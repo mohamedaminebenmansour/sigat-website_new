@@ -47,7 +47,11 @@ import { SocialLink } from '../../models/social-link.model';
 
     .social-link:hover {
       color: #fff;
-      transform: translateX(-4px);
+      transform: translateY(-2px);
+    }
+
+    :host-context([dir='rtl']) .social-link:hover {
+      transform: translateY(-2px);
     }
 
     .social-link i {
@@ -60,19 +64,43 @@ import { SocialLink } from '../../models/social-link.model';
       white-space: nowrap;
     }
 
-    @media (max-width: 768px) {
+    @media (min-width: 768px) and (max-width: 1024px) {
+      /* Tablet: keep the desktop right-hand rail but icon-only and tighter,
+         so it never competes with navigation or statistics. */
       .social-links {
-        flex-direction: row;
-        justify-content: center;
-        gap: 1.25rem;
-      }
-
-      .social-link:hover {
-        transform: translateY(-2px);
+        gap: 0.85rem;
       }
 
       .social-label {
         display: none;
+      }
+    }
+
+    @media (max-width: 767px) {
+      /* Mobile: one quiet horizontal group (f in ◎) in its own safe area,
+         clearly separated from the logo / hamburger zone above it. */
+      .social-links {
+        flex-direction: row;
+        justify-content: center;
+        gap: 0.35rem;
+        padding: 0.25rem 0.55rem;
+        border-radius: 999px;
+        background: rgba(10, 20, 40, 0.32);
+        backdrop-filter: blur(6px);
+        -webkit-backdrop-filter: blur(6px);
+      }
+
+      .social-link {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        min-width: 2.75rem;   /* >= 44px touch target */
+        min-height: 2.75rem;
+        border-radius: 999px;
+      }
+
+      .social-link i {
+        font-size: 0.95rem;
       }
     }
   `]

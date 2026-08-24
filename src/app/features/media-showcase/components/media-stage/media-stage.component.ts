@@ -42,6 +42,9 @@ export class MediaStageComponent implements AfterViewInit, OnDestroy {
 
   @ViewChild('videoRef') videoRef?: ElementRef<HTMLVideoElement>;
 
+  /** True when the video was playing right before the showcase left the viewport. */
+  private wasPlayingBeforeHide = false;
+
   activeMedia(): MediaItem | null {
     return this.media[this.currentIndex] ?? null;
   }
@@ -51,6 +54,36 @@ export class MediaStageComponent implements AfterViewInit, OnDestroy {
     if (id) {
       this.videoEnded.emit(id);
     }
+  }
+
+  /**
+   * Pause the current video because the showcase left the viewport.
+   * Records whether it was actually playing so an automatic resume can
+   * respect a manual user pause. The element and its position are untouched.
+   */
+  pauseForVisibility(): void {
+    const video = this.videoRef?.nativeElement;
+    if (!video || video.paused || video.ended) {
+      this.wasPlayingBeforeHide = false;
+      return;
+    }
+    this.wasPlayingBeforeHide = true;
+    video.pause();
+  }
+
+  /**
+   * Resume after the showcase became visible again — only when the video was
+   * playing before it was hidden. Never rewinds or reloads the media.
+   */
+  resumeFromVisibility(): void {
+    const video = this.videoRef?.nativeElement;
+    if (!video || !this.wasPlayingBeforeHide) {
+      return;
+    }
+    this.wasPlayingBeforeHide = false;
+    void video.play().catch(() => {
+      // Autoplay restrictions can still block playback; fail silently.
+    });
   }
 
   ngAfterViewInit(): void {

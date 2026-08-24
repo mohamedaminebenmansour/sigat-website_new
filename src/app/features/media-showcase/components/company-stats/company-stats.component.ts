@@ -65,6 +65,29 @@ import { CompanyStat } from '../../models/company-stat.model';
         font-size: 0.8rem;
       }
     }
+
+    /* Mobile: compact 2x2 block so the statistics stay readable without
+       covering the media or colliding with the navigation pill. */
+    @media (max-width: 767px) {
+      .company-stats {
+        gap: 0.55rem 0.75rem;
+        max-width: 24rem;
+        padding-inline: 0.25rem;
+      }
+
+      .stat-item {
+        gap: 0.1rem;
+      }
+
+      .stat-value {
+        font-size: 1.45rem;
+      }
+
+      .stat-label {
+        font-size: 0.6rem;
+        letter-spacing: 0.05em;
+      }
+    }
   `]
 })
 export class CompanyStatsComponent {
