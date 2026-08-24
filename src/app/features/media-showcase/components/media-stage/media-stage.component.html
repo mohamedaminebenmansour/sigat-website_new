@@ -1,0 +1,25 @@
+<section class="media-stage">
+  @if (activeMedia(); as item) {
+    @if (item.type === 'image') {
+      <img
+        class="stage-media"
+        [src]="item.src"
+        [alt]="item.titleKey || 'Showcase image'"
+      />
+    } @else {
+      <video
+        #videoRef
+        class="stage-media"
+        [src]="item.src"
+        [poster]="item.poster"
+        autoplay
+        muted
+        playsinline
+        preload="auto"
+        (ended)="onVideoEnded()"
+      ></video>
+    }
+  }
+
+  <div class="stage-overlay" aria-hidden="true"></div>
+</section>

@@ -1,0 +1,4 @@
+/* Media page styles */
+:host {
+  display: block;
+}

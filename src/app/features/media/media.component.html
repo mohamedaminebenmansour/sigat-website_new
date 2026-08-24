@@ -1,0 +1,38 @@
+<section class="py-16 md:py-20 bg-white">
+  <div class="container mx-auto px-4">
+    <app-section-header
+      [title]="'nav_media' | translate"
+      [subtitle]="'media_subtitle' | translate"
+    />
+  </div>
+</section>
+
+<section class="pb-16 bg-white">
+  <div class="container mx-auto px-4">
+    <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
+      @for (item of mediaItems; track item.id) {
+        <figure class="bg-white rounded-lg shadow-md overflow-hidden border border-gray-100">
+          <div class="relative">
+            <img
+              [src]="thumbnailFor(item)"
+              [alt]="item.alt || (item.titleKey | translate)"
+              class="w-full h-56 object-cover"
+              loading="lazy"
+            />
+            @if (isVideo(item)) {
+              <span class="absolute top-3 right-3 bg-blue-900 text-white text-xs font-semibold px-2 py-1 rounded-full">
+                <i class="fa-solid fa-play mr-1"></i>{{ item.duration }}
+              </span>
+            }
+          </div>
+          <figcaption class="p-5">
+            <h3 class="text-lg font-bold text-gray-900">{{ item.titleKey | translate }}</h3>
+            @if (item.descriptionKey) {
+              <p class="text-sm text-gray-500 mt-1">{{ item.descriptionKey | translate }}</p>
+            }
+          </figcaption>
+        </figure>
+      }
+    </div>
+  </div>
+</section>

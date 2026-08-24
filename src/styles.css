@@ -1,0 +1,48 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+html {
+  scroll-behavior: smooth;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  html {
+    scroll-behavior: auto;
+  }
+}
+
+.nav-link {
+  position: relative;
+  overflow: hidden;
+}
+.nav-link::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: rgba(255, 255, 255, 0.12);
+  transform: scaleY(0);
+  transform-origin: top;
+  transition: transform 300ms ease-out;
+  pointer-events: none;
+  border-radius: inherit;
+}
+.nav-link:hover::before {
+  transform: scaleY(1);
+}
+.nav-link:active::before {
+  transform: scaleY(1);
+  background: rgba(255, 255, 255, 0.18);
+}
+@media (prefers-reduced-motion: reduce) {
+  .nav-link::before {
+    transition: none;
+  }
+}
+
+.header-glass {
+  box-shadow: 0 1px 20px rgba(15, 23, 42, 0.08);
+}
+app-header {
+  text-shadow: 0 1px 3px rgba(0, 0, 0, 0.25);
+}
