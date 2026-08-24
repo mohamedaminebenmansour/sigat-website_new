@@ -32,13 +32,14 @@ import { ValuesComponent } from '../about/components/values.component';
     <!-- ==================== COMPANY STORY ==================== -->
     <app-company-story />
 
-    <!-- ==================== MISSION & VISION ==================== -->
-    <app-mission-vision />
+    <!-- ==================== MISSION & VISION ====================
+    <app-mission-vision />-->
 
     <!-- ==================== CORE VALUES ==================== -->
     <app-values />
 
-    <!-- ==================== EXPERTISE ==================== -->
+    <!-- ==================== EXPERTISE ====================
+
     <section class="py-16 md:py-20 bg-gray-100">
       <div class="container mx-auto px-4">
         <app-section-header
@@ -73,6 +74,7 @@ import { ValuesComponent } from '../about/components/values.component';
         </div>
       </div>
     </section>
+    -->
 
     <!-- ==================== FEATURED PROJECTS ==================== -->
     <section class="py-16 md:py-20 bg-white">

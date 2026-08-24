@@ -42,6 +42,7 @@ type Filter = 'all' | 'hydraulic' | 'construction';
             @for (project of filteredProjects; track project.id) {
               <app-project-card
                 [title]="project.title"
+                [description]="project.description"
                 [location]="project.location"
                 [year]="project.year"
                 [category]="project.category"

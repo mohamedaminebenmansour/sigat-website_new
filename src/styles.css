@@ -50,11 +50,12 @@ html {
 
 .values-section {
   /* Responsive geometric tuning (rem units, clamped per breakpoint). */
-  --values-r: clamp(6.5rem, 20vw, 14rem);      /* orbit radius */
-  --values-card: clamp(6rem, 11vw, 11rem);     /* value card size */
-  --values-center: clamp(8rem, 14vw, 13rem);   /* center circle size */
+  --values-r: clamp(11rem, 30vw, 17rem);       /* orbit radius (card center on path) */
+  --values-card-w: clamp(12.5rem, 22vw, 15rem); /* ellipse card width */
+  --values-card-h: clamp(10rem, 18vw, 12rem);   /* ellipse card height */
+  --values-center: clamp(8rem, 14vw, 13rem);    /* center circle size */
   position: relative;
-  padding: 3rem 0 3rem;
+  padding: 5rem 0 5rem;
 }
 
 .values-container {
@@ -145,9 +146,10 @@ html {
     position: absolute;
     left: 50%;
     top: 50%;
-    width: var(--values-card);
-    height: var(--values-card);
-    /* Positioned around the ring via inline transform (radius var). */
+    width: var(--values-card-w);
+    height: var(--values-card-h);
+    /* Positioned around the ring via inline transform (radius var).
+       translate(-50%,-50%) centers the CARD on the orbit path. */
     transition: transform 0.8s cubic-bezier(0.4, 0, 0.22, 1);
     animation: values-slot-in 0.55s ease-out both;
     animation-play-state: paused;
@@ -199,7 +201,7 @@ html {
     position: static;
     width: 100%;
     height: auto;
-    aspect-ratio: 1 / 1;
+    aspect-ratio: auto;
     transform: none !important;
     animation: none;
     opacity: 1;

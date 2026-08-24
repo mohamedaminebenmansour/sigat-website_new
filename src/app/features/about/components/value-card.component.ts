@@ -26,11 +26,12 @@ import { CompanyValue } from './values.data';
         flex-direction: column;
         align-items: center;
         justify-content: center;
-        gap: 0.55rem;
+        gap: 0.45rem;
         text-align: center;
         width: 100%;
         height: 100%;
         box-sizing: border-box;
+        padding: 0.85rem 1.1rem;
         border-radius: 9999px;
         background: linear-gradient(150deg, rgba(255, 255, 255, 0.96) 0%, rgba(226, 232, 240, 0.12) 100%);
         border: 1.5px solid rgba(30, 58, 138, 0.22);
@@ -40,7 +41,7 @@ import { CompanyValue } from './values.data';
       }
 
       .value-card.active {
-        transform: scale(1.08);
+        transform: scale(1.05);
         background: linear-gradient(150deg, #ffffff 0%, #dbeafe 70%, rgba(30, 58, 138, 0.06) 100%);
         border: 2.5px solid rgba(30, 58, 138, 0.65);
         box-shadow: 0 18px 46px rgba(30, 58, 138, 0.28), 0 2px 6px rgba(15, 23, 42, 0.12), inset 0 0 0 1px rgba(255, 255, 255, 0.7);
@@ -51,15 +52,16 @@ import { CompanyValue } from './values.data';
         display: flex;
         align-items: center;
         justify-content: center;
-        width: 3rem;
-        height: 3rem;
+        flex-shrink: 0;
+        width: 2.5rem;
+        height: 2.5rem;
         border-radius: 9999px;
         background: rgba(30, 58, 138, 0.07);
         color: #1e40af;
       }
 
       .value-card .icon i {
-        font-size: 1.5rem;
+        font-size: 1.25rem;
         line-height: 1;
       }
 
@@ -74,13 +76,22 @@ import { CompanyValue } from './values.data';
         font-weight: 700;
         letter-spacing: 0.01em;
         line-height: 1.1;
+        margin: 0;
       }
 
       .value-card p {
-        font-size: 0.72rem;
-        line-height: 1.35;
-        max-width: 13rem;
+        font-size: 0.78rem;
+        line-height: 1.4;
+        max-width: 11.5rem;
+        margin: 0;
         color: rgba(30, 58, 138, 0.82);
+      }
+
+      @media (max-width: 767px) {
+        .value-card {
+          height: auto;
+          padding: 1rem 0.9rem;
+        }
       }
 
       @media (prefers-reduced-motion: reduce) {
