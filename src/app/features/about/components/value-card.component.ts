@@ -102,19 +102,16 @@ import { CompanyValue } from './values.data';
     `
   ],
   template: `
-    <button
-      type="button"
+    <div
       class="value-card"
       [class.active]="active()"
-      [attr.aria-label]="value().titleKey | translate"
-      [attr.title]="value().titleKey | translate"
     >
       <span class="icon">
         <i [class]="value().icon" aria-hidden="true"></i>
       </span>
       <h3>{{ value().titleKey | translate }}</h3>
       <p>{{ value().descriptionKey | translate }}</p>
-    </button>
+    </div>
   `
 })
 export class ValueCardComponent {

@@ -53,10 +53,12 @@ const REVEAL_STAGGER_MS = 140;
     <section class="values-section">
       <div class="values-container mx-auto px-4">
         <app-section-header
+          class="values-header"
           [title]="'values_title' | translate"
           [subtitle]="'values_subtitle' | translate"
         />
 
+        <!-- Desktop / tablet: automatic orbit presentation (observe only) -->
         <div
           class="values-orbit"
           #orbitShell
@@ -79,19 +81,43 @@ const REVEAL_STAGGER_MS = 140;
             </div>
           </div>
 
-          <!-- Six values on fixed orbit slots -->
-          @for (value of values; track value.titleKey) {
-            <div
-              class="values-slot"
-              [style]="slotStyle(value)"
-              (click)="onSelect(value)"
-              (keydown.enter)="onSelect(value)"
-              (keydown.space)="onSelect(value)"
-            >
+          <!-- Six values on fixed orbit slots (informational, non-interactive) -->
+          @for (value of values; track value.id) {
+            <div class="values-slot" [style]="slotStyle(value)">
               <app-value-card [value]="value" [active]="isFront(value)" />
             </div>
           }
         </div>
+
+        <!-- Mobile: compact interactive disclosure (explore) -->
+        <ul class="values-mobile" role="list">
+          @for (value of values; track value.id) {
+            <li class="values-mobile-item" [class.open]="activeMobileId() === value.id">
+              <button
+                type="button"
+                class="values-mobile-trigger"
+                (click)="toggleMobile(value.id)"
+                [attr.aria-expanded]="activeMobileId() === value.id"
+                [attr.aria-controls]="'value-panel-' + value.id"
+              >
+                <span class="values-mobile-icon" aria-hidden="true">
+                  <i [class]="value.icon"></i>
+                </span>
+                <span class="values-mobile-title">{{ value.titleKey | translate }}</span>
+                <span class="values-mobile-indicator" aria-hidden="true">
+                  {{ activeMobileId() === value.id ? '−' : '+' }}
+                </span>
+              </button>
+              <div
+                class="values-mobile-panel"
+                [id]="'value-panel-' + value.id"
+                [class.open]="activeMobileId() === value.id"
+              >
+                <p>{{ value.descriptionKey | translate }}</p>
+              </div>
+            </li>
+          }
+        </ul>
       </div>
     </section>
   `
@@ -107,6 +133,9 @@ export class ValuesComponent implements AfterViewInit, OnDestroy {
 
   /** True once the section has entered the viewport (one-shot reveal). */
   readonly revealed = signal(false);
+
+  /** Id of the single expanded value in the mobile disclosure (null = none). */
+  readonly activeMobileId = signal<string | null>(null);
 
   /** Respect prefers-reduced-motion by disabling the automatic orbit. */
   readonly reducedMotion = signal(false);
@@ -190,11 +219,12 @@ export class ValuesComponent implements AfterViewInit, OnDestroy {
     );
   }
 
-  /** Bring the clicked / focused value into the emphasized front slot. */
-  onSelect(value: CompanyValue): void {
-    const index = this.values.indexOf(value);
-    const target = ((FRONT_SLOT - index) % SLOT_COUNT + SLOT_COUNT) % SLOT_COUNT;
-    this.activeOffset.set(target);
+  /**
+   * Mobile disclosure: open the tapped value, or close it if already open.
+   * Only one value can be expanded at a time.
+   */
+  toggleMobile(id: string): void {
+    this.activeMobileId.update((current) => (current === id ? null : id));
   }
 
   onEnterZone(): void {
