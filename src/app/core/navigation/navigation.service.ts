@@ -3,7 +3,6 @@ import { NavigationLink, LanguageOption, SupportedLang } from './navigation.mode
 
 export const NAV_LINKS: NavigationLink[] = [
   { path: '/home', label: 'nav_home' },
-  { path: '/about', label: 'nav_about' },
   { path: '/expertise', label: 'nav_expertise' },
   { path: '/projects', label: 'nav_projects' },
   { path: '/capabilities', label: 'nav_capabilities' },

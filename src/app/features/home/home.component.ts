@@ -6,6 +6,9 @@ import { SectionHeaderComponent } from '../../shared/components/section-header.c
 import { ExpertiseCardComponent } from '../../shared/components/expertise-card.component';
 import { ProjectCardComponent } from '../../shared/components/project-card.component';
 import { CtaBannerComponent } from '../../shared/components/cta-banner.component';
+import { CompanyStoryComponent } from '../about/components/company-story.component';
+import { MissionVisionComponent } from '../about/components/mission-vision.component';
+import { ValuesComponent } from '../about/components/values.component';
 
 @Component({
   selector: 'app-home',
@@ -17,11 +20,23 @@ import { CtaBannerComponent } from '../../shared/components/cta-banner.component
     SectionHeaderComponent,
     ExpertiseCardComponent,
     ProjectCardComponent,
-    CtaBannerComponent
+    CtaBannerComponent,
+    CompanyStoryComponent,
+    MissionVisionComponent,
+    ValuesComponent
   ],
   template: `
-    <!-- ==================== MEDIA SHOWCASE ==================== -->
+    <!-- ==================== MEDIA SHOWCASE / HERO (includes stats) ==================== -->
     <app-media-showcase />
+
+    <!-- ==================== COMPANY STORY ==================== -->
+    <app-company-story />
+
+    <!-- ==================== MISSION & VISION ==================== -->
+    <app-mission-vision />
+
+    <!-- ==================== CORE VALUES ==================== -->
+    <app-values />
 
     <!-- ==================== EXPERTISE ==================== -->
     <section class="py-16 md:py-20 bg-gray-100">

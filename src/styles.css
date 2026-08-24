@@ -43,6 +43,181 @@ html {
 .header-glass {
   box-shadow: 0 1px 20px rgba(15, 23, 42, 0.08);
 }
-app-header {
-  text-shadow: 0 1px 3px rgba(0, 0, 0, 0.25);
+/* ============================================================
+   VALUES ORBIT (kept global to stay within component style budget)
+   Six values arranged on fixed slots around a central philosophy.
+   ============================================================ */
+
+.values-section {
+  /* Responsive geometric tuning (rem units, clamped per breakpoint). */
+  --values-r: clamp(6.5rem, 20vw, 14rem);      /* orbit radius */
+  --values-card: clamp(6rem, 11vw, 11rem);     /* value card size */
+  --values-center: clamp(8rem, 14vw, 13rem);   /* center circle size */
+  position: relative;
+  padding: 3rem 0 3rem;
+}
+
+.values-container {
+  position: relative;
+}
+
+/* ---- Desktop / tablet orbit ------------------------------------- */
+@media (min-width: 768px) {
+  .values-orbit {
+    position: relative;
+    width: min(100%, 52rem);
+    aspect-ratio: 1 / 1;
+    margin: 0 auto;
+  }
+
+  /* Decorative rings (thin, subtle, non-interactive). */
+  .values-ring-outer {
+    position: absolute;
+    inset: 26%;
+    border: 1px dashed rgba(30, 58, 138, 0.18);
+    border-radius: 50%;
+    pointer-events: none;
+  }
+  .values-ring-inner {
+    position: absolute;
+    inset: 34%;
+    border: 1px solid rgba(30, 58, 138, 0.08);
+    border-radius: 50%;
+    pointer-events: none;
+  }
+
+  /* Central philosophy disc. */
+  .values-center {
+    position: absolute;
+    left: 50%;
+    top: 50%;
+    width: var(--values-center);
+    height: var(--values-center);
+    transform: translate(-50%, -50%);
+    border-radius: 50%;
+    background: radial-gradient(
+      circle at 50% 18%,
+      #ffffff 0%,
+      #eef4ff 62%,
+      rgba(30, 58, 138, 0.94) 130%
+    );
+    border: 2px solid rgba(30, 58, 138, 0.28);
+    box-shadow: 0 16px 44px rgba(30, 58, 138, 0.2),
+      inset 0 0 0 1px rgba(255, 255, 255, 0.7);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    text-align: center;
+    animation: values-center-in 0.8s ease-out both;
+    animation-play-state: paused;
+  }
+
+  .values-center-core {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 0.3rem;
+  }
+
+  .values-center-core i {
+    font-size: 1.35rem;
+    color: #1e3a8a;
+  }
+
+  .values-center-title {
+    font-size: 0.95rem;
+    font-weight: 800;
+    letter-spacing: 0.03em;
+    color: #1e3a8a;
+    margin: 0;
+    line-height: 1.1;
+  }
+
+  .values-center-subtitle {
+    font-size: 0.68rem;
+    line-height: 1.35;
+    color: rgba(30, 58, 138, 0.78);
+    display: block;
+  }
+
+  .values-slot {
+    position: absolute;
+    left: 50%;
+    top: 50%;
+    width: var(--values-card);
+    height: var(--values-card);
+    /* Positioned around the ring via inline transform (radius var). */
+    transition: transform 0.8s cubic-bezier(0.4, 0, 0.22, 1);
+    animation: values-slot-in 0.55s ease-out both;
+    animation-play-state: paused;
+  }
+
+  .values-orbit.revealed .values-slot {
+    animation-play-state: running;
+  }
+  .values-orbit.revealed .values-center {
+    animation-play-state: running;
+  }
+}
+
+@keyframes values-slot-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@keyframes values-center-in {
+  from {
+    opacity: 0;
+    transform: translate(-50%, -50%) scale(0.72);
+  }
+  to {
+    opacity: 1;
+    transform: translate(-50%, -50%) scale(1);
+  }
+}
+
+/* ---- Mobile: readable static grid instead of an orbit ------------ */
+@media (max-width: 767px) {
+  .values-orbit {
+    position: static;
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 1rem;
+    width: 100%;
+    aspect-ratio: auto;
+    margin: 0 auto;
+  }
+
+  .values-ring-outer,
+  .values-ring-inner,
+  .values-center {
+    display: none;
+  }
+
+  .values-slot {
+    position: static;
+    width: 100%;
+    height: auto;
+    aspect-ratio: 1 / 1;
+    transform: none !important;
+    animation: none;
+    opacity: 1;
+  }
+}
+
+/* ---- Reduced motion --------------------------------------------- */
+@media (prefers-reduced-motion: reduce) {
+  .values-slot,
+  .values-center {
+    animation: none;
+    transition: none;
+  }
+  .values-slot {
+    opacity: 1;
+  }
+  .values-center {
+    opacity: 1;
+    transform: translate(-50%, -50%);
+  }
 }
