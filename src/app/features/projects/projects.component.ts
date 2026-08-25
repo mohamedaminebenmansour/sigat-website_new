@@ -46,7 +46,7 @@ type Filter = 'all' | 'hydraulic' | 'construction';
                 [location]="project.location"
                 [year]="project.year"
                 [category]="project.category"
-                [imageUrl]="project.imageUrl"
+                [imageUrl]="project.media?.cover ?? project.imageUrl"
                 [routerLink]="'/projects/' + project.id"
               />
             }

@@ -22,7 +22,17 @@ export class MockDataService {
       galleryUrls: [
         'https://images.unsplash.com/photo-1541888946425-d81bb50b2e0b?w=800&q=80',
         'https://images.unsplash.com/photo-1581092160562-40aa08e78837?w=800&q=80'
-      ]
+      ],
+      media: {
+        cover: 'assets/media/projects/aep-ouled-khalfallah/cover.jpg',
+        gallery: [
+          'assets/media/projects/aep-ouled-khalfallah/6.jpg',
+          'assets/media/projects/aep-ouled-khalfallah/7.jpg',
+          'assets/media/projects/aep-ouled-khalfallah/8.jpg',
+          'assets/media/projects/aep-ouled-khalfallah/9.jpg',
+          'assets/media/projects/aep-ouled-khalfallah/3.jpg'
+        ]
+      }
     },
     {
       id: 2,
