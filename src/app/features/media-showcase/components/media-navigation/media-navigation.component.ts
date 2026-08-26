@@ -156,6 +156,13 @@ import { MediaItem } from '../../models/media-item.model';
           flex-direction: row;
           gap: 0.7rem;
         }
+
+        /* Mobile dots are horizontal with only three visible; enlarge the
+           invisible hit area so each reaches a comfortable touch target
+           (~32px) without changing the small visual dot. */
+        .nav-dot::after {
+          inset: -0.72rem;
+        }
       }
 
       @media (prefers-reduced-motion: reduce) {

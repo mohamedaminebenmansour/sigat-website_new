@@ -26,12 +26,10 @@ import { CompanyValue } from './values.data';
         flex-direction: column;
         align-items: center;
         justify-content: center;
-        gap: 0.45rem;
-        text-align: center;
         width: 100%;
         height: 100%;
         box-sizing: border-box;
-        padding: 0.85rem 1.1rem;
+        padding: 0.85rem 1.05rem;
         border-radius: 9999px;
         background: linear-gradient(150deg, rgba(255, 255, 255, 0.96) 0%, rgba(226, 232, 240, 0.12) 100%);
         border: 1.5px solid rgba(30, 58, 138, 0.22);
@@ -48,20 +46,34 @@ import { CompanyValue } from './values.data';
         color: #1e3a8a;
       }
 
+      /* Inner content capsule: constrains icon/title/description so nothing
+         reaches the pill's curved ends (keeps all text inside the circle). */
+      .value-card__content {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        text-align: center;
+        gap: 0.4rem;
+        width: 100%;
+        max-width: 8.75rem;
+        margin-inline: auto;
+      }
+
       .value-card .icon {
         display: flex;
         align-items: center;
         justify-content: center;
         flex-shrink: 0;
-        width: 2.5rem;
-        height: 2.5rem;
+        width: 2.25rem;
+        height: 2.25rem;
         border-radius: 9999px;
         background: rgba(30, 58, 138, 0.07);
         color: #1e40af;
       }
 
       .value-card .icon i {
-        font-size: 1.25rem;
+        font-size: 1.12rem;
         line-height: 1;
       }
 
@@ -72,17 +84,18 @@ import { CompanyValue } from './values.data';
       }
 
       .value-card h3 {
-        font-size: 0.95rem;
+        font-size: clamp(0.86rem, 1.3vw, 0.92rem);
         font-weight: 700;
         letter-spacing: 0.01em;
-        line-height: 1.1;
+        line-height: 1.15;
         margin: 0;
+        max-width: 100%;
       }
 
       .value-card p {
-        font-size: 0.78rem;
-        line-height: 1.4;
-        max-width: 11.5rem;
+        font-size: clamp(0.76rem, 1vw, 0.82rem);
+        line-height: 1.34;
+        max-width: 100%;
         margin: 0;
         color: rgba(30, 58, 138, 0.82);
       }
@@ -106,11 +119,13 @@ import { CompanyValue } from './values.data';
       class="value-card"
       [class.active]="active()"
     >
-      <span class="icon">
-        <i [class]="value().icon" aria-hidden="true"></i>
-      </span>
-      <h3>{{ value().titleKey | translate }}</h3>
-      <p>{{ value().descriptionKey | translate }}</p>
+      <div class="value-card__content">
+        <span class="icon">
+          <i [class]="value().icon" aria-hidden="true"></i>
+        </span>
+        <h3>{{ value().titleKey | translate }}</h3>
+        <p>{{ value().descriptionKey | translate }}</p>
+      </div>
     </div>
   `
 })

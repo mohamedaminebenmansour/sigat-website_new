@@ -18,6 +18,13 @@ import { MediaNavigationComponent } from '../media-navigation/media-navigation.c
 import { SocialLinksComponent } from '../social-links/social-links.component';
 import { CompanyStatsComponent } from '../company-stats/company-stats.component';
 
+/**
+ * Minimum visible fraction of the showcase for which the hero video may play.
+ * Shared by the IntersectionObserver thresholds and the ratio check so the
+ * pause/resume behaviour stays in one place.
+ */
+const VISIBILITY_THRESHOLD = 0.4;
+
 @Component({
   selector: 'app-media-showcase',
   standalone: true,
@@ -124,41 +131,79 @@ import { CompanyStatsComponent } from '../company-stats/company-stats.component'
       }
 
       @media (max-width: 767px) {
-        /* Purpose-built mobile zones:
-           top-right  -> social pill (below the logo / hamburger safe area)
-           bottom     -> navigation pill, then compact statistics */
+        /* Structurally separated mobile composition:
+             .media-showcase = flex column
+             ├── .showcase-grid (flex:1, media zone)  -> + social + navigation
+             └── .showcase-footer (flex:0, reserved stats row)
+           The navigation is anchored to the BOTTOM of the media zone, and the
+           statistics are a real sibling row below it -- so the two can never
+           collide regardless of viewport height or orientation. */
+        .media-showcase {
+          display: flex;
+          flex-direction: column;
+          height: 100svh;
+          overflow: hidden;
+        }
+
+        .showcase-grid {
+          position: relative;
+          flex: 1 1 auto;
+          min-height: 0;
+          height: auto;
+        }
+
+        .showcase-stage {
+          position: absolute;
+          inset: 0;
+          z-index: 0;
+        }
+
+        /* Horizontal ← ● ● ● → pill at the bottom of the media zone, above
+           the statistics row by construction. */
         .showcase-nav {
           position: absolute;
-          top: auto;
           left: 50%;
-          transform: translateX(-50%);
-          /* Sits clearly ABOVE the statistics band (no collision). */
-          bottom: calc(8.25rem + env(safe-area-inset-bottom, 0px));
           right: auto;
+          top: auto;
+          bottom: calc(1rem + env(safe-area-inset-bottom, 0px));
+          transform: translateX(-50%);
           padding: 0;
           align-items: center;
           z-index: 20;
         }
 
+        /* Social lives inside the media zone with a committed offset below
+           the header safe area, so it can never overlap the navbar/menu. */
         .showcase-social {
           position: absolute;
-          top: calc(5.75rem + env(safe-area-inset-top, 0px));
-          bottom: auto;
           inset-inline-end: 0.75rem;
+          top: calc(6.75rem + env(safe-area-inset-top, 0px));
+          bottom: auto;
           padding: 0;
           align-items: flex-start;
           z-index: 20;
         }
 
-        /* Compact translucent backing so the statistics belong to the hero
-           without hiding the media behind a solid panel. */
+        /* The stats band is a real reserved row (not an overlay), so it
+           keeps its own vertical space clear of the navigation. */
         .showcase-footer {
+          position: relative;
+          flex: 0 0 auto;
+          z-index: 20;
           padding: 0.7rem 0.75rem calc(0.85rem + env(safe-area-inset-bottom, 0px));
           background:
             linear-gradient(to top, rgba(10, 20, 40, 0.55) 0%, rgba(10, 20, 40, 0) 100%),
             rgba(10, 20, 40, 0.28);
           backdrop-filter: blur(6px);
           -webkit-backdrop-filter: blur(6px);
+        }
+
+        /* Squat / landscape screens: drop the decorative social pill so the
+           nav + media + stats composition stays clean. */
+        @media (max-height: 480px) {
+          .showcase-social {
+            display: none;
+          }
         }
       }
 
@@ -267,7 +312,7 @@ export class MediaShowcaseComponent implements OnInit, OnDestroy, AfterViewInit 
     const zone = inject(NgZone);
     this.intersectionObserver = new IntersectionObserver(
       () => this.syncVideoVisibility(),
-      { threshold: [0, 0.35, 1] }
+      { threshold: [0, VISIBILITY_THRESHOLD, 1] }
     );
     zone.runOutsideAngular(() =>
       this.intersectionObserver?.observe(this.host.nativeElement)
@@ -294,7 +339,7 @@ export class MediaShowcaseComponent implements OnInit, OnDestroy, AfterViewInit 
     } catch {
       return;
     }
-    if (ratio < 0.35) {
+    if (ratio < VISIBILITY_THRESHOLD) {
       stage.pauseForVisibility();
     } else {
       stage.resumeFromVisibility();

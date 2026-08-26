@@ -33,3 +33,61 @@
     linear-gradient(to bottom, rgba(0, 0, 0, 0.25) 0%, transparent 18%),
     linear-gradient(to top, rgba(0, 0, 0, 0.75) 0%, rgba(0, 0, 0, 0.35) 35%, rgba(0, 0, 0, 0.05) 100%);
 }
+
+/* Discreet, secondary mute/unmute toggle for the hero video. Sits just
+   above the bottom gradient, clear of the right-side social control. */
+.stage-sound {
+  position: absolute;
+  right: 1.5rem;
+  bottom: 5.5rem;
+  z-index: 3;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 2.75rem;
+  height: 2.75rem;
+  padding: 0;
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  border-radius: 999px;
+  background: rgba(10, 20, 40, 0.34);
+  backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: blur(6px);
+  color: rgba(255, 255, 255, 0.82);
+  cursor: pointer;
+  transition: color 0.25s ease, background-color 0.25s ease;
+}
+
+.stage-sound svg {
+  width: 1.1rem;
+  height: 1.1rem;
+}
+
+.stage-sound::after {
+  content: '';
+  position: absolute;
+  inset: -0.3rem;
+}
+
+.stage-sound:hover {
+  color: #ffffff;
+  background: rgba(255, 255, 255, 0.16);
+}
+
+.stage-sound:focus-visible {
+  outline: 2px solid rgba(255, 255, 255, 0.8);
+  outline-offset: 2px;
+}
+
+@media (max-width: 767px) {
+  .stage-sound {
+    right: 0.75rem;
+    top: calc(11.25rem + env(safe-area-inset-top, 0px));
+    bottom: auto;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .stage-sound {
+    transition: none;
+  }
+}

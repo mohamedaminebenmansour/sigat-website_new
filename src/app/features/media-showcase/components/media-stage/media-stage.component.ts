@@ -6,7 +6,8 @@ import {
   ViewChild,
   ElementRef,
   AfterViewInit,
-  OnDestroy
+  OnDestroy,
+  signal
 } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { MediaItem } from '../../models/media-item.model';
@@ -44,6 +45,29 @@ export class MediaStageComponent implements AfterViewInit, OnDestroy {
 
   /** True when the video was playing right before the showcase left the viewport. */
   private wasPlayingBeforeHide = false;
+
+  /**
+   * User mute preference for the showcase video. The professional default is
+   * muted; the preference survives slide changes and is never force-reset.
+   */
+  readonly isMuted = signal(true);
+
+  /** Honors `prefers-reduced-motion`: keep the video as a calm poster. */
+  private readonly reducedMotion =
+    typeof window !== 'undefined' &&
+    typeof window.matchMedia === 'function' &&
+    window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+  /** True while the active slide is the hero video (drives the mute toggle). */
+  toggleMute(): void {
+    const video = this.videoRef?.nativeElement;
+    if (!video) {
+      return;
+    }
+    const next = !this.isMuted();
+    this.isMuted.set(next);
+    video.muted = next;
+  }
 
   activeMedia(): MediaItem | null {
     return this.media[this.currentIndex] ?? null;
@@ -98,6 +122,11 @@ export class MediaStageComponent implements AfterViewInit, OnDestroy {
     const video = this.videoRef?.nativeElement;
     const current = this.activeMedia();
     if (!video || !current || current.type !== 'video') {
+      return;
+    }
+    // Respect reduced-motion: keep the calibrated poster, never force playback.
+    if (this.reducedMotion) {
+      video.muted = true;
       return;
     }
     // Belt-and-suspenders: the template's `autoplay` handles this for freshly
