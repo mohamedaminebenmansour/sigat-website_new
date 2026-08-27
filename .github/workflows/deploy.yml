@@ -1,0 +1,45 @@
+name: Deploy to GitHub Pages
+
+# Builds and publishes the Angular site to the `gh-pages` branch.
+# Requires GitHub Pages to serve from branch `gh-pages` (root folder).
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+jobs:
+  build-and-deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Install dependencies
+        run: npm install
+
+      - name: Build for GitHub Pages
+        run: npm run build:pages
+
+      - name: Deploy to gh-pages
+        uses: peaceiris/actions-ghpages@v4
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          publish_dir: dist/sigat-website/browser
+          publish_branch: gh-pages
+          force_orphan: true
+          keep_files: false
+          user_name: github-actions[bot]
+          user_email: 41898282+github-actions[bot]@users.noreply.github.com
+          commit_message: 'deploy: ${{ github.event.head_commit.message }}'
