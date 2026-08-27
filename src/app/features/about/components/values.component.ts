@@ -26,7 +26,7 @@ const SLOT_ANGLES = [-90, -30, 30, 90, 150, 210];
 const FRONT_SLOT = 3;
 
 /** How long each orbit state stays visible before the next step. */
-const DWELL_MS = 5500;
+const DWELL_MS = 4000;
 
 /** Reveal stagger between the six cards when the section enters view. */
 const REVEAL_STAGGER_MS = 140;
