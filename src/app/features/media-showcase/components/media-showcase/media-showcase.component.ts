@@ -59,6 +59,7 @@ const VISIBILITY_THRESHOLD = 0.4;
             [media]="media"
             [currentIndex]="service.currentIndex()"
             (videoEnded)="onVideoEnded($event)"
+            (videoError)="onVideoError()"
           />
         </div>
 
@@ -284,6 +285,13 @@ export class MediaShowcaseComponent implements OnInit, OnDestroy, AfterViewInit 
 
   onVideoEnded(mediaId: string): void {
     this.service.onVideoEnded(mediaId);
+  }
+
+  /** The hero video failed to load — continue gracefully from the first image. */
+  onVideoError(): void {
+    if (this.service.currentIndex() === 0 && this.media.length > 1) {
+      this.service.goToSlide(1);
+    }
   }
 
   onMouseEnter(): void {

@@ -3,43 +3,87 @@
     @if (item.type === 'image') {
       <img
         class="stage-media"
-        [src]="item.src"
-        [alt]="item.titleKey || 'Showcase image'"
+        [class.stage-media--fallback]="imgFailed(item.src)"
+        [src]="imgSrc(item.src)"
+        [srcset]="imgSrcSet(item.src)"
+        [sizes]="isFirstVisible() ? '100vw' : '100vw'"
+        [loading]="isFirstVisible() ? 'eager' : 'lazy'"
+        [attr.fetchpriority]="isFirstVisible() ? 'high' : undefined"
+        decoding="async"
+        [alt]="item.alt ?? (item.titleKey + ' - SIGAT') || 'Project photograph'"
+        (error)="onImgError(item.src)"
+        (load)="markLoaded(item.src)"
       />
-    } @else {
-      <video
-        #videoRef
+    } @else if (item.provider === 'youtube' && !youtubeActive()) {
+      <!-- Deferred YouTube: show the optimised poster first; the player
+           <iframe> is only created when the user activates this slide. -->
+      <img
         class="stage-media"
-        [src]="item.src"
-        [poster]="item.poster"
-        autoplay
-        [muted]="isMuted()"
-        playsinline
-        preload="auto"
-        (ended)="onVideoEnded()"
-      ></video>
-
+        [class.stage-media--fallback]="imgFailed(item.poster ?? '')"
+        [src]="imgSrc(item.poster ?? '')"
+        [loading]="isFirstVisible() ? 'eager' : 'lazy'"
+        [attr.fetchpriority]="isFirstVisible() ? 'high' : undefined"
+        decoding="async"
+        [alt]="item.alt ?? (item.titleKey ?? '') + ' video poster'"
+        (error)="onImgError(item.poster ?? '')"
+      />
       <button
         type="button"
-        class="stage-sound"
-        (click)="toggleMute()"
-        [attr.aria-label]="isMuted() ? 'Sound off' : 'Sound on'"
-        [attr.aria-pressed]="isMuted()"
+        class="stage-play"
+        (click)="activateYoutube()"
+        aria-label="Play video"
       >
-        @if (isMuted()) {
-          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-            <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"></polygon>
-            <line x1="23" y1="9" x2="17" y2="15"></line>
-            <line x1="17" y1="9" x2="23" y2="15"></line>
-          </svg>
-        } @else {
-          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-            <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"></polygon>
-            <path d="M15.54 8.46a5 5 0 0 1 0 7.07"></path>
-            <path d="M19.07 4.93a10 10 0 0 1 0 14.14"></path>
-          </svg>
-        }
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+          <path d="M8 5v14l11-7z"></path>
+        </svg>
       </button>
+    } @else {
+      @if (item.provider === 'youtube') {
+        <iframe
+          #ytFrame
+          class="stage-media"
+          [src]="youtubeSrc(item.videoId ?? '')"
+          title="Company showcase video"
+          allow="autoplay; encrypted-media; picture-in-picture"
+          allowfullscreen
+          referrerpolicy="strict-origin-when-cross-origin"
+        ></iframe>
+      } @else {
+        <video
+          #videoRef
+          class="stage-media"
+          [src]="item.src"
+          [poster]="item.poster"
+          autoplay
+          [muted]="isMuted()"
+          playsinline
+          preload="metadata"
+          (ended)="onVideoEnded()"
+          (error)="onVideoError()"
+        ></video>
+
+        <button
+          type="button"
+          class="stage-sound"
+          (click)="toggleMute()"
+          [attr.aria-label]="isMuted() ? 'Sound off' : 'Sound on'"
+          [attr.aria-pressed]="isMuted()"
+        >
+          @if (isMuted()) {
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+              <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"></polygon>
+              <line x1="23" y1="9" x2="17" y2="15"></line>
+              <line x1="17" y1="9" x2="23" y2="15"></line>
+            </svg>
+          } @else {
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+              <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"></polygon>
+              <path d="M15.54 8.46a5 5 0 0 1 0 7.07"></path>
+              <path d="M19.07 4.93a10 10 0 0 1 0 14.14"></path>
+            </svg>
+          }
+        </button>
+      }
     }
   }
 

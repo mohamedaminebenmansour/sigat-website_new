@@ -112,6 +112,24 @@ import { CompanyStat } from '../../models/company-stat.model';
       .stat-label {
         font-size: 0.8rem;
       }
+
+      /* Column-gap token shared by the separator offsets below. */
+      .company-stats {
+        --stats-gap-x: 1rem;
+      }
+
+      /* Thin vertical separator between neighbouring statistics.
+         1px, vertically centred, shorter than the stat block so it never
+         touches the container edges; inset-inline-* keeps it RTL-correct. */
+      .stat-item:not(:first-child)::before {
+        content: '';
+        position: absolute;
+        inset-block: 22%;
+        inset-inline-start: calc(-0.5 * var(--stats-gap-x, 1rem));
+        width: 1px;
+        background: rgba(147, 197, 253, 0.3);
+        pointer-events: none;
+      }
     }
 
     @media (min-width: 768px) and (max-width: 1023px) {
@@ -135,6 +153,10 @@ import { CompanyStat } from '../../models/company-stat.model';
 
       .stat-label {
         font-size: 0.7rem;
+      }
+
+      .company-stats {
+        --stats-gap-x: 0.75rem;
       }
     }
 
@@ -162,6 +184,32 @@ import { CompanyStat } from '../../models/company-stat.model';
       .stat-label {
         font-size: 0.6rem;
         letter-spacing: 0.05em;
+      }
+
+      .company-stats {
+        --stats-gap-x: 0.75rem;
+      }
+
+      /* Mobile 2x2 grid: one subtle vertical rule between the two columns. */
+      .stat-item:nth-child(even)::before {
+        content: '';
+        position: absolute;
+        inset-block: 14%;
+        inset-inline-start: calc(-0.5 * var(--stats-gap-x, 0.75rem));
+        width: 1px;
+        background: rgba(147, 197, 253, 0.24);
+        pointer-events: none;
+      }
+
+      /* One short horizontal rule between the two rows (never full-width). */
+      .stat-item:nth-child(n + 3)::after {
+        content: '';
+        position: absolute;
+        top: -0.34rem;
+        inset-inline: 18%;
+        height: 1px;
+        background: rgba(147, 197, 253, 0.2);
+        pointer-events: none;
       }
     }
 

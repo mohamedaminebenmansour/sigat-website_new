@@ -1,5 +1,7 @@
 export type MediaType = 'image' | 'video';
 
+export type MediaProvider = 'local' | 'youtube';
+
 export type MediaCategory =
   | 'projects'
   | 'construction'
@@ -12,6 +14,10 @@ export interface MediaItem {
   type: MediaType;
   src: string;
   category: MediaCategory;
+  /** Video host. When 'youtube', `videoId` is used and `src` may be empty. */
+  provider?: MediaProvider;
+  /** YouTube video id (used when provider === 'youtube'). */
+  videoId?: string;
   tags?: MediaCategory[];
   thumbnail?: string;
   poster?: string;

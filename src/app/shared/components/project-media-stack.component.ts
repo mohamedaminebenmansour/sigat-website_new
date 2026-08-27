@@ -125,7 +125,8 @@ let nextLayerId = 0;
 
       @if (!coverFailed()) {
         <!-- Project hero / cover: permanent background, never in the gallery -->
-        <img class="pms-cover" [src]="cover()" [alt]="altLabel() + ' - cover'"
+        <img class="pms-cover" [src]="cover()" [srcset]="mediaSrcset(cover())"
+             sizes="100vw" [alt]="altLabel() + ' - cover'"
              fetchpriority="high" (error)="onCoverError()" />
         <div class="pms-shade" aria-hidden="true"></div>
       } @else {
@@ -141,8 +142,9 @@ let nextLayerId = 0;
              [style.transform]="layerTransform(layer)"
              [style.opacity]="layerOpacity(layer)"
              [attr.aria-hidden]="layer.leaving ? 'true' : null">
-          <img [src]="layer.src" [alt]="altFor(layer)"
-               loading="lazy" decoding="async" (error)="onLayerError(layer)" />
+          <img [src]="layer.src" [srcset]="mediaSrcset(layer.src)" sizes="100vw"
+                 [alt]="altFor(layer)"
+                 loading="lazy" decoding="async" (error)="onLayerError(layer)" />
         </div>
       }
 
@@ -168,6 +170,15 @@ export class ProjectMediaStackComponent implements OnInit {
   readonly gallery = computed(() => this.media()?.gallery ?? []);
   /** Compact counter, e.g. 03 / 08 */
   readonly position = signal('01 / 01');
+
+  /** Responsive `srcset` for a WebP slide (uses the -1280 / -768 variants). */
+  mediaSrcset(src: string): string {
+    if (src.includes('.webp')) {
+      const root = src.replace(/\.webp$/, '');
+      return `${src} 1920w, ${root}-1280.webp 1280w, ${root}-768.webp 768w`;
+    }
+    return '';
+  }
 
   private readonly host = inject(ElementRef<HTMLElement>);
   private readonly destroyRef = inject(DestroyRef);

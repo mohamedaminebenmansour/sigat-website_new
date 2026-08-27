@@ -10,27 +10,27 @@ export class MockDataService {
   private projects: Project[] = [
     {
       id: 1,
-      title: 'Réseau d\'assainissement - Sousse',
+      title: 'RÃ©seau d\'assainissement - Sousse',
       category: 'hydraulic',
       location: 'Sousse, Tunisie',
       year: '2023',
       description:
-        'Installation de 28 km de réseaux d\'assainissement pour la ville de Sousse, incluant des collecteurs principaux en PVC DN400 à DN800, 3 stations de relevage et la raccordement de 1 200 foyers.',
+        'Installation de 28 km de rÃ©seaux d\'assainissement pour la ville de Sousse, incluant des collecteurs principaux en PVC DN400 Ã  DN800, 3 stations de relevage et la raccordement de 1 200 foyers.',
       client: 'ONAS (Office National de l\'Assainissement)',
-      scope: 'Étude, fourniture, installation, essais et mise en service',
+      scope: 'Ã‰tude, fourniture, installation, essais et mise en service',
       imageUrl: 'https://images.unsplash.com/photo-1541888946425-d81bb50b2e0b?w=800&q=80',
       galleryUrls: [
         'https://images.unsplash.com/photo-1541888946425-d81bb50b2e0b?w=800&q=80',
         'https://images.unsplash.com/photo-1581092160562-40aa08e78837?w=800&q=80'
       ],
       media: {
-        cover: 'assets/media/projects/aep-ouled-khalfallah/cover.jpg',
+        cover: 'assets/media/projects/aep-ouled-khalfallah/cover.webp',
         gallery: [
-          'assets/media/projects/aep-ouled-khalfallah/6.jpg',
-          'assets/media/projects/aep-ouled-khalfallah/7.jpg',
-          'assets/media/projects/aep-ouled-khalfallah/8.jpg',
-          'assets/media/projects/aep-ouled-khalfallah/9.jpg',
-          'assets/media/projects/aep-ouled-khalfallah/3.jpg'
+          'assets/media/projects/aep-ouled-khalfallah/6.webp',
+          'assets/media/projects/aep-ouled-khalfallah/7.webp',
+          'assets/media/projects/aep-ouled-khalfallah/8.webp',
+          'assets/media/projects/aep-ouled-khalfallah/9.webp',
+          'assets/media/projects/aep-ouled-khalfallah/3.webp'
         ]
       }
     },
@@ -41,8 +41,8 @@ export class MockDataService {
       location: 'Nabeul, Tunisie',
       year: '2022',
       description:
-        'Réalisation d\'une conduite d\'adduction d\'eau potable en fonte ductile DN600 sur 15 km entre le barrage et la station de traitement de Nabeul. Travaux incluant les regards de purge et de vidange.',
-      client: 'SONEDE (Société Nationale d\'Exploitation et de Distribution des Eaux)',
+        'RÃ©alisation d\'une conduite d\'adduction d\'eau potable en fonte ductile DN600 sur 15 km entre le barrage et la station de traitement de Nabeul. Travaux incluant les regards de purge et de vidange.',
+      client: 'SONEDE (SociÃ©tÃ© Nationale d\'Exploitation et de Distribution des Eaux)',
       scope: 'Conception, fourniture, pose et essais hydrauliques',
       imageUrl: 'https://images.unsplash.com/photo-1581092160562-40aa08e78837?w=800&q=80',
       galleryUrls: [
@@ -56,9 +56,9 @@ export class MockDataService {
       location: 'Djerba, Tunisie',
       year: '2024',
       description:
-        'Construction d\'une station de dessalement par osmose inverse d\'une capacité de 50 000 m³/jour incluant la prise d\'eau de mer, le prétraitement, les membranes RO, le post-traitement et 10 km de conduite de refoulement.',
-      client: 'Ministère de l\'Agriculture et des Ressources Hydrauliques',
-      scope: 'Contrat EPC — ingénierie, approvisionnement, construction',
+        'Construction d\'une station de dessalement par osmose inverse d\'une capacitÃ© de 50 000 mÂ³/jour incluant la prise d\'eau de mer, le prÃ©traitement, les membranes RO, le post-traitement et 10 km de conduite de refoulement.',
+      client: 'MinistÃ¨re de l\'Agriculture et des Ressources Hydrauliques',
+      scope: 'Contrat EPC â€” ingÃ©nierie, approvisionnement, construction',
       imageUrl: 'https://images.unsplash.com/photo-1504307651254-35680f356dfd?w=800&q=80',
       galleryUrls: [
         'https://images.unsplash.com/photo-1504307651254-35680f356dfd?w=800&q=80'
@@ -66,14 +66,14 @@ export class MockDataService {
     },
     {
       id: 4,
-      title: 'Zone industrielle - Mégrine',
+      title: 'Zone industrielle - MÃ©grine',
       category: 'construction',
-      location: 'Mégrine, Grand Tunis, Tunisie',
+      location: 'MÃ©grine, Grand Tunis, Tunisie',
       year: '2023',
       description:
-        'Aménagement d\'une zone industrielle de 45 hectares incluant terrassement, réseaux VRD, assainissement pluvial, éclairage public et construction de 10 hangars pour PME industrielles.',
-      client: 'Agence Foncière Industrielle (AFI)',
-      scope: 'Plan d\'aménagement, conception VRD, construction',
+        'AmÃ©nagement d\'une zone industrielle de 45 hectares incluant terrassement, rÃ©seaux VRD, assainissement pluvial, Ã©clairage public et construction de 10 hangars pour PME industrielles.',
+      client: 'Agence FonciÃ¨re Industrielle (AFI)',
+      scope: 'Plan d\'amÃ©nagement, conception VRD, construction',
       imageUrl: 'https://images.unsplash.com/photo-1581092795360-fd1ca04f0952?w=800&q=80',
       galleryUrls: [
         'https://images.unsplash.com/photo-1581092795360-fd1ca04f0952?w=800&q=80'
@@ -81,14 +81,14 @@ export class MockDataService {
     },
     {
       id: 5,
-      title: 'Siège administratif - Tunis',
+      title: 'SiÃ¨ge administratif - Tunis',
       category: 'construction',
       location: 'Tunis, Tunisie',
       year: '2024',
       description:
-        'Construction d\'un immeuble de bureaux R+6 avec 2 niveaux de sous-sol, structure en béton armé, façade en mur-rideau et systèmes de building intelligents. Surface totale : 8 500 m².',
-      client: 'Promotion Immobilière Maghrébine',
-      scope: 'Études d\'exécution, fondations, superstructure, second œuvre',
+        'Construction d\'un immeuble de bureaux R+6 avec 2 niveaux de sous-sol, structure en bÃ©ton armÃ©, faÃ§ade en mur-rideau et systÃ¨mes de building intelligents. Surface totale : 8 500 mÂ².',
+      client: 'Promotion ImmobiliÃ¨re MaghrÃ©bine',
+      scope: 'Ã‰tudes d\'exÃ©cution, fondations, superstructure, second Å“uvre',
       imageUrl: 'https://images.unsplash.com/photo-1486325212027-8081e485255e?w=800&q=80',
       galleryUrls: [
         'https://images.unsplash.com/photo-1486325212027-8081e485255e?w=800&q=80'
@@ -96,14 +96,14 @@ export class MockDataService {
     },
     {
       id: 6,
-      title: 'Pont-canal - Béja',
+      title: 'Pont-canal - BÃ©ja',
       category: 'construction',
-      location: 'Béja, Tunisie',
+      location: 'BÃ©ja, Tunisie',
       year: '2022',
       description:
-        'Conception et réalisation d\'un pont-canal de 180 m pour le franchissement de l\'oued Béja par une conduite d\'irrigation DN800, avec culées en béton armé et appuis intermédiaires.',
-      client: 'Ministère de l\'Équipement et de l\'Habitat',
-      scope: 'Avant-projet, études d\'exécution, construction, essais de charge',
+        'Conception et rÃ©alisation d\'un pont-canal de 180 m pour le franchissement de l\'oued BÃ©ja par une conduite d\'irrigation DN800, avec culÃ©es en bÃ©ton armÃ© et appuis intermÃ©diaires.',
+      client: 'MinistÃ¨re de l\'Ã‰quipement et de l\'Habitat',
+      scope: 'Avant-projet, Ã©tudes d\'exÃ©cution, construction, essais de charge',
       imageUrl: 'https://images.unsplash.com/photo-1504917595217-d4dc5ebe6122?w=800&q=80',
       galleryUrls: [
         'https://images.unsplash.com/photo-1504917595217-d4dc5ebe6122?w=800&q=80'
@@ -116,7 +116,7 @@ export class MockDataService {
       id: 1,
       name: 'Caterpillar 336 Excavator',
       type: 'Excavator',
-      specs: '36-tonne, 2.0m³ bucket, 320 HP',
+      specs: '36-tonne, 2.0mÂ³ bucket, 320 HP',
       quantity: 5,
       imageUrl: 'https://images.unsplash.com/photo-1581092160562-40aa08e78837?w=800&q=80'
     },
@@ -156,7 +156,7 @@ export class MockDataService {
       id: 6,
       name: 'Sany HZS180 Concrete Plant',
       type: 'Concrete Mixer',
-      specs: '180 m³/hour capacity, twin-shaft mixer',
+      specs: '180 mÂ³/hour capacity, twin-shaft mixer',
       quantity: 6,
       imageUrl: 'https://images.unsplash.com/photo-1581092795360-fd1ca04f0952?w=800&q=80'
     }

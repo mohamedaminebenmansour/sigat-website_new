@@ -1,13 +1,14 @@
 import { Component, input } from '@angular/core';
 import { RouterLink } from '@angular/router';
 import { TranslatePipe } from '@ngx-translate/core';
+import { NgOptimizedImage } from '@angular/common';
 
 const DEFAULT_IMAGE = 'https://images.unsplash.com/photo-1504307651254-35680f356dfd?w=800';
 
 @Component({
   selector: 'app-project-card',
   standalone: true,
-  imports: [RouterLink, TranslatePipe],
+  imports: [RouterLink, TranslatePipe, NgOptimizedImage],
   styles: [
     `
       :host {
@@ -60,10 +61,12 @@ const DEFAULT_IMAGE = 'https://images.unsplash.com/photo-1504307651254-35680f356
       [routerLink]="routerLink()"
       class="group project-card relative block aspect-[4/3] overflow-hidden rounded-lg shadow-md hover:shadow-xl transition-shadow duration-300 cursor-pointer"
     >
-      <!-- Project photograph fills the entire card -->
+      <!-- Project photograph fills the entire card (NgOptimizedImage: fill + lazy) -->
       <img
-        [src]="imageUrl()"
+        [ngSrc]="imageUrl()"
         [alt]="title()"
+        fill
+        priority="false"
         loading="lazy"
         class="absolute inset-0 w-full h-full object-cover transition-transform duration-500 ease-out group-hover:scale-105"
       />

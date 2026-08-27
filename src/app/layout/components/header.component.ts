@@ -79,7 +79,7 @@ import { NavigationService } from '../../core/navigation/navigation.service';
           <div class="brand-zone">
             <a routerLink="/home" [class]="logoClasses()" aria-label="SIGAT home">
               <img
-                src="/assets/media/logo/sigatlogo.png"
+                src="assets/media/logo/sigatlogo.png"
                 alt="SIGAT"
                 class="h-auto object-contain"
               />

@@ -63,3 +63,13 @@ src/assets/media/hero/AEP-ouled-khalfallah-01.mp4
 *.mov
 *.avi
 *.mkv
+# Exception: the optimised production video (~81MB H.264 web.mp4) must ship.
+!src/assets/media/hero/AEP-ouled-khalfallah-01.web.mp4
+
+# Keep multi-MB original media out of the production repo.
+src/assets/media/_source/
+
+
+# Local master-source media (large originals) � NOT deployed/committed.
+/media-source/
+

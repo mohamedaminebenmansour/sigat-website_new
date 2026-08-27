@@ -23,6 +23,69 @@
   display: block;
 }
 
+/* Deferred YouTube iframe fills the stage like a slide. */
+.media-stage iframe.stage-media {
+  border: 0;
+}
+
+/* Play control overlay for the deferred YouTube poster. */
+.stage-play {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  z-index: 3;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 4rem;
+  height: 4rem;
+  padding: 0;
+  border-radius: 999px;
+  border: 1px solid rgba(255, 255, 255, 0.4);
+  background: rgba(10, 20, 40, 0.4);
+  backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: blur(6px);
+  color: #ffffff;
+  cursor: pointer;
+  transition: background-color 0.25s ease, transform 0.25s ease;
+}
+
+.stage-play svg {
+  width: 1.75rem;
+  height: 1.75rem;
+}
+
+.stage-play::after {
+  content: '';
+  position: absolute;
+  inset: -0.3rem;
+}
+
+.stage-play:hover {
+  background: rgba(30, 58, 138, 0.7);
+  transform: translate(-50%, -50%) scale(1.04);
+}
+
+.stage-play:focus-visible {
+  outline: 2px solid rgba(255, 255, 255, 0.8);
+  outline-offset: 2px;
+}
+
+/* Graceful broken-image fallback: a calm SIG blue-toned panel. */
+.stage-media--fallback {
+  background: radial-gradient(140% 140% at 50% 20%, #15223d 0%, #0b1220 60%, #060a12 100%);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .stage-play {
+    transition: none;
+  }
+  .stage-play:hover {
+    transform: translate(-50%, -50%);
+  }
+}
+
 /* Semi-transparent overlay sits above the media but below controls. */
 .stage-overlay {
   position: absolute;
