@@ -8,7 +8,7 @@ on:
   workflow_dispatch:
 
 permissions:
-  contents: read
+  contents: write
 
 concurrency:
   group: pages
@@ -33,13 +33,18 @@ jobs:
         run: npm run build:pages
 
       - name: Deploy to gh-pages
-        uses: peaceiris/actions-ghpages@v4
-        with:
-          github_token: ${{ secrets.GITHUB_TOKEN }}
-          publish_dir: dist/sigat-website/browser
-          publish_branch: gh-pages
-          force_orphan: true
-          keep_files: false
-          user_name: github-actions[bot]
-          user_email: 41898282+github-actions[bot]@users.noreply.github.com
-          commit_message: 'deploy: ${{ github.event.head_commit.message }}'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -e
+          cd dist/sigat-website/browser
+          git init -q
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git checkout -qb gh-pages
+          git add -A
+          git commit -qm "deploy: $GITHUB_SHA"
+          git remote add origin "https://x-access-token:${GH_TOKEN}@github.com/${{ github.repository }}.git"
+          git push -fq origin gh-pages
+          echo "Published dist/sigat-website/browser to gh-pages"
+
