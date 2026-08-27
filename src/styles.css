@@ -50,12 +50,15 @@ html {
 
 .values-section {
   /* Responsive geometric tuning (rem units, clamped per breakpoint). */
-  --values-r: clamp(8.75rem, 22vw, 11.75rem);   /* orbit radius (card center on path) */
+  --values-r: clamp(9.4rem, 23.5vw, 12.6rem);   /* orbit radius (card center on path) */
   --values-card-w: clamp(10.5rem, 15vw, 11.25rem); /* ellipse card width */
   --values-card-h: clamp(9.75rem, 13vw, 10.5rem); /* ellipse card height */
-  --values-center: clamp(6.5rem, 10vw, 7.25rem); /* center circle size */
+  --values-center: clamp(7rem, 10.8vw, 7.9rem);   /* center circle size */
   position: relative;
   padding: 2.5rem 0 3rem;
+  /* Continuous-surface rhythm: white flows into a whisper-light blue-gray so
+     Story -> Values -> Projects reads as one presentation, not three bands. */
+  background: linear-gradient(180deg, #ffffff 0%, #f4f7fc 100%);
 }
 
 .values-container {
@@ -146,6 +149,10 @@ html {
     line-height: 1.35;
     color: rgba(30, 58, 138, 0.78);
     display: block;
+    /* Contained inside the disc: constrained measure + inline padding so the
+       supporting phrase never reaches the circular boundary. */
+    max-width: calc(var(--values-center) * 0.78);
+    padding-inline: 0.25rem;
   }
 
   .values-slot {
