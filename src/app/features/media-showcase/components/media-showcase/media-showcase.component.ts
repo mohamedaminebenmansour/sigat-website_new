@@ -235,6 +235,7 @@ export class MediaShowcaseComponent implements OnInit, OnDestroy, AfterViewInit 
 
   private readonly host = inject(ElementRef<HTMLElement>);
   private readonly destroyRef = inject(DestroyRef);
+  private readonly zone = inject(NgZone);
   private intersectionObserver: IntersectionObserver | null = null;
 
   /**
@@ -317,12 +318,11 @@ export class MediaShowcaseComponent implements OnInit, OnDestroy, AfterViewInit 
     if (typeof IntersectionObserver === 'undefined') {
       return;
     }
-    const zone = inject(NgZone);
     this.intersectionObserver = new IntersectionObserver(
       () => this.syncVideoVisibility(),
       { threshold: [0, VISIBILITY_THRESHOLD, 1] }
     );
-    zone.runOutsideAngular(() =>
+    this.zone.runOutsideAngular(() =>
       this.intersectionObserver?.observe(this.host.nativeElement)
     );
 

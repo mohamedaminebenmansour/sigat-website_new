@@ -5,6 +5,8 @@
     "ng": "ng",
     "start": "ng serve",
     "build": "ng build",
+    "build:pages": "ng build --base-href=/sigat-website_new/ && node scripts/build-pages.mjs",
+    "deploy:pages": "npm run build:pages && npx angular-cli-ghpages --dir=dist/sigat-website/browser --no-silent",
     "watch": "ng build --watch --configuration development",
     "test": "ng test"
   },
