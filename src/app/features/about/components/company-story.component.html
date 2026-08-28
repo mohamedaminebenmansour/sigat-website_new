@@ -45,18 +45,15 @@
               never empty.
             -->
             <img
-              class="cs-slide"
               fill
               priority
+              [class]="activeSlideClass()"
               [ngSrc]="images[activeIndex()].src"
               [ngSrcset]="imageSrcset"
               [sizes]="imageSizes"
               [alt]="images[activeIndex()].alt"
               [style.object-position]="images[activeIndex()].objectPosition"
               draggable="false"
-              [class.cs-slide--active]="!isTransitioning()"
-              [class.cs-slide--exit-next]="isTransitioning() && direction() === 'next'"
-              [class.cs-slide--exit-prev]="isTransitioning() && direction() === 'prev'"
               (load)="onImageLoad(activeIndex())"
               (error)="onImageError(activeIndex())" />
 
@@ -65,18 +62,15 @@
               the next image; transition = slides in on top of the current one.
             -->
             <img
-              class="cs-slide"
               fill
               loading="eager"
+              [class]="preloadSlideClass()"
               [ngSrc]="images[preloadIndex()].src"
               [ngSrcset]="imageSrcset"
               [sizes]="imageSizes"
               [alt]="isTransitioning() ? images[preloadIndex()].alt : ''"
               [style.object-position]="images[preloadIndex()].objectPosition"
               draggable="false"
-              [class.cs-slide--hidden]="!isTransitioning()"
-              [class.cs-slide--enter-next]="isTransitioning() && direction() === 'next'"
-              [class.cs-slide--enter-prev]="isTransitioning() && direction() === 'prev'"
               (load)="onImageLoad(preloadIndex())"
               (error)="onImageError(preloadIndex())" />
           </div>

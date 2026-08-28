@@ -47,6 +47,30 @@ const REVEAL_STAGGER_MS = 140;
       :host {
         display: block;
       }
+
+      /* The center disc (>=768px) holds only the descriptive sentence after the
+         duplicated title was removed. Slightly larger type rebalances the disc
+         so it reads as a confident anchor without needing to resize the circle.
+         Component-scoped, so it wins over the global rule for this element. */
+      .values-center-subtitle {
+        font-size: 0.75rem;
+      }
+
+      /* The center disc already carries this sentence on >=768px, so the header
+         subtitle is hidden there and restored on mobile (project "md" breakpoint
+         of 767px). ::ng-deep is required because the subtitle <p> lives inside
+         the child SectionHeaderComponent; scoping it under .values-header keeps
+         the rule local to this component's header instance. display:none avoids
+         reserving layout space on desktop/tablet. */
+      .values-header ::ng-deep p {
+        display: none;
+      }
+
+      @media (max-width: 767px) {
+        .values-header ::ng-deep p {
+          display: block;
+        }
+      }
     `
   ],
   template: `
@@ -76,7 +100,6 @@ const REVEAL_STAGGER_MS = 140;
           <div class="values-center" aria-hidden="true">
             <div class="values-center-core">
               <i class="fa-solid fa-helmet-safety" aria-hidden="true"></i>
-              <strong class="values-center-title">{{ 'values_center_title' | translate }}</strong>
               <span class="values-center-subtitle">{{ 'values_center_subtitle' | translate }}</span>
             </div>
           </div>

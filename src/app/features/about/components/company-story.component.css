@@ -14,9 +14,11 @@
   --cs-body: #475569;
   --cs-surface: #f8fafc;
   --cs-card-border: rgba(15, 23, 42, 0.08);
-  --cs-transition: 650ms;   /* keep in sync with TRANSITION_MS */
-  --cs-autoplay: 6000ms;    /* keep in sync with AUTOPLAY_MS */
+  --cs-transition: 800ms;   /* keep in sync with TRANSITION_MS */
+  --cs-autoplay: 3000ms;    /* keep in sync with AUTOPLAY_MS */
   --cs-ken-burns: 6800ms;
+  --cs-shift-x: 7%;
+  --cs-shift-y: 6%;
   --cs-ease-out: cubic-bezier(0.22, 1, 0.36, 1);
   --cs-ease-in-out: cubic-bezier(0.4, 0, 0.2, 1);
 
@@ -178,47 +180,41 @@
   opacity: 0;
 }
 
-.cs-slide--exit-next {
-  z-index: 1;
-  animation: cs-exit-next var(--cs-transition) var(--cs-ease-in-out) both;
-}
-
-.cs-slide--exit-prev {
-  z-index: 1;
-  animation: cs-exit-prev var(--cs-transition) var(--cs-ease-in-out) both;
-}
-
-.cs-slide--enter-next {
-  z-index: 2;
-  animation: cs-enter-next var(--cs-transition) var(--cs-ease-out) both;
-}
-
-.cs-slide--enter-prev {
-  z-index: 2;
-  animation: cs-enter-prev var(--cs-transition) var(--cs-ease-out) both;
-}
+/* Outgoing layer beneath entering; incoming above, so no gap is ever visible. */
+.cs-slide[class*='cs-slide--exit-']{z-index:1;animation:cs-exit var(--cs-transition) var(--cs-ease-in-out) both}
+.cs-slide[class*='cs-slide--enter-']{z-index:2;animation:cs-enter var(--cs-transition) var(--cs-ease-out) both}
 
 @keyframes cs-ken-burns {
   from { transform: scale(1); }
   to { transform: scale(1.03); }
 }
 
-@keyframes cs-exit-next {
-  to { opacity: 0; transform: translateX(-3.5%) scale(0.99); }
+/* Per-direction travel offsets feeding the two shared keyframes below. */
+.cs-slide--exit-right{--cs-ex:calc(var(--cs-shift-x)*-.6);--cs-ey:0}
+.cs-slide--exit-left{--cs-ex:calc(var(--cs-shift-x)*.6);--cs-ey:0}
+.cs-slide--exit-top{--cs-ex:0;--cs-ey:calc(var(--cs-shift-y)*.6)}
+.cs-slide--exit-bottom{--cs-ex:0;--cs-ey:calc(var(--cs-shift-y)*-.6)}
+.cs-slide--exit-top-left{--cs-ex:calc(var(--cs-shift-x)*-.6);--cs-ey:calc(var(--cs-shift-y)*.6)}
+.cs-slide--exit-top-right{--cs-ex:calc(var(--cs-shift-x)*.6);--cs-ey:calc(var(--cs-shift-y)*.6)}
+.cs-slide--exit-bottom-left{--cs-ex:calc(var(--cs-shift-x)*-.6);--cs-ey:calc(var(--cs-shift-y)*-.6)}
+.cs-slide--exit-bottom-right{--cs-ex:calc(var(--cs-shift-x)*.6);--cs-ey:calc(var(--cs-shift-y)*-.6)}
+
+.cs-slide--enter-right{--cs-ex:var(--cs-shift-x);--cs-ey:0}
+.cs-slide--enter-left{--cs-ex:calc(var(--cs-shift-x)*-1);--cs-ey:0}
+.cs-slide--enter-top{--cs-ex:0;--cs-ey:calc(var(--cs-shift-y)*-1)}
+.cs-slide--enter-bottom{--cs-ex:0;--cs-ey:var(--cs-shift-y)}
+.cs-slide--enter-top-left{--cs-ex:calc(var(--cs-shift-x)*-1);--cs-ey:calc(var(--cs-shift-y)*-1)}
+.cs-slide--enter-top-right{--cs-ex:var(--cs-shift-x);--cs-ey:calc(var(--cs-shift-y)*-1)}
+.cs-slide--enter-bottom-left{--cs-ex:calc(var(--cs-shift-x)*-1);--cs-ey:var(--cs-shift-y)}
+.cs-slide--enter-bottom-right{--cs-ex:var(--cs-shift-x);--cs-ey:var(--cs-shift-y)}
+
+@keyframes cs-enter {
+  from { opacity: 0; transform: translate(var(--cs-ex, 0), var(--cs-ey, 0)) scale(1.04); }
+  to { opacity: 1; transform: translate(0, 0) scale(1); }
 }
 
-@keyframes cs-exit-prev {
-  to { opacity: 0; transform: translateX(3.5%) scale(0.99); }
-}
-
-@keyframes cs-enter-next {
-  from { opacity: 0; transform: translateX(6%) scale(1.015); }
-  to { opacity: 1; transform: translateX(0) scale(1); }
-}
-
-@keyframes cs-enter-prev {
-  from { opacity: 0; transform: translateX(-6%) scale(1.015); }
-  to { opacity: 1; transform: translateX(0) scale(1); }
+@keyframes cs-exit {
+  to { opacity: 0; transform: translate(var(--cs-ex, 0), var(--cs-ey, 0)) scale(0.98); }
 }
 
 /* ---------- Navigation arrows ---------- */
@@ -408,6 +404,8 @@
   }
 
   .cs-gallery {
+    --cs-shift-x: 3.5%; /* reduce travel distance on small screens */
+    --cs-shift-y: 3%;
     max-width: 34rem;
   }
 
@@ -503,13 +501,11 @@
     animation: none;
   }
 
-  .cs-slide--exit-next,
-  .cs-slide--exit-prev {
+  .cs-slide[class*='cs-slide--exit-'] {
     animation: cs-fade-out 200ms ease both;
   }
 
-  .cs-slide--enter-next,
-  .cs-slide--enter-prev {
+  .cs-slide[class*='cs-slide--enter-'] {
     animation: cs-fade-in 200ms ease both;
   }
 

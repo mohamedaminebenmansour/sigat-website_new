@@ -17,8 +17,43 @@ import {
 } from '@angular/common';
 import { TranslatePipe } from '@ngx-translate/core';
 
-/** Direction of a gallery transition (navigation intent). */
-type GalleryDirection = 'next' | 'prev';
+/**
+ * Direction a slide travels / enters from. Each transition uses a different
+ * deterministic direction (see ENTRANCE_SEQUENCE) for an editorial feel.
+ */
+type SlideDirection =
+  | 'right'
+  | 'left'
+  | 'top'
+  | 'bottom'
+  | 'top-left'
+  | 'top-right'
+  | 'bottom-left'
+  | 'bottom-right';
+
+/** Deterministic, repeating entrance sequence (never random). */
+const ENTRANCE_SEQUENCE: readonly SlideDirection[] = [
+  'right',
+  'bottom-left',
+  'top',
+  'left',
+  'top-right',
+  'bottom',
+  'bottom-right',
+  'top-left',
+];
+
+/** Exit direction is the mirror of the entrance so the slides wipe coherently. */
+const EXIT_DIRECTION: Record<SlideDirection, SlideDirection> = {
+  right: 'left',
+  left: 'right',
+  top: 'bottom',
+  bottom: 'top',
+  'top-left': 'bottom-right',
+  'top-right': 'bottom-left',
+  'bottom-left': 'top-right',
+  'bottom-right': 'top-left',
+};
 
 /**
  * Typed gallery configuration. Add / remove / reorder entries here and the
@@ -58,9 +93,9 @@ const IMAGE_SRCSET = '768w, 1280w';
 const IMAGE_SIZES = '(min-width: 1280px) 600px, (min-width: 1024px) 52vw, 100vw';
 
 /** Autoplay display duration per image (ms). */
-const AUTOPLAY_MS = 6000;
+const AUTOPLAY_MS = 3000;
 /** CSS transition duration (must match --cs-transition in the stylesheet). */
-const TRANSITION_MS = 650;
+const TRANSITION_MS = 800;
 /** Commit delay when the user prefers reduced motion (opacity-only fade). */
 const REDUCED_MOTION_TRANSITION_MS = 250;
 /** Minimum horizontal distance for a swipe to be recognized. */
@@ -96,13 +131,30 @@ export class CompanyStoryComponent {
   protected readonly activeIndex = signal(0);
   /** Index of the image being preloaded / entering during a transition. */
   protected readonly preloadIndex = signal(GALLERY_IMAGES.length > 1 ? 1 : 0);
-  protected readonly direction = signal<GalleryDirection>('next');
+  /** Entrance direction of the slide that is transitioning in. */
+  protected readonly entranceKey = signal<SlideDirection>('right');
   protected readonly isTransitioning = signal(false);
 
   protected readonly counter = computed(() => ({
     current: String(this.activeIndex() + 1).padStart(2, '0'),
     total: String(GALLERY_IMAGES.length).padStart(2, '0'),
   }));
+
+  /** Class string for the slide currently on display. */
+  protected readonly activeSlideClass = computed(() => {
+    if (!this.isTransitioning()) {
+      return 'cs-slide cs-slide--active';
+    }
+    return `cs-slide cs-slide--exit-${EXIT_DIRECTION[this.entranceKey()]}`;
+  });
+
+  /** Class string for the preload / entering slide layer. */
+  protected readonly preloadSlideClass = computed(() => {
+    if (!this.isTransitioning()) {
+      return 'cs-slide cs-slide--hidden';
+    }
+    return `cs-slide cs-slide--enter-${this.entranceKey()}`;
+  });
 
   private readonly loadedImages = new Set<number>();
   private readonly failedImages = new Set<number>();
@@ -139,13 +191,12 @@ export class CompanyStoryComponent {
   // ------------------------------------------------------------------
 
   protected next(): void {
-    this.goTo((this.activeIndex() + 1) % GALLERY_IMAGES.length, 'next');
+    this.goTo((this.activeIndex() + 1) % GALLERY_IMAGES.length);
   }
 
   protected previous(): void {
     this.goTo(
       (this.activeIndex() - 1 + GALLERY_IMAGES.length) % GALLERY_IMAGES.length,
-      'prev',
     );
   }
 
@@ -154,14 +205,14 @@ export class CompanyStoryComponent {
     if (index === current) {
       return;
     }
-    this.goTo(index, index > current ? 'next' : 'prev');
+    this.goTo(index);
   }
 
   /**
    * Core navigation. The current image ALWAYS stays visible until the target
    * image is fully preloaded; only then does the CSS transition start.
    */
-  private goTo(startIndex: number, direction: GalleryDirection): void {
+  private goTo(startIndex: number): void {
     if (this.isTransitioning()) {
       return;
     }
@@ -171,7 +222,7 @@ export class CompanyStoryComponent {
       return;
     }
 
-    this.direction.set(direction);
+    this.entranceKey.set(ENTRANCE_SEQUENCE[target % ENTRANCE_SEQUENCE.length]);
     this.clearAutoPlayTimer();
 
     if (this.loadedImages.has(target)) {
