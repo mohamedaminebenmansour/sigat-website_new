@@ -1,124 +1,120 @@
-import { Component, computed, signal } from '@angular/core';
+import { ChangeDetectionStrategy, Component, DestroyRef, inject, signal } from '@angular/core';
 import { ActivatedRoute, RouterLink } from '@angular/router';
 import { TranslatePipe } from '@ngx-translate/core';
 import { MockDataService } from '../../core/services/mock-data.service';
-import { Project, ProjectMedia } from '../../core/models/project.model';
-import { ProjectMediaStackComponent } from '../../shared/components/project-media-stack.component';
+import { Project } from '../../core/models/project.model';
+import { CtaBannerComponent } from '../../shared/components/cta-banner.component';
+import { ProjectHeroComponent, ProjectHeroData } from './components/project-hero.component';
+import { ProjectStoryComponent } from './components/project-story.component';
+import { ProjectMetricsComponent } from './components/project-metrics.component';
+import { ProjectLocationComponent } from './components/project-location.component';
+import { ProjectNavigationComponent, ProjectNavItem } from './components/project-navigation.component';
 
 @Component({
   selector: 'app-project-detail',
   standalone: true,
-  imports: [RouterLink, TranslatePipe, ProjectMediaStackComponent],
+  changeDetection: ChangeDetectionStrategy.OnPush,
+  imports: [
+    RouterLink,
+    TranslatePipe,
+    CtaBannerComponent,
+    ProjectHeroComponent,
+    ProjectStoryComponent,
+    ProjectMetricsComponent,
+    ProjectLocationComponent,
+    ProjectNavigationComponent,
+  ],
   template: `
     @if (project(); as p) {
-      <section class="relative h-[60vh] min-h-[24rem] md:h-[78vh] overflow-hidden bg-blue-950">
-        <app-project-media-stack
-          class="absolute inset-0 z-[1]"
-          [media]="stackMedia()"
-          [altLabel]="p.title"
-        />
-        <div class="absolute inset-x-0 top-0 z-[4]">
-          <div class="container mx-auto px-4 pt-10 md:pt-16">
-            <a
-              routerLink="/projects"
-              class="inline-flex items-center gap-2 text-white/80 hover:text-white transition-colors text-sm"
-            >
-              <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7" />
-              </svg>
-              {{ 'project_back' | translate }}
-            </a>
-          </div>
-        </div>
-        <div class="absolute inset-0 z-[3] flex items-end">
-          <div class="container mx-auto px-4 pb-8 md:pb-14">
-            <h1 class="text-3xl md:text-5xl font-bold text-white">{{ p.title }}</h1>
-            <span class="inline-block mt-3 bg-orange-500 text-white text-sm font-semibold uppercase tracking-[0.06em] px-4 py-1.5 rounded-full">
-              {{ p.category }}
-            </span>
-          </div>
-        </div>
-      </section>
+      <app-project-hero [project]="heroData()" />
 
-      <section class="py-12 md:py-16 bg-white">
-        <div class="container mx-auto px-4">
-          <div class="grid grid-cols-1 lg:grid-cols-3 gap-10">
-            <div class="lg:col-span-2">
-              <h2 class="text-2xl font-bold text-gray-900 mb-4">{{ 'project_overview' | translate }}</h2>
-              <p class="text-gray-600 leading-relaxed mb-8">{{ p.description }}</p>
+      <!-- Story + gallery -->
+      <app-project-story [project]="p" />
 
-              <h3 class="text-xl font-bold text-gray-900 mb-3">{{ 'project_scope' | translate }}</h3>
-              <p class="text-gray-600 leading-relaxed mb-8">{{ p.scope }}</p>
-            </div>
+      <!-- Measurable results -->
+      @if (p.metrics?.length) {
+        <app-project-metrics [metrics]="p.metrics ?? []" />
+      }
 
-            <div class="lg:col-span-1">
-              <div class="bg-gray-50 rounded-lg p-6 space-y-6 sticky top-24">
-                <h3 class="text-lg font-bold text-gray-900 border-b border-gray-200 pb-3">{{ 'project_facts' | translate }}</h3>
+      <!-- Location / map -->
+      @if (p.locationGeo) {
+        <app-project-location [geo]="p.locationGeo" />
+      }
 
-                <div>
-                  <p class="text-xs font-semibold text-gray-500 uppercase tracking-wide">{{ 'project_client' | translate }}</p>
-                  <p class="text-gray-900 font-medium mt-1">{{ p.client }}</p>
-                </div>
-                <div>
-                  <p class="text-xs font-semibold text-gray-500 uppercase tracking-wide">{{ 'project_location' | translate }}</p>
-                  <p class="text-gray-900 font-medium mt-1">{{ p.location }}</p>
-                </div>
-                <div>
-                  <p class="text-xs font-semibold text-gray-500 uppercase tracking-wide">{{ 'project_year' | translate }}</p>
-                  <p class="text-gray-900 font-medium mt-1">{{ p.year }}</p>
-                </div>
-                <div>
-                  <p class="text-xs font-semibold text-gray-500 uppercase tracking-wide">{{ 'project_value' | translate }}</p>
-                  <p class="text-gray-900 font-medium mt-1">$2.2M - $8M</p>
-                </div>
-                <div>
-                  <p class="text-xs font-semibold text-gray-500 uppercase tracking-wide">{{ 'project_duration' | translate }}</p>
-                  <p class="text-gray-900 font-medium mt-1">18 months</p>
-                </div>
+      <!-- Previous / next project -->
+      <app-project-navigation
+        [prev]="prevItem()"
+        [next]="nextItem()"
+        [index]="adjacent().index + 1"
+        [total]="adjacent().total"
+      />
 
-                <a
-                  routerLink="/contact"
-                  class="block w-full text-center bg-orange-500 hover:bg-orange-600 text-white font-semibold py-3 px-6 rounded-lg transition-colors mt-6"
-                >
-                  {{ 'project_cta' | translate }}
-                </a>
-              </div>
-            </div>
-          </div>
-        </div>
-      </section>
+      <!-- Existing CTA banner -->
+      <app-cta-banner
+        [title]="'project_cta_title' | translate"
+        [description]="'project_cta_subtitle' | translate"
+        [buttonText]="'project_cta_btn' | translate"
+        buttonRoute="/contact"
+      />
     } @else {
-      <div class="py-20 text-center">
-        <p class="text-gray-500 text-lg">{{ 'project_not_found' | translate }}</p>
-        <a routerLink="/projects" class="inline-block mt-4 text-blue-900 hover:underline font-medium">
-          &larr; {{ 'project_back_all' | translate }}
-        </a>
+      <div class="flex min-h-[50vh] items-center justify-center py-20 text-center">
+        <div>
+          <p class="text-lg text-gray-500">{{ 'project_not_found' | translate }}</p>
+          <a routerLink="/projects" class="mt-4 inline-block font-medium text-blue-900 hover:underline">
+            &larr; {{ 'project_back_all' | translate }}
+          </a>
+        </div>
       </div>
     }
   `
 })
 export class ProjectDetailComponent {
-  readonly project = signal<Project | undefined>(undefined);
+  private readonly destroyRef = inject(DestroyRef);
 
-  /**
-   * Single source of truth for the media stack. Uses the project's own
-   * `media` manifest when present, otherwise falls back to the legacy
-   * imageUrl/galleryUrls so every project still gets a working stack.
-   */
-  readonly stackMedia = computed<ProjectMedia | undefined>(() => {
-    const p = this.project();
-    if (!p) {
-      return undefined;
-    }
-    return p.media ?? { cover: p.imageUrl, gallery: p.galleryUrls };
+  readonly project = signal<Project | undefined>(undefined);
+  readonly adjacent = signal<{ prev?: Project; next?: Project; index: number; total: number }>({
+    index: 0,
+    total: 0
   });
 
   constructor(
     private route: ActivatedRoute,
     private mockData: MockDataService
   ) {
-    const id = Number(this.route.snapshot.paramMap.get('id'));
-    const found = this.mockData.getProjectById(id);
-    this.project.set(found);
+    // Re-resolve on every param change (supports prev/next navigation on the
+    // same :id route) and clean up on destroy.
+    const sub = this.route.paramMap.subscribe((params) => {
+      const id = Number(params.get('id'));
+      this.project.set(this.mockData.getProjectById(id));
+      this.adjacent.set(this.mockData.getAdjacentProjects(id));
+      if (typeof window !== 'undefined') {
+        window.scrollTo({ top: 0, behavior: 'auto' });
+      }
+    });
+    this.destroyRef.onDestroy(() => sub.unsubscribe());
   }
+
+  /** Hero-ready shape (cover falls back to the legacy image). */
+  readonly heroData = (): ProjectHeroData => {
+    const p = this.project();
+    return {
+      title: p?.title ?? '',
+      location: p?.location ?? '',
+      category: p?.category ?? 'hydraulic',
+      startDate: p?.startDate,
+      endDate: p?.endDate,
+      year: p?.year,
+      cover: p?.media?.cover ?? p?.imageUrl ?? ''
+    };
+  };
+
+  readonly prevItem = (): ProjectNavItem | null => {
+    const prev = this.adjacent().prev;
+    return prev ? { id: prev.id, title: prev.title } : null;
+  };
+
+  readonly nextItem = (): ProjectNavItem | null => {
+    const next = this.adjacent().next;
+    return next ? { id: next.id, title: next.title } : null;
+  };
 }

@@ -18,9 +18,56 @@ export interface Project {
    * fallback so existing cards and everything else keep working.
    */
   media?: ProjectMedia;
+
+  // ------------------------------------------------------------------
+  // Case-study extensions (optional / additive - every field below is
+  // optional so legacy projects keep rendering without them).
+  // ------------------------------------------------------------------
+
+  /** Display period, e.g. '2021' and '2023'. Falls back to `year`. */
+  startDate?: string;
+  endDate?: string;
+
+  /**
+   * Structured case-study content. All sentences are translation keys (see the
+   * fr/en/ar json files); the component never embeds copy directly.
+   */
+  content?: ProjectContent;
+
+  /** Quantifiable results (variable length). */
+  metrics?: ProjectMetric[];
+
+  /** Geographic information for the location/map section. */
+  locationGeo?: ProjectGeo;
 }
 
 export interface ProjectMedia {
   cover: string;
   gallery: string[];
+}
+
+export interface ProjectContent {
+  /** Short overview always visible. */
+  overviewKey: string;
+  /** Challenge paragraph (always visible; concise). */
+  challengeKey: string;
+  /** Execution activities as translation keys (progressive disclosure list). */
+  executionScopeKeys: string[];
+  /** Equipment / technology / methods as translation keys. */
+  equipmentKeys?: string[];
+}
+
+export interface ProjectMetric {
+  /** Label translation key, e.g. 'project_1_metric_1_label'. */
+  labelKey: string;
+  /** Numeric or short value kept in the model (never in the component). */
+  value: string;
+  /** Optional unit rendered next to the value. */
+  unit?: string;
+}
+
+export interface ProjectGeo {
+  name: string;
+  latitude?: number;
+  longitude?: number;
 }

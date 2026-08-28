@@ -32,7 +32,34 @@ export class MockDataService {
           'assets/media/projects/aep-ouled-khalfallah/9.webp',
           'assets/media/projects/aep-ouled-khalfallah/3.webp'
         ]
-      }
+      },
+      startDate: '2021',
+      endDate: '2023',
+      content: {
+        overviewKey: 'project_1_overview',
+        challengeKey: 'project_1_challenge',
+        executionScopeKeys: [
+          'project_1_execution_1',
+          'project_1_execution_2',
+          'project_1_execution_3',
+          'project_1_execution_4',
+          'project_1_execution_5',
+          'project_1_execution_6'
+        ],
+        equipmentKeys: [
+          'project_1_equipment_1',
+          'project_1_equipment_2',
+          'project_1_equipment_3',
+          'project_1_equipment_4'
+        ]
+      },
+      metrics: [
+        { labelKey: 'project_1_metric_1_label', value: '28', unit: 'km' },
+        { labelKey: 'project_1_metric_2_label', value: '1 200' },
+        { labelKey: 'project_1_metric_3_label', value: '18' },
+        { labelKey: 'project_1_metric_4_label', value: '24', unit: 'mois' }
+      ],
+      locationGeo: { name: 'Sousse, Tunisie', latitude: 35.8256, longitude: 10.6084 }
     },
     {
       id: 2,
@@ -227,6 +254,23 @@ export class MockDataService {
 
   getProjectById(id: number): Project | undefined {
     return this.projects.find(p => p.id === id);
+  }
+
+  /**
+   * Previous / next project around `id` (wrap-around), derived from the data
+   * array order so it stays correct as projects are added or removed.
+   */
+  getAdjacentProjects(
+    id: number
+  ): { prev?: Project; next?: Project; index: number; total: number } {
+    const index = this.projects.findIndex(p => p.id === id);
+    const total = this.projects.length;
+    if (index === -1) {
+      return { index: -1, total };
+    }
+    const prev = this.projects[(index - 1 + total) % total];
+    const next = this.projects[(index + 1) % total];
+    return { prev, next, index, total };
   }
 
   getProjectsByCategory(category: Project['category']): Project[] {
