@@ -1,0 +1,529 @@
+/* ============================================================
+   Company Story - premium editorial section
+   Fully self-contained: every rule is scoped to this component.
+   Animations use transform / opacity only (GPU friendly).
+   ============================================================ */
+
+:host {
+  --cs-navy: #0f172a;
+  --cs-blue-900: #1e3a8a;
+  --cs-blue-700: #1d4ed8;
+  --cs-blue-500: #3b82f6;
+  --cs-orange: #f59e0b;
+  --cs-heading: #0f172a;
+  --cs-body: #475569;
+  --cs-surface: #f8fafc;
+  --cs-card-border: rgba(15, 23, 42, 0.08);
+  --cs-transition: 650ms;   /* keep in sync with TRANSITION_MS */
+  --cs-autoplay: 6000ms;    /* keep in sync with AUTOPLAY_MS */
+  --cs-ken-burns: 6800ms;
+  --cs-ease-out: cubic-bezier(0.22, 1, 0.36, 1);
+  --cs-ease-in-out: cubic-bezier(0.4, 0, 0.2, 1);
+
+  display: block;
+}
+
+/* ---------- Section shell ---------- */
+
+.cs-section {
+  background: var(--cs-surface);
+  padding-block: clamp(3rem, 5vw + 1.5rem, 5.5rem);
+  overflow-x: clip; /* contains the decorative offset frame */
+}
+
+.cs-layout {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 3rem;
+  align-items: center;
+  max-width: 75rem; /* 1200px editorial width */
+  margin-inline: auto;
+}
+
+/* ---------- Story content ---------- */
+
+.cs-eyebrow {
+  margin: 0 0 0.85rem;
+  font-size: 0.75rem;
+  font-weight: 600;
+  letter-spacing: 0.22em;
+  text-transform: uppercase;
+  color: var(--cs-blue-900);
+}
+
+.cs-title {
+  margin: 0;
+  font-size: clamp(1.75rem, 1.15rem + 2.2vw, 2.5rem);
+  font-weight: 700;
+  line-height: 1.15;
+  letter-spacing: -0.015em;
+  color: var(--cs-heading);
+}
+
+.cs-accent {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  margin-block: 1.15rem 1.6rem;
+}
+
+.cs-accent::before {
+  content: '';
+  width: 2.9rem;
+  height: 3px;
+  border-radius: 999px;
+  background: linear-gradient(90deg, var(--cs-blue-900), var(--cs-blue-500));
+}
+
+.cs-accent::after {
+  content: '';
+  width: 0.9rem;
+  height: 3px;
+  border-radius: 999px;
+  background: var(--cs-orange);
+}
+
+.cs-text {
+  margin: 0;
+  max-width: 34rem;
+  font-size: 1rem;
+  line-height: 1.75;
+  color: var(--cs-body);
+}
+
+.cs-highlight {
+  margin: 1.9rem 0 0;
+  padding: 1.15rem 1.4rem;
+  background: #ffffff;
+  border: 1px solid var(--cs-card-border);
+  border-inline-start: 3px solid var(--cs-blue-700);
+  border-radius: 0.9rem;
+  box-shadow: 0 16px 36px -28px rgba(15, 23, 42, 0.45);
+}
+
+.cs-highlight-text {
+  margin: 0;
+  font-size: 0.95rem;
+  font-weight: 500;
+  line-height: 1.7;
+  color: #334155;
+}
+
+/* ---------- Gallery ---------- */
+
+.cs-gallery-wrap {
+  width: 100%;
+  min-width: 0;
+}
+
+.cs-gallery {
+  position: relative;
+  width: 100%;
+  max-width: 40rem;
+  margin-inline: auto;
+  outline: none;
+}
+
+.cs-gallery:focus-visible {
+  outline: 2px solid var(--cs-blue-700);
+  outline-offset: 6px;
+}
+
+/* Decorative blueprint-style offset frame (engineering feel). */
+.cs-gallery::before {
+  content: '';
+  position: absolute;
+  inset-block-start: 0.9rem;
+  inset-block-end: -0.9rem;
+  inset-inline-start: 0.9rem;
+  inset-inline-end: -0.9rem;
+  border: 1px solid rgba(30, 58, 138, 0.18);
+  border-radius: 1.1rem;
+  pointer-events: none;
+}
+
+.cs-viewport {
+  position: relative;
+  aspect-ratio: 4 / 3;
+  overflow: hidden;
+  border-radius: 1rem;
+  background: var(--cs-navy);
+  box-shadow:
+    0 30px 60px -30px rgba(15, 23, 42, 0.45),
+    0 0 0 1px rgba(15, 23, 42, 0.05);
+  /* horizontal swipe support without blocking vertical page scrolling */
+  touch-action: pan-y;
+}
+
+/* ---------- Slides ---------- */
+
+.cs-slide {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  user-select: none;
+  -webkit-user-drag: none;
+  will-change: transform, opacity;
+}
+
+.cs-slide--active {
+  z-index: 1;
+  animation: cs-ken-burns var(--cs-ken-burns) ease-out both;
+}
+
+.cs-slide--hidden {
+  z-index: 0;
+  opacity: 0;
+}
+
+.cs-slide--exit-next {
+  z-index: 1;
+  animation: cs-exit-next var(--cs-transition) var(--cs-ease-in-out) both;
+}
+
+.cs-slide--exit-prev {
+  z-index: 1;
+  animation: cs-exit-prev var(--cs-transition) var(--cs-ease-in-out) both;
+}
+
+.cs-slide--enter-next {
+  z-index: 2;
+  animation: cs-enter-next var(--cs-transition) var(--cs-ease-out) both;
+}
+
+.cs-slide--enter-prev {
+  z-index: 2;
+  animation: cs-enter-prev var(--cs-transition) var(--cs-ease-out) both;
+}
+
+@keyframes cs-ken-burns {
+  from { transform: scale(1); }
+  to { transform: scale(1.03); }
+}
+
+@keyframes cs-exit-next {
+  to { opacity: 0; transform: translateX(-3.5%) scale(0.99); }
+}
+
+@keyframes cs-exit-prev {
+  to { opacity: 0; transform: translateX(3.5%) scale(0.99); }
+}
+
+@keyframes cs-enter-next {
+  from { opacity: 0; transform: translateX(6%) scale(1.015); }
+  to { opacity: 1; transform: translateX(0) scale(1); }
+}
+
+@keyframes cs-enter-prev {
+  from { opacity: 0; transform: translateX(-6%) scale(1.015); }
+  to { opacity: 1; transform: translateX(0) scale(1); }
+}
+
+/* ---------- Navigation arrows ---------- */
+
+.cs-arrow {
+  position: absolute;
+  top: 50%;
+  translate: 0 -50%;
+  z-index: 5;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 44px; /* minimum touch target */
+  height: 44px;
+  padding: 0;
+  border: 1px solid rgba(255, 255, 255, 0.35);
+  border-radius: 999px;
+  background: rgba(15, 23, 42, 0.42);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  color: #ffffff;
+  cursor: pointer;
+  transition: background-color 0.2s ease, border-color 0.2s ease;
+}
+
+.cs-arrow svg {
+  width: 18px;
+  height: 18px;
+}
+
+.cs-arrow:hover {
+  background: rgba(15, 23, 42, 0.65);
+  border-color: rgba(255, 255, 255, 0.6);
+}
+
+.cs-arrow:focus-visible {
+  outline: 2px solid #ffffff;
+  outline-offset: 2px;
+}
+
+.cs-arrow--prev {
+  inset-inline-start: 0.75rem;
+}
+
+.cs-arrow--next {
+  inset-inline-end: 0.75rem;
+}
+
+/* ---------- Indicator (segments + counter, no loading bar) ---------- */
+
+.cs-indicator {
+  position: absolute;
+  inset-block-end: 0.75rem;
+  inset-inline-end: 0.75rem;
+  z-index: 5;
+  display: flex;
+  align-items: center;
+  gap: 0.7rem;
+  padding: 0.4rem 0.75rem;
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  border-radius: 999px;
+  background: rgba(15, 23, 42, 0.5);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+}
+
+.cs-segments {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+}
+
+.cs-seg {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.4rem;
+  height: 1.2rem;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  cursor: pointer;
+}
+
+.cs-seg::before {
+  content: '';
+  width: 100%;
+  height: 2px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.35);
+  transition: background-color 0.25s ease;
+}
+
+.cs-seg:hover::before {
+  background: rgba(255, 255, 255, 0.6);
+}
+
+.cs-seg:focus-visible {
+  outline: 2px solid rgba(255, 255, 255, 0.85);
+  outline-offset: 1px;
+  border-radius: 4px;
+}
+
+.cs-seg--active::before {
+  background: rgba(255, 255, 255, 0.3);
+}
+
+.cs-seg--active::after {
+  content: '';
+  position: absolute;
+  inset-inline-start: 0;
+  width: 100%;
+  height: 2px;
+  border-radius: 999px;
+  background: #ffffff;
+  transform-origin: left center;
+  animation: cs-seg-fill var(--cs-autoplay) linear both;
+}
+
+/* Keep the subtle fill in sync with the paused autoplay timer. */
+.cs-gallery:hover .cs-seg--active::after,
+.cs-gallery:focus-within .cs-seg--active::after {
+  animation-play-state: paused;
+}
+
+@keyframes cs-seg-fill {
+  from { transform: scaleX(0); }
+  to { transform: scaleX(1); }
+}
+
+.cs-counter {
+  margin: 0;
+  display: flex;
+  align-items: baseline;
+  gap: 0.3rem;
+  color: #ffffff;
+  font-size: 0.72rem;
+  font-weight: 600;
+  letter-spacing: 0.14em;
+  line-height: 1;
+  font-variant-numeric: tabular-nums;
+}
+
+.cs-counter-sep {
+  opacity: 0.5;
+}
+
+.cs-counter-total {
+  opacity: 0.65;
+}
+
+/* ---------- Responsive: tablet (768-1023) ---------- */
+
+@media (min-width: 768px) and (max-width: 1023px) {
+  .cs-layout {
+    gap: 3.5rem;
+  }
+
+  .cs-gallery {
+    max-width: 38rem;
+  }
+}
+
+/* ---------- Responsive: desktop (>= 1024) ---------- */
+
+@media (min-width: 1024px) {
+  .cs-layout {
+    grid-template-columns: minmax(0, 46fr) minmax(0, 54fr);
+    gap: 4.5rem;
+  }
+
+  .cs-gallery {
+    max-width: none;
+  }
+
+  .cs-text {
+    font-size: 1.0625rem;
+  }
+}
+
+/* ---------- Responsive: mobile (<= 767) ---------- */
+
+@media (max-width: 767px) {
+  .cs-layout {
+    gap: 2.5rem;
+  }
+
+  .cs-gallery {
+    max-width: 34rem;
+  }
+
+  .cs-gallery::before {
+    display: none; /* keep the composition clean on small screens */
+  }
+
+  .cs-viewport {
+    border-radius: 0.85rem;
+  }
+
+  .cs-arrow--prev {
+    inset-inline-start: 0.6rem;
+  }
+
+  .cs-arrow--next {
+    inset-inline-end: 0.6rem;
+  }
+
+  .cs-indicator {
+    inset-block-end: 0.6rem;
+    inset-inline-end: 0.6rem;
+    gap: 0.5rem;
+    padding: 0.3rem 0.6rem;
+  }
+
+  .cs-seg {
+    width: 1.15rem;
+  }
+
+  .cs-highlight {
+    padding: 1rem 1.1rem;
+  }
+}
+
+/* ---------- Responsive: small phones (320-379) ---------- */
+
+@media (max-width: 379px) {
+  .cs-section {
+    padding-block: 2.5rem;
+  }
+
+  .cs-layout {
+    gap: 1.75rem;
+  }
+
+  .cs-title {
+    font-size: 1.6rem;
+  }
+
+  .cs-accent {
+    margin-block: 1rem 1.4rem;
+  }
+
+  .cs-gallery {
+    max-width: 30rem;
+  }
+
+  /* Keep 44px touch targets but pull controls in from the rounded corners. */
+  .cs-arrow--prev {
+    inset-inline-start: 0.45rem;
+  }
+
+  .cs-arrow--next {
+    inset-inline-end: 0.45rem;
+  }
+
+  .cs-indicator {
+    inset-inline-end: 0.45rem;
+    gap: 0.4rem;
+    padding: 0.3rem 0.5rem;
+  }
+
+  .cs-seg {
+    width: 1rem;
+  }
+}
+
+/* ---------- Responsive: large desktop (>= 1920) ---------- */
+
+@media (min-width: 1920px) {
+  /* Editorial width already capped at 75rem via .cs-layout (centered), so the
+     gallery can never exceed the intended composition on ultra-wide screens. */
+  .cs-section {
+    padding-block: 6rem;
+  }
+}
+
+/* ---------- Reduced motion ---------- */
+
+@media (prefers-reduced-motion: reduce) {
+  .cs-slide--active {
+    animation: none;
+  }
+
+  .cs-slide--exit-next,
+  .cs-slide--exit-prev {
+    animation: cs-fade-out 200ms ease both;
+  }
+
+  .cs-slide--enter-next,
+  .cs-slide--enter-prev {
+    animation: cs-fade-in 200ms ease both;
+  }
+
+  .cs-seg--active::after {
+    animation: none;
+  }
+}
+
+@keyframes cs-fade-out {
+  to { opacity: 0; }
+}
+
+@keyframes cs-fade-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+

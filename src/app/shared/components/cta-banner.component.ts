@@ -6,7 +6,10 @@ import { RouterLink } from '@angular/router';
   standalone: true,
   imports: [RouterLink],
   template: `
-    <section class="bg-blue-900 py-16 md:py-20">
+    <section
+      class="py-10 md:py-12"
+      style="background-color: rgb(32 56 167 / 82%)"
+    >
       <div class="container mx-auto px-4 text-center">
         <h2 class="text-3xl md:text-4xl font-bold text-white mb-4">{{ title() }}</h2>
         @if (description()) {

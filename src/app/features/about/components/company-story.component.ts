@@ -1,70 +1,408 @@
-import { Component } from '@angular/core';
+import {
+  ChangeDetectionStrategy,
+  Component,
+  DestroyRef,
+  ElementRef,
+  afterNextRender,
+  computed,
+  inject,
+  signal,
+  viewChild,
+} from '@angular/core';
+import {
+  IMAGE_LOADER,
+  ImageLoader,
+  ImageLoaderConfig,
+  NgOptimizedImage,
+} from '@angular/common';
 import { TranslatePipe } from '@ngx-translate/core';
 
+/** Direction of a gallery transition (navigation intent). */
+type GalleryDirection = 'next' | 'prev';
+
 /**
- * Presentational editorial section: content first, supporting image second.
- * Pure HTML + Tailwind (logical utilities for RTL); no component logic.
+ * Typed gallery configuration. Add / remove / reorder entries here and the
+ * gallery (counter, segments, preloading, autoplay) adapts automatically.
  */
+interface StoryGalleryImage {
+  readonly src: string;
+  readonly alt: string;
+  readonly objectPosition: string;
+}
+
+const GALLERY_IMAGES: readonly StoryGalleryImage[] = [
+  {
+    src: 'assets/media/company-story-gallery/story-01.webp',
+    alt: 'SIGAT hydraulic infrastructure construction site',
+    objectPosition: 'center center',
+  },
+  {
+    src: 'assets/media/company-story-gallery/story-02.webp',
+    alt: 'SIGAT pipeline installation project',
+    objectPosition: 'center center',
+  },
+  {
+    src: 'assets/media/company-story-gallery/story-03.webp',
+    alt: 'SIGAT civil engineering works',
+    objectPosition: 'center center',
+  },
+  {
+    src: 'assets/media/company-story-gallery/story-04.webp',
+    alt: 'SIGAT riprap and terrain stabilization',
+    objectPosition: 'center center',
+  },
+];
+
+/** Responsive candidates served by the loader (files: story-XX-768 / -1280). */
+const IMAGE_SRCSET = '768w, 1280w';
+const IMAGE_SIZES = '(min-width: 1280px) 600px, (min-width: 1024px) 52vw, 100vw';
+
+/** Autoplay display duration per image (ms). */
+const AUTOPLAY_MS = 6000;
+/** CSS transition duration (must match --cs-transition in the stylesheet). */
+const TRANSITION_MS = 650;
+/** Commit delay when the user prefers reduced motion (opacity-only fade). */
+const REDUCED_MOTION_TRANSITION_MS = 250;
+/** Minimum horizontal distance for a swipe to be recognized. */
+const SWIPE_THRESHOLD_PX = 48;
+
+/**
+ * Component-scoped loader: maps width candidates of NgOptimizedImage onto the
+ * pre-generated responsive WebP files (story-01.webp -> story-01-768.webp).
+ */
+const responsiveWebpLoader: ImageLoader = (config: ImageLoaderConfig): string =>
+  config.isPlaceholder || !config.width
+    ? config.src
+    : config.src.replace(/\.webp$/i, `-${config.width}.webp`);
+
 @Component({
   selector: 'app-company-story',
   standalone: true,
-  imports: [TranslatePipe],
-  template: `
-    <section class="py-12 sm:py-14 md:py-20 bg-slate-50">
-      <div class="container mx-auto px-4">
-        <div class="flex flex-col lg:flex-row items-center gap-10 lg:gap-14 max-w-6xl mx-auto">
-
-          <!-- Content (leads the section on every breakpoint) -->
-          <div class="w-full lg:w-[46%]">
-            <p class="text-xs font-semibold uppercase tracking-[0.18em] text-blue-800 mb-3">
-              {{ 'about_page_title' | translate }}
-            </p>
-
-            <h2 class="text-2xl sm:text-3xl lg:text-4xl font-bold text-slate-900 leading-tight">
-              {{ 'about_story_title' | translate }}
-            </h2>
-
-            <div class="w-12 h-[3px] rounded-full bg-gradient-to-r from-blue-900 to-blue-500 my-5"></div>
-
-            <p class="text-slate-600 leading-relaxed text-base md:text-lg max-w-xl">
-              {{ 'about_story_text' | translate }}
-            </p>
-
-            <!-- Corporate statement panel -->
-            <div class="mt-7 flex gap-4 bg-white p-5 rounded-xl shadow-sm ring-1 ring-slate-900/5">
-              <span
-                class="w-[3px] shrink-0 self-stretch rounded-full bg-gradient-to-b from-blue-900 to-blue-500"
-                aria-hidden="true"
-              ></span>
-              <p class="text-slate-700 text-sm md:text-[0.95rem] font-medium leading-relaxed">
-                {{ 'about_story_highlight' | translate }}
-              </p>
-            </div>
-          </div>
-
-          <!-- Supporting image (second) -->
-          <div class="w-full lg:w-[54%] relative">
-            <!-- Subtle SIGAT-blue depth frame behind the photo (decoration only) -->
-            <div
-              class="hidden md:block absolute top-3 end-[-12px] bottom-3 start-6 rounded-xl bg-blue-900/[0.06]"
-              aria-hidden="true"
-            ></div>
-            <img
-              src="assets/media/gallery/20240428-station-1280.webp"
-              srcset="
-                assets/media/gallery/20240428-station-768.webp   768w,
-                assets/media/gallery/20240428-station-1280.webp 1280w
-              "
-              sizes="(min-width: 1024px) 54vw, 100vw"
-              alt="SIGAT hydraulic infrastructure construction site"
-              class="relative w-full aspect-[4/3] object-cover rounded-lg shadow-lg"
-              loading="lazy"
-            />
-          </div>
-
-        </div>
-      </div>
-    </section>
-  `
+  imports: [NgOptimizedImage, TranslatePipe],
+  providers: [{ provide: IMAGE_LOADER, useValue: responsiveWebpLoader }],
+  templateUrl: './company-story.component.html',
+  styleUrl: './company-story.component.css',
+  changeDetection: ChangeDetectionStrategy.OnPush,
 })
-export class CompanyStoryComponent {}
+export class CompanyStoryComponent {
+  private readonly destroyRef = inject(DestroyRef);
+  private readonly galleryRef = viewChild.required<ElementRef<HTMLElement>>('gallery');
+
+  protected readonly images = GALLERY_IMAGES;
+  protected readonly imageSrcset = IMAGE_SRCSET;
+  protected readonly imageSizes = IMAGE_SIZES;
+
+  /** Index of the image currently on display (rendered immediately). */
+  protected readonly activeIndex = signal(0);
+  /** Index of the image being preloaded / entering during a transition. */
+  protected readonly preloadIndex = signal(GALLERY_IMAGES.length > 1 ? 1 : 0);
+  protected readonly direction = signal<GalleryDirection>('next');
+  protected readonly isTransitioning = signal(false);
+
+  protected readonly counter = computed(() => ({
+    current: String(this.activeIndex() + 1).padStart(2, '0'),
+    total: String(GALLERY_IMAGES.length).padStart(2, '0'),
+  }));
+
+  private readonly loadedImages = new Set<number>();
+  private readonly failedImages = new Set<number>();
+  private readonly reducedMotion =
+    typeof matchMedia === 'function' &&
+    matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+  private autoPlayTimer: ReturnType<typeof setTimeout> | null = null;
+  private transitionTimer: ReturnType<typeof setTimeout> | null = null;
+  /** Navigation target waiting for its image to finish preloading. */
+  private pendingIndex: number | null = null;
+  private pointerStart: { x: number; y: number } | null = null;
+  private inView = false;
+  private hovered = false;
+  private focused = false;
+  private documentHidden =
+    typeof document === 'undefined' ? false : document.visibilityState === 'hidden';
+
+  constructor() {
+    afterNextRender(() => {
+      this.setupIntersectionObserver();
+      this.setupVisibilityListener();
+      this.scheduleAutoplay();
+    });
+
+    this.destroyRef.onDestroy(() => {
+      this.clearAutoPlayTimer();
+      this.clearTransitionTimer();
+    });
+  }
+
+  // ------------------------------------------------------------------
+  // Navigation (template API)
+  // ------------------------------------------------------------------
+
+  protected next(): void {
+    this.goTo((this.activeIndex() + 1) % GALLERY_IMAGES.length, 'next');
+  }
+
+  protected previous(): void {
+    this.goTo(
+      (this.activeIndex() - 1 + GALLERY_IMAGES.length) % GALLERY_IMAGES.length,
+      'prev',
+    );
+  }
+
+  protected goToIndex(index: number): void {
+    const current = this.activeIndex();
+    if (index === current) {
+      return;
+    }
+    this.goTo(index, index > current ? 'next' : 'prev');
+  }
+
+  /**
+   * Core navigation. The current image ALWAYS stays visible until the target
+   * image is fully preloaded; only then does the CSS transition start.
+   */
+  private goTo(startIndex: number, direction: GalleryDirection): void {
+    if (this.isTransitioning()) {
+      return;
+    }
+    const target = this.resolveTarget(startIndex);
+    if (target === this.activeIndex()) {
+      this.scheduleAutoplay();
+      return;
+    }
+
+    this.direction.set(direction);
+    this.clearAutoPlayTimer();
+
+    if (this.loadedImages.has(target)) {
+      this.beginTransition(target);
+      return;
+    }
+
+    // Not downloaded yet: keep the current image on screen and wait for load.
+    this.pendingIndex = target;
+    this.preloadIndex.set(target);
+  }
+
+  /** Skips images that previously failed to load. */
+  private resolveTarget(startIndex: number): number {
+    let candidate = startIndex;
+    for (let attempt = 0; attempt < GALLERY_IMAGES.length; attempt++) {
+      if (!this.failedImages.has(candidate)) {
+        return candidate;
+      }
+      candidate = (candidate + 1) % GALLERY_IMAGES.length;
+    }
+    return startIndex;
+  }
+
+  protected onImageLoad(index: number): void {
+    this.loadedImages.add(index);
+    if (this.pendingIndex === index) {
+      this.beginTransition(index);
+    }
+  }
+
+  protected onImageError(index: number): void {
+    this.failedImages.add(index);
+    if (this.pendingIndex !== index) {
+      return;
+    }
+    // Never show a blank gallery: fall through to the next healthy image.
+    this.pendingIndex = null;
+    const fallback = this.resolveTarget((index + 1) % GALLERY_IMAGES.length);
+    if (!this.failedImages.has(fallback) && fallback !== this.activeIndex()) {
+      this.pendingIndex = fallback;
+      this.preloadIndex.set(fallback);
+    }
+  }
+
+  // ------------------------------------------------------------------
+
+  // ------------------------------------------------------------------
+  // Autoplay (single timeout chain, never duplicated)
+  // ------------------------------------------------------------------
+
+  private scheduleAutoplay(): void {
+    this.clearAutoPlayTimer();
+    if (!this.canAutoplay()) {
+      return;
+    }
+    this.autoPlayTimer = setTimeout(() => {
+      this.autoPlayTimer = null;
+      this.next();
+    }, AUTOPLAY_MS);
+  }
+
+  private canAutoplay(): boolean {
+    return (
+      this.inView &&
+      !this.hovered &&
+      !this.focused &&
+      !this.documentHidden &&
+      !this.isTransitioning() &&
+      this.pendingIndex === null &&
+      this.failedImages.size < GALLERY_IMAGES.length
+    );
+  }
+
+  // ------------------------------------------------------------------
+  // Pause / resume triggers
+  // ------------------------------------------------------------------
+
+  protected onPointerEnter(): void {
+    this.hovered = true;
+    this.clearAutoPlayTimer();
+  }
+
+  protected onPointerLeave(): void {
+    this.hovered = false;
+    this.scheduleAutoplay();
+  }
+
+  protected onFocusIn(): void {
+    this.focused = true;
+    this.clearAutoPlayTimer();
+  }
+
+  protected onFocusOut(): void {
+    this.focused = false;
+    this.scheduleAutoplay();
+  }
+
+  protected onKeyDown(event: KeyboardEvent): void {
+    if (event.key === 'ArrowLeft') {
+      event.preventDefault();
+      this.previous();
+    } else if (event.key === 'ArrowRight') {
+      event.preventDefault();
+      this.next();
+    }
+  }
+
+  // ------------------------------------------------------------------
+  // Swipe (pointer events, vertical page scroll untouched)
+  // ------------------------------------------------------------------
+
+  protected onPointerDown(event: PointerEvent): void {
+    if (event.pointerType === 'mouse' && event.button !== 0) {
+      return;
+    }
+    this.pointerStart = { x: event.clientX, y: event.clientY };
+  }
+
+  protected onPointerUp(event: PointerEvent): void {
+    const start = this.pointerStart;
+    this.pointerStart = null;
+    if (!start || this.isTransitioning()) {
+      return;
+    }
+    const deltaX = event.clientX - start.x;
+    const deltaY = event.clientY - start.y;
+    if (
+      Math.abs(deltaX) < SWIPE_THRESHOLD_PX ||
+      Math.abs(deltaX) <= Math.abs(deltaY)
+    ) {
+      return;
+    }
+    if (deltaX < 0) {
+      this.next();
+    } else {
+      this.previous();
+    }
+  }
+
+  protected onPointerCancel(): void {
+    this.pointerStart = null;
+  }
+
+  // Transition state machine
+  // ------------------------------------------------------------------
+
+  private beginTransition(target: number): void {
+    this.pendingIndex = null;
+    this.clearTransitionTimer();
+    this.isTransitioning.set(true);
+    this.transitionTimer = setTimeout(
+      () => this.commitTransition(target),
+      this.reducedMotion ? REDUCED_MOTION_TRANSITION_MS : TRANSITION_MS,
+    );
+  }
+
+  private commitTransition(target: number): void {
+    this.transitionTimer = null;
+    this.activeIndex.set(target);
+    this.preloadIndex.set((target + 1) % GALLERY_IMAGES.length);
+    this.isTransitioning.set(false);
+    this.scheduleAutoplay();
+  }
+
+  // ------------------------------------------------------------------
+  // Timer helpers (single instance each, cleared on destroy)
+  // ------------------------------------------------------------------
+
+  private clearAutoPlayTimer(): void {
+    if (this.autoPlayTimer !== null) {
+      clearTimeout(this.autoPlayTimer);
+      this.autoPlayTimer = null;
+    }
+  }
+
+  private clearTransitionTimer(): void {
+    if (this.transitionTimer !== null) {
+      clearTimeout(this.transitionTimer);
+      this.transitionTimer = null;
+    }
+  }
+
+  // ------------------------------------------------------------------
+  // Visibility: pause autoplay when the gallery scrolls out of view
+  // ------------------------------------------------------------------
+
+  private setupIntersectionObserver(): void {
+    if (typeof IntersectionObserver === 'undefined') {
+      return;
+    }
+    const gallery = this.galleryRef();
+    if (!gallery) {
+      return;
+    }
+    const io = new IntersectionObserver(
+      (entries) => {
+        const visible = Boolean(entries[0]?.isIntersecting);
+        this.inView = visible;
+        if (visible) {
+          this.scheduleAutoplay();
+        } else {
+          this.clearAutoPlayTimer();
+        }
+      },
+      { threshold: [0.35] },
+    );
+    io.observe(gallery.nativeElement);
+    this.destroyRef.onDestroy(() => io.disconnect());
+  }
+
+  // ------------------------------------------------------------------
+  // Hidden / background tab: pause autoplay, resume when visible again
+  // ------------------------------------------------------------------
+
+  private setupVisibilityListener(): void {
+    if (typeof document === 'undefined') {
+      return;
+    }
+    const onChange = (): void => {
+      this.documentHidden = document.visibilityState === 'hidden';
+      if (this.documentHidden) {
+        this.clearAutoPlayTimer();
+      } else {
+        this.scheduleAutoplay();
+      }
+    };
+    document.addEventListener('visibilitychange', onChange);
+    this.destroyRef.onDestroy(() =>
+      document.removeEventListener('visibilitychange', onChange),
+    );
+  }
+}
+

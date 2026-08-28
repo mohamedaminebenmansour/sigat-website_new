@@ -1,0 +1,133 @@
+<section class="cs-section">
+  <div class="container mx-auto px-4">
+    <div class="cs-layout">
+
+      <!-- ==================== Story content ==================== -->
+      <div class="cs-content">
+        <p class="cs-eyebrow">{{ 'about_page_title' | translate }}</p>
+
+        <h2 class="cs-title">{{ 'about_story_title' | translate }}</h2>
+
+        <div class="cs-accent" aria-hidden="true"></div>
+
+        <p class="cs-text">{{ 'about_story_text' | translate }}</p>
+
+        <!-- Corporate statement card -->
+        <figure class="cs-highlight">
+          <p class="cs-highlight-text">{{ 'about_story_highlight' | translate }}</p>
+        </figure>
+      </div>
+
+      <!-- ==================== Visual story gallery ==================== -->
+      <div class="cs-gallery-wrap">
+        <div
+          #gallery
+          class="cs-gallery"
+          role="region"
+          aria-roledescription="carousel"
+          tabindex="0"
+          [attr.aria-label]="'about_story_title' | translate"
+          (mouseenter)="onPointerEnter()"
+          (mouseleave)="onPointerLeave()"
+          (focusin)="onFocusIn()"
+          (focusout)="onFocusOut()"
+          (keydown)="onKeyDown($event)">
+
+          <div
+            class="cs-viewport"
+            (pointerdown)="onPointerDown($event)"
+            (pointerup)="onPointerUp($event)"
+            (pointercancel)="onPointerCancel()">
+
+            <!--
+              Current image: rendered on the very first paint (initial signal
+              state, priority). Never removed from the DOM, so the gallery is
+              never empty.
+            -->
+            <img
+              class="cs-slide"
+              fill
+              priority
+              [ngSrc]="images[activeIndex()].src"
+              [ngSrcset]="imageSrcset"
+              [sizes]="imageSizes"
+              [alt]="images[activeIndex()].alt"
+              [style.object-position]="images[activeIndex()].objectPosition"
+              draggable="false"
+              [class.cs-slide--active]="!isTransitioning()"
+              [class.cs-slide--exit-next]="isTransitioning() && direction() === 'next'"
+              [class.cs-slide--exit-prev]="isTransitioning() && direction() === 'prev'"
+              (load)="onImageLoad(activeIndex())"
+              (error)="onImageError(activeIndex())" />
+
+            <!--
+              Preload / entering layer: idle = invisible but already downloading
+              the next image; transition = slides in on top of the current one.
+            -->
+            <img
+              class="cs-slide"
+              fill
+              loading="eager"
+              [ngSrc]="images[preloadIndex()].src"
+              [ngSrcset]="imageSrcset"
+              [sizes]="imageSizes"
+              [alt]="isTransitioning() ? images[preloadIndex()].alt : ''"
+              [style.object-position]="images[preloadIndex()].objectPosition"
+              draggable="false"
+              [class.cs-slide--hidden]="!isTransitioning()"
+              [class.cs-slide--enter-next]="isTransitioning() && direction() === 'next'"
+              [class.cs-slide--enter-prev]="isTransitioning() && direction() === 'prev'"
+              (load)="onImageLoad(preloadIndex())"
+              (error)="onImageError(preloadIndex())" />
+          </div>
+
+          <button
+            type="button"
+            class="cs-arrow cs-arrow--prev"
+            (click)="previous()"
+            aria-label="Previous image">
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none"
+                 stroke="currentColor" stroke-width="2" stroke-linecap="round"
+                 stroke-linejoin="round" aria-hidden="true">
+              <path d="M15 19l-7-7 7-7" />
+            </svg>
+          </button>
+
+          <button
+            type="button"
+            class="cs-arrow cs-arrow--next"
+            (click)="next()"
+            aria-label="Next image">
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none"
+                 stroke="currentColor" stroke-width="2" stroke-linecap="round"
+                 stroke-linejoin="round" aria-hidden="true">
+              <path d="M9 5l7 7-7 7" />
+            </svg>
+          </button>
+
+          <!-- Refined indicator: subtle segments + 01 / 04 counter -->
+          <div class="cs-indicator">
+            <div class="cs-segments" role="group" aria-label="Gallery navigation">
+              @for (image of images; track image.src) {
+                <button
+                  type="button"
+                  class="cs-seg"
+                  [class.cs-seg--active]="$index === activeIndex()"
+                  (click)="goToIndex($index)"
+                  [attr.aria-label]="'Go to image ' + ($index + 1) + ' of ' + images.length"
+                  [attr.aria-current]="$index === activeIndex() ? 'true' : null"></button>
+              }
+            </div>
+
+            <p class="cs-counter" aria-live="polite" aria-atomic="true">
+              <span class="cs-counter-current">{{ counter().current }}</span>
+              <span class="cs-counter-sep" aria-hidden="true">/</span>
+              <span class="cs-counter-total">{{ counter().total }}</span>
+            </p>
+          </div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+</section>
