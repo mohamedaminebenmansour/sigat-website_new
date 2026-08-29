@@ -65,6 +65,22 @@ export class ProjectMapComponent {
   private initialized = false;
   private observer: IntersectionObserver | null = null;
 
+  /**
+   * Deterministic hover state. We avoid relying on Leaflet's popupPane DOM
+   * (popups are created/moved dynamically) and instead track which marker is
+   * hovered plus a tiny close delay that lets the pointer travel from a marker
+   * onto its popup without the preview closing.
+   */
+  private hoveredId: number | null = null;
+  private closeTimer: ReturnType<typeof setTimeout> | null = null;
+  /** One-time check: on touch-only devices there is no real hover, so we keep
+   *  popups open (tap to show, CTA to navigate) rather than closing on the
+   *  synthetic mouseout that browsers emit after a tap. */
+  private readonly isTouchOnly =
+    typeof window !== 'undefined' &&
+    !!window.matchMedia &&
+    window.matchMedia('(hover: none)').matches;
+
   constructor() {
     // React to the current project changing (prev/next navigation reuses this
     // component) by swapping the highlighted marker + re-focusing. Guarded so
@@ -157,30 +173,43 @@ export class ProjectMapComponent {
 
       // Every marker gets the same preview card (project-specific state differs
       // only by visual class, never by availability).
+      // NOTE: autoPan stays disabled so opening a preview never pans the marker
+      // out from under the cursor (edge markers would instantly flicker closed
+      // and clicks would be cancelled by the pan).
       marker.bindPopup(() => this.buildPopup(entry, isCurrent), {
         maxWidth: 280,
-        autoPan: true,
+        autoPan: false,
         autoPanPadding: [12, 12],
         closeButton: false,
       });
 
-      // Click: other projects navigate; the current project shows its preview.
+      // Click: other projects navigate immediately; the current project opens
+      // its preview. On touch-only devices the first tap opens the preview and
+      // the popup CTA (or a second tap on the marker) is what navigates.
       marker.on('click', (ev) => {
         ev.originalEvent.stopPropagation();
-        if (entry.id !== this.currentProjectId()) {
-          this.navigateTo(entry);
+        if (entry.id !== this.currentProjectId() && !this.isTouchOnly) {
+          this.navigateToProject(entry);
         } else {
-          marker.openPopup();
+          this.openMarker(marker, entry.id);
         }
       });
 
-      // Hover: open the same preview for every project (touch taps also fire
-      // this on mobile); kept open when the pointer moves onto the popup.
+      // Hover: identical for ALL markers - set hover state + open preview.
       marker.on('mouseover', () => {
+        if (this.isTouchOnly) return;
+        this.clearCloseTimer();
+        this.hoveredId = entry.id;
         marker.getElement()?.classList.add('pm-marker--hover');
-        marker.openPopup();
+        this.openRequestedMarker(marker, entry.id);
       });
-      marker.on('mouseout', (e) => this.handleMarkerMouseOut(marker, e));
+      // mouseout fires when leaving the marker. We only schedule a close; the
+      // tiny delay (and the timer cancel in mouseover / popup mouseenter) lets
+      // the pointer travel onto the popup or to another marker cleanly.
+      marker.on('mouseout', (e) => {
+        if (this.isTouchOnly) return;
+        this.mouseOutOfMarker(marker, e, entry.id);
+      });
 
       this.markers.set(entry.id, marker);
     }
@@ -190,19 +219,63 @@ export class ProjectMapComponent {
     }
   }
 
-  /** Close the hover preview when leaving the marker (unless entering the popup). */
-  private handleMarkerMouseOut(marker: L.Marker, e: L.LeafletMouseEvent): void {
-    marker.getElement()?.classList.remove('pm-marker--hover');
-    const to = e.originalEvent.relatedTarget as Node | null;
-    if (to && this.map?.getPane('popupPane')?.contains(to)) {
-      return;
-    }
-    marker.closePopup();
+  /** Open a marker's popup, closing any other popup first (one at a time). */
+  private openRequestedMarker(marker: L.Marker, id: number): void {
+    this.hoveredId = id;
+    marker.openPopup();
   }
 
-  private navigateTo(entry: ProjectMapEntry): void {
+  private openMarker(marker: L.Marker, id: number): void {
+    this.clearCloseTimer();
+    this.openRequestedMarker(marker, id);
+  }
+
+  private clearCloseTimer(): void {
+    if (this.closeTimer !== null) {
+      clearTimeout(this.closeTimer);
+      this.closeTimer = null;
+    }
+  }
+
+  /**
+   * Leave a marker. We do NOT close immediately: a short timer allows the
+   * pointer to move onto the marker's own popup. If it moves to another marker
+   * first (mouseover) or onto the popup (mouseenter), the timer is cancelled.
+   */
+  private mouseOutOfMarker(
+    marker: L.Marker,
+    e: L.LeafletMouseEvent,
+    id: number,
+  ): void {
+    marker.getElement()?.classList.remove('pm-marker--hover');
+    // If we've already moved onto a different marker, do nothing (that
+    // marker's mouseover owns the state now).
+    this.clearCloseTimer();
+    this.closeTimer = setTimeout(() => {
+      this.closeTimer = null;
+      // Only close if we're still on THIS marker - a subsequent mouseover on
+      // another marker / popup cancels the timer.
+      if (this.hoveredId === id) {
+        this.hoveredId = null;
+        marker.closePopup();
+      }
+    }, 120);
+  }
+
+  /** Single deterministic navigation entry point for the SPA. */
+  private async navigateToProject(entry: ProjectMapEntry): Promise<void> {
+    if (!entry || !Number.isFinite(entry.id)) return;
+
+    this.clearCloseTimer();
+    this.hoveredId = null;
     this.map?.closePopup();
-    this.router.navigate(['/projects', entry.id]);
+
+    try {
+      await this.router.navigate(['/projects', entry.id]);
+    } catch (err) {
+      // Keep the map usable even if navigation is interrupted.
+      console.warn('[project-map] Navigation to project failed:', err);
+    }
   }
 
   /** Swap highlighted marker + focus when the current project changes. */
@@ -289,11 +362,22 @@ protected fitAll(): void {
     cta.addEventListener('click', (ev) => {
       ev.preventDefault();
       ev.stopPropagation();
-      this.navigateTo(entry);
+      this.navigateToProject(entry);
     });
 
     body.append(title, loc, cta);
     root.append(img, body);
+
+    // Hover keep-open: entering the popup (from the marker) cancels the close
+    // timer; leaving the popup entirely closes the preview immediately. Fresh
+    // node per open, so these listeners die with the node - no leaks.
+    root.addEventListener('mouseenter', () => this.clearCloseTimer());
+    root.addEventListener('mouseleave', () => {
+      this.clearCloseTimer();
+      this.hoveredId = null;
+      this.map?.closePopup();
+    });
+
     return root;
   }
 
@@ -310,6 +394,8 @@ protected fitAll(): void {
   private teardown(): void {
     this.observer?.disconnect();
     this.observer = null;
+    this.clearCloseTimer();
+    this.hoveredId = null;
     this.markers.clear();
     if (this.map) {
       this.map.remove();

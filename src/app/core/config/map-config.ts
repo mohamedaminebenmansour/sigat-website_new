@@ -55,6 +55,11 @@ export const MAP_CONFIG = new InjectionToken<MapConfig>('map.config', {
       html: '<span class="pm-pin"></span>',
       iconSize: [18, 18],
       iconAnchor: [9, 9],
+      // Popup tip must sit ABOVE the 18px pin. Without this the popup renders
+      // on top of the pin (popup pane is above the marker pane), which makes the
+      // pointer land on the popup instead of the marker -> unstable hover and
+      // swallowed marker clicks.
+      popupAnchor: [0, -20],
     },
     currentMarkerIcon: {
       className: 'pm-marker pm-marker--current',
