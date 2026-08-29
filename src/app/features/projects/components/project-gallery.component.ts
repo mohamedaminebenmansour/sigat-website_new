@@ -1,4 +1,4 @@
-﻿import {
+import {
   ChangeDetectionStrategy,
   Component,
   DestroyRef,
@@ -10,9 +10,9 @@
 import { DOCUMENT, NgOptimizedImage } from '@angular/common';
 
 /** Autoplay interval between automatic stack rotations (single scheduler). */
-const GALLERY_AUTOPLAY_MS = 3500;
+const GALLERY_AUTOPLAY_MS = 3000;
 /** Grace period after a manual interaction before autoplay resumes. */
-const INTERACTION_RESUME_MS = 3500;
+const INTERACTION_RESUME_MS = 3000;
 /** Horizontal distance (px) required for a swipe to register. */
 const SWIPE_THRESHOLD_PX = 42;
 /** Max vertical travel (px) still treated as a horizontal swipe. */
@@ -39,19 +39,19 @@ const SWIPE_MAX_DY_PX = 80;
     `
       :host { display: block; }
 
-      .pgx { position: relative; isolation: isolate; width: 100%; max-width: 560px; margin-inline: auto; }
+      .pgx { position: relative; isolation: isolate; width: 100%; max-width: 680px; margin-inline: auto; }
 
       /* ------------------------------------------------------------------
-       * Vertical staggered editorial stack. Each image is anchored by its
-       * TOP edge (--y in % of stage height) and horizontal offset (--x in %
-       * of stage width). Rank drives position, size, rotation, shadow and
-       * opacity; changing the active index re-ranks every layer so each card
-       * physically animates into its new slot.
+       * Editorial CORNER composition: CENTER + TOP-LEFT / TOP-RIGHT /
+       * BOTTOM-LEFT / BOTTOM-RIGHT. The four corners intentionally overlap
+       * the center's corners ("framing conflict") while the center (z 50)
+       * stays fully readable. Rank drives position, size, rotation, z-index
+       * and opacity; each card physically animates into its new slot.
        * ------------------------------------------------------------------ */
       .pgx-stage {
         position: relative;
         width: 100%;
-        height: clamp(360px, 118vw, 430px);
+        height: clamp(470px, 126vw, 540px);
         touch-action: pan-y;
       }
 
@@ -95,38 +95,47 @@ const SWIPE_MAX_DY_PX = 80;
 
       .pgx-layer:not(.pgx-r0) img { filter: brightness(0.95) saturate(0.96); }
 
-      /* ------------------------- MOBILE (default) --------------------- */
-      .pgx-r0 { --w: 82%; --x: 0%;   --y: 2%;   --s: 1.05; --r: 16px; --rot: 0deg; }
-      .pgx-r1 { --w: 72%; --x: 14%;  --y: 46%; --s: 0.82; --r: 14px; --rot: 1.4deg; opacity: 0.96; }
-      .pgx-r2 { --w: 62%; --x: -15%; --y: 78%; --s: 0.74; --r: 14px; --rot: -1.6deg; opacity: 0.9; }
-      .pgx-r3,
-      .pgx-rh { --w: 58%; --x: 4%;   --y: 100%; --s: 0.64; --r: 14px; --rot: 1deg; opacity: 0; pointer-events: none; }
+      /* ------------------------- MOBILE (default) ---------------------
+       * Dedicated corner geometry: dominant center (74%), four small
+       * corners tucked toward the edges with shallow dips over the
+       * center's corners. No horizontal escape. */
+      .pgx-r0 { --w: 74%; --x: 0%;    --y: 24%; --s: 1;    --r: 18px; --rot: 0deg;  z-index: 50; }
+      .pgx-r1 { --w: 34%; --x: 30%;   --y: 9%;  --s: 0.94; --r: 14px; --rot: 1.8deg;  z-index: 30; }
+      .pgx-r2 { --w: 32%; --x: 30%;   --y: 60%; --s: 0.9;  --r: 14px; --rot: -1.4deg; z-index: 26; }
+      .pgx-r3 { --w: 32%; --x: -30%;  --y: 62%; --s: 0.9;  --r: 14px; --rot: 1.2deg;  z-index: 26; }
+      .pgx-r4 { --w: 34%; --x: -30%;  --y: 13%; --s: 0.94; --r: 14px; --rot: -1.6deg; z-index: 30; }
+      .pgx-rh { --w: 40%; --x: 0%;    --y: 30%; --s: 0.8;  --r: 14px; --rot: 0.6deg;  z-index: 20; opacity: 0; pointer-events: none; }
 
-      /* ------------------------------ TABLET -------------------------- */
+      /* ------------------------------ TABLET --------------------------
+       * Same 5-slot concept: slightly larger center, moderate overlap. */
       @media (min-width: 768px) {
-        .pgx-stage { height: clamp(430px, 62vw, 500px); }
-        .pgx-r0 { --w: 78%; --s: 1.03; --r: 18px; }
-        .pgx-r1 { --w: 66%; --x: 12%; --y: 30%; --s: 0.84; --rot: 1.3deg; }
-        .pgx-r2 { --w: 56%; --x: -14%; --y: 50%; --s: 0.75; --rot: -1.5deg; }
-        .pgx-r3 { --y: 72%; opacity: 0.92; pointer-events: auto; }
-        .pgx-rh { --y: 98%; }
+        .pgx-stage { height: clamp(520px, 86vw, 600px); }
+        .pgx-r0 { --w: 56%; --y: 26%; --r: 20px; }
+        .pgx-r1 { --w: 32%; --x: 34%; --y: 6%;  --rot: 1.7deg; }
+        .pgx-r2 { --w: 31%; --x: 34%; --y: 66%; --rot: -1.4deg; }
+        .pgx-r3 { --w: 31%; --x: -34%; --y: 64%; --rot: 1.2deg; }
+        .pgx-r4 { --w: 32%; --x: -34%; --y: 4%;  --rot: -1.5deg; }
       }
 
-      /* ----------------------------- DESKTOP -------------------------- */
+      /* ----------------------------- DESKTOP --------------------------
+       * Full composition: large center (54%) with four 28-30% corners
+       * whose inner edges intersect the center's corners. */
       @media (min-width: 1024px) {
-        .pgx-stage { height: clamp(520px, 60vw, 600px); }
-        .pgx-r0 { --w: 80%; --s: 1.06; --r: 22px; box-shadow: 0 34px 68px -26px rgba(15, 23, 42, 0.6); }
-        .pgx-r1 { --w: 68%; --x: 16%; --y: 34%; --s: 0.86; --rot: 1.4deg; }
-        .pgx-r2 { --w: 56%; --x: -18%; --y: 54%; --s: 0.76; --rot: -1.6deg; }
-        .pgx-r3 { --x: 6%;  --y: 78%; --w: 48%; --s: 0.66; --rot: 1deg; opacity: 0.92; }
-        .pgx-rh { --y: 103%; --w: 44%; --s: 0.6; --rot: -0.8deg; opacity: 0; }
+        .pgx-stage { height: clamp(560px, 92vw, 640px); }
+        .pgx-r0 { --w: 54%; --y: 28%; --r: 22px; box-shadow: 0 34px 68px -26px rgba(15, 23, 42, 0.6); }
+        .pgx-r1 { --w: 30%; --x: 34.5%; --y: 7%;   --s: 0.96; --rot: 1.8deg; }
+        .pgx-r2 { --w: 30%; --x: 34%;   --y: 68%;  --s: 0.96; --rot: -1.4deg; }
+        .pgx-r3 { --w: 28%; --x: -34%;  --y: 66%;  --s: 0.92; --rot: 1.2deg; }
+        .pgx-r4 { --w: 30%; --x: -34.5%; --y: 8.5%; --s: 0.96; --rot: -1.6deg; }
       }
 
       /* Hover (fine pointers only): subtle lift / reveal, never aggressive. */
       @media (hover: hover) and (pointer: fine) {
         .pgx-layer:not(.pgx-r0):hover {
           --lift: -5px;
+          --s: 1.03;
           opacity: 1;
+          z-index: 40;
           box-shadow: 0 28px 54px -24px rgba(15, 23, 42, 0.55);
         }
         .pgx-layer:not(.pgx-r0):hover img { filter: none; }
@@ -243,23 +252,25 @@ const SWIPE_MAX_DY_PX = 80;
         (pointerup)="onPointerUp($event)"
       >
         @for (src of images(); track src; let i = $index) {
-          <button
-            type="button"
-            [class]="'pgx-layer ' + layerClass(i)"
-            [style.zIndex]="50 - rankOf(i)"
-            (click)="onLayerClick(i)"
-            [attr.aria-label]="altFor(i)"
-            [attr.aria-current]="i === activeIndex() ? 'true' : null"
-          >
-            <img
-              [ngSrc]="src"
-              width="1280"
-              height="960"
-              [alt]="altFor(i)"
-              [loading]="i === activeIndex() ? 'eager' : 'lazy'"
-              [attr.fetchpriority]="i === activeIndex() ? 'high' : null"
-            />
-          </button>
+          @if (!hasFailed(src)) {
+            <button
+              type="button"
+              [class]="'pgx-layer ' + layerClass(i)"
+              (click)="onLayerClick(i)"
+              [attr.aria-label]="altFor(i)"
+              [attr.aria-current]="i === activeIndex() ? 'true' : null"
+            >
+              <img
+                [ngSrc]="src"
+                width="1280"
+                height="960"
+                [alt]="altFor(i)"
+                [loading]="i === activeIndex() ? 'eager' : 'lazy'"
+                [attr.fetchpriority]="i === activeIndex() ? 'high' : null"
+                (error)="onImgError(src)"
+              />
+            </button>
+          }
         }
       </div>
 
@@ -307,6 +318,19 @@ export class ProjectGalleryComponent {
   /** Index (into the original, immutable array) of the principal image. */
   readonly activeIndex = signal(0);
 
+  /**
+   * Sources whose <img> failed to load. Failed images are removed from the
+   * stack gracefully (no broken-image icon); the remaining layers keep the
+   * composition functional. Immutable updates keep OnPush change detection
+   * correct.
+   */
+  private readonly failedImages = signal<ReadonlySet<string>>(new Set<string>());
+
+  /** True once the given source has failed to load (hidden from the stack). */
+  protected hasFailed(src: string): boolean {
+    return this.failedImages().has(src);
+  }
+
   private timer: ReturnType<typeof setTimeout> | null = null;
   private swipeStart: { x: number; y: number; t: number } | null = null;
   private lastSwipeAt = 0;
@@ -337,16 +361,28 @@ export class ProjectGalleryComponent {
     return (i - this.activeIndex() + n) % n;
   }
 
-  /** Deterministic slot class for a layer at rank r. */
+  /** Deterministic slot class for a layer at rank r.
+   *  Corner composition: 0 = CENTER, 1 = TOP-RIGHT, 2 = BOTTOM-RIGHT,
+   *  3 = BOTTOM-LEFT, 4 = TOP-LEFT, >= 5 = hidden entry slot. */
   layerClass(i: number): string {
     const r = this.rankOf(i);
     if (r === 0) return 'pgx-r0';
-    if (r >= 1 && r <= 3) return `pgx-r${r}`;
+    if (r >= 1 && r <= 4) return `pgx-r${r}`;
     return 'pgx-rh';
   }
 
   altFor(i: number): string {
     return this.images().length ? `${this.altText()} ${i + 1}` : '';
+  }
+
+  /** Gracefully drop a broken image from the stack (no broken-image icon). */
+  onImgError(src: string): void {
+    this.failedImages.update(prev => {
+      if (prev.has(src)) return prev;
+      const next = new Set(prev);
+      next.add(src);
+      return next;
+    });
   }
 
   next(): void {

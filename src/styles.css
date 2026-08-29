@@ -547,6 +547,17 @@ html {
   transition: opacity 180ms ease, transform 180ms ease;
   pointer-events: auto;
 }
+
+/* Mobile: keep safe horizontal margins so the card never touches/overflows
+   the map edge, and stay comfortably readable. */
+@media (max-width: 640px) {
+  .pm-card {
+    max-width: calc(100% - 32px);
+  }
+  .pm-popup img.pm-popup-img {
+    height: 120px;
+  }
+}
 @media (prefers-reduced-motion: reduce) {
   .pm-card {
     transition: none;
@@ -694,6 +705,22 @@ html {
   background: #f97316;
 }
 
+/* ACTIVE/SELECTED: the marker whose card is currently open. Distinct from
+   transient hover — a subtle blue ring + slight lift, no color change, so
+   hover/current/active states remain readable together. */
+.pm-marker--active .pm-pin {
+  box-shadow:
+    0 0 0 3px rgba(30, 58, 138, 0.35),
+    0 1px 4px rgba(15, 23, 42, 0.45);
+}
+
+/* Keyboard accessibility: visible focus on the marker element itself. */
+.pm-marker:focus-visible {
+  outline: 2px solid #f97316;
+  outline-offset: 2px;
+  border-radius: 50%;
+}
+
 /* Current project marker: larger, blue-orange halo + gentle pulse. */
 .pm-current {
   position: relative;
@@ -758,11 +785,12 @@ html {
   padding: 0.6rem 0.7rem 0.75rem;
 }
 
-/* Current-project badge + category chip (top of the body). */
+/* Current-project badge + category chip (top of the body).
+   Logical margin so the layout mirrors correctly in RTL (Arabic). */
 .pm-popup-badge,
 .pm-popup-cat {
   display: inline-block;
-  margin-right: 0.35rem;
+  margin-inline-end: 0.35rem;
   margin-bottom: 0.4rem;
   padding: 0.18rem 0.5rem;
   font-size: 0.62rem;

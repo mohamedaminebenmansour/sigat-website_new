@@ -2,6 +2,7 @@ import {
   ChangeDetectionStrategy,
   Component,
   DestroyRef,
+  computed,
   effect,
   inject,
   input,
@@ -41,10 +42,12 @@ import { toDivIcon } from './project-map.types';
           <span class="pm-legend-dot pm-legend-dot--normal"></span>
           <span>{{ 'map_legend_projects' | translate }}</span>
         </div>
-        <div class="pm-legend-row">
-          <span class="pm-legend-dot pm-legend-dot--current"></span>
-          <span>{{ 'map_legend_current' | translate }}</span>
-        </div>
+        @if (hasCurrent()) {
+          <div class="pm-legend-row">
+            <span class="pm-legend-dot pm-legend-dot--current"></span>
+            <span>{{ 'map_legend_current' | translate }}</span>
+          </div>
+        }
       </div>
 
       <button type="button" class="pm-fit" (click)="fitAll()">
@@ -56,7 +59,7 @@ import { toDivIcon } from './project-map.types';
 })
 export class ProjectMapComponent {
   readonly projects = input<ProjectMapEntry[]>([]);
-  readonly currentProjectId = input<number | undefined>(undefined);
+  readonly currentProjectId = input<number | undefined | null>(undefined);
 
   private readonly stage = viewChild<ElementRef<HTMLDivElement>>('stage');
   private readonly cardEl = viewChild<ElementRef<HTMLDivElement>>('card');
@@ -66,6 +69,9 @@ export class ProjectMapComponent {
   private readonly destroyRef = inject(DestroyRef);
 
   protected readonly tileError = signal(false);
+
+  /** True in Mode A (Project Details); false in Mode B (Projects listing). */
+  protected readonly hasCurrent = computed(() => this.currentProjectId() != null);
 
   /** Whether the smart-positioned project card is currently visible. */
   protected readonly cardOpen = signal(false);
@@ -238,8 +244,13 @@ export class ProjectMapComponent {
 
     this.clearCloseTimer();
     this.hoveredId = entry.id;
+
+    // ACTIVE/SELECTED state: the marker whose card is open gets a distinct
+    // emphasis (in addition to transient hover). Clear it from the previous one.
+    const prev = this.activeCardMarker;
     this.activeCardMarker = marker;
-    marker.getElement()?.classList.add('pm-marker--hover');
+    prev?.getElement()?.classList.remove('pm-marker--active');
+    marker.getElement()?.classList.add('pm-marker--hover', 'pm-marker--active');
 
     // Rebuild content (fresh node per open - its listeners die with it).
     card.replaceChildren(this.buildPopup(entry, entry.id === this.currentProjectId()));
@@ -254,8 +265,10 @@ export class ProjectMapComponent {
     const marker = this.activeCardMarker;
     this.activeCardMarker = null;
     this.cardSizes = null;
-    marker?.getElement()?.classList.remove('pm-marker--hover');
+    marker?.getElement()?.classList.remove('pm-marker--hover', 'pm-marker--active');
     this.cardOpen.set(false);
+    const card = this.cardEl()?.nativeElement;
+    if (card) card.replaceChildren();
   }
 
   /**
@@ -342,7 +355,7 @@ export class ProjectMapComponent {
   }
 
   /** Swap highlighted marker + focus when the current project changes. */
-  private applyCurrent(id: number | undefined): void {
+  private applyCurrent(id: number | null | undefined): void {
     if (!this.map || !this.markers.size) return;
 
     for (const [rid, marker] of this.markers) {
@@ -352,7 +365,7 @@ export class ProjectMapComponent {
       marker.setZIndexOffset(isCurrent ? this.cfg.currentMarkerZIndex : 0);
     }
 
-    const target = id !== undefined ? this.entryFor(id) : undefined;
+    const target = id != null ? this.entryFor(id) : undefined;
     if (target) {
       this.map.setView([target.latitude, target.longitude], this.cfg.focusZoom);
     }
