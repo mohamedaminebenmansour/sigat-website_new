@@ -70,4 +70,8 @@ export interface ProjectGeo {
   name: string;
   latitude?: number;
   longitude?: number;
+  /** Optional short city label for map popups/legends (falls back to `name`). */
+  city?: string;
+  /** Optional region, e.g. 'Grand Tunis'. */
+  region?: string;
 }

@@ -280,5 +280,12 @@
   "footer_address": "2000، عمارة أميرة 20 مارس، باردو، تونس",
   "footer_email": "contact@sigat.tn",
   "footer_phone": "+216 XX XXX XXX",
-  "footer_copyright": "© 2025 SIGAT. جميع الحقوق محفوظة."
+  "footer_copyright": "© 2025 SIGAT. جميع الحقوق محفوظة.",
+  "project_map_title": "المشاريع على الخريطة",
+  "project_map_subtitle": "مواقع مشاريعنا في نظرة واحدة عبر تونس",
+  "map_legend_projects": "مشاريع أخرى",
+  "map_legend_current": "المشروع الحالي",
+  "map_all_projects": "كل المشاريع",
+  "map_view_project": "عرض المشروع",
+  "map_tile_error": "تعذّر تحميل خرائط التطبيق."
 }

@@ -7,8 +7,9 @@ import { CtaBannerComponent } from '../../shared/components/cta-banner.component
 import { ProjectHeroComponent, ProjectHeroData } from './components/project-hero.component';
 import { ProjectStoryComponent } from './components/project-story.component';
 import { ProjectMetricsComponent } from './components/project-metrics.component';
-import { ProjectLocationComponent } from './components/project-location.component';
 import { ProjectNavigationComponent, ProjectNavItem } from './components/project-navigation.component';
+import { ProjectMapComponent } from '../../shared/components/project-map/project-map.component';
+import type { ProjectMapEntry } from '../../shared/components/project-map/project-map.types';
 
 @Component({
   selector: 'app-project-detail',
@@ -21,8 +22,8 @@ import { ProjectNavigationComponent, ProjectNavItem } from './components/project
     ProjectHeroComponent,
     ProjectStoryComponent,
     ProjectMetricsComponent,
-    ProjectLocationComponent,
     ProjectNavigationComponent,
+    ProjectMapComponent,
   ],
   template: `
     @if (project(); as p) {
@@ -36,9 +37,26 @@ import { ProjectNavigationComponent, ProjectNavItem } from './components/project
         <app-project-metrics [metrics]="p.metrics ?? []" />
       }
 
-      <!-- Location / map -->
-      @if (p.locationGeo) {
-        <app-project-location [geo]="p.locationGeo" />
+      <!-- Interactive project map (all projects) -->
+      @if (mapEntries().length) {
+        <section class="bg-white py-14 md:py-20">
+          <div class="container mx-auto px-4">
+            <div class="mx-auto max-w-5xl">
+              <p class="text-xs font-semibold uppercase tracking-[0.18em] text-blue-900">
+                {{ 'project_map_title' | translate }}
+              </p>
+              <h3 class="mt-3 text-2xl font-bold text-gray-900 md:text-3xl">
+                {{ 'project_map_subtitle' | translate }}
+              </h3>
+              <div class="mt-8">
+                <app-project-map
+                  [projects]="mapEntries()"
+                  [currentProjectId]="p.id"
+                />
+              </div>
+            </div>
+          </div>
+        </section>
       }
 
       <!-- Previous / next project -->
@@ -117,4 +135,8 @@ export class ProjectDetailComponent {
     const next = this.adjacent().next;
     return next ? { id: next.id, title: next.title } : null;
   };
+
+  /** All projects with valid coordinates, shaped for the Leaflet map. */
+  readonly mapEntries = (): ProjectMapEntry[] =>
+    this.mockData.getProjectMapEntries();
 }

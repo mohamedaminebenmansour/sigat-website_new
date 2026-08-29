@@ -39,7 +39,7 @@ const SWIPE_MAX_DY_PX = 80;
     `
       :host { display: block; }
 
-      .pgx { position: relative; width: 100%; max-width: 560px; margin-inline: auto; }
+      .pgx { position: relative; isolation: isolate; width: 100%; max-width: 560px; margin-inline: auto; }
 
       /* ------------------------------------------------------------------
        * Vertical staggered editorial stack. Each image is anchored by its
@@ -173,15 +173,15 @@ const SWIPE_MAX_DY_PX = 80;
       }
 
       @media (min-width: 768px) {
-        .pgx-controls { position: absolute; inset: 0; margin: 0; pointer-events: none; }
+        .pgx-controls { position: absolute; inset: 0; z-index: 100; margin: 0; pointer-events: none; }
         .pgx-btn {
           position: absolute;
           top: 50%;
           transform: translateY(-50%);
           pointer-events: auto;
-          background: rgba(255, 255, 255, 0.92);
+          background: rgba(255, 255, 255, 0.88);
           border-color: rgba(15, 23, 42, 0.12);
-          box-shadow: 0 8px 20px -10px rgba(15, 23, 42, 0.4);
+          box-shadow: 0 6px 18px rgba(15, 23, 42, 0.10);
         }
         .pgx-btn--prev { left: 0.75rem; }
         .pgx-btn--next { right: 0.75rem; }
@@ -191,12 +191,38 @@ const SWIPE_MAX_DY_PX = 80;
           position: absolute;
           bottom: 0.85rem;
           inset-inline-end: 0.85rem;
-          min-width: 0;
+          min-width: 0; z-index: 110;
           padding: 0.25rem 0.7rem;
           border-radius: 999px;
           background: rgba(15, 23, 42, 0.55);
           color: #ffffff;
         }
+      }
+
+      /* Desktop: translucent floating controls layered above all image cards (cards live inside the isolated stage context). */
+      @media (min-width: 768px) {
+        .pgx-btn {
+          transition:
+            background 0.2s ease,
+            border-color 0.2s ease,
+            transform 0.2s ease,
+            box-shadow 0.2s ease;
+        }
+        .pgx-btn:hover:not(:disabled) {
+          background: rgba(255, 255, 255, 0.98);
+          transform: translateY(calc(-50% - 1px));
+          box-shadow: 0 10px 22px -8px rgba(15, 23, 42, 0.16);
+        }
+        @supports (backdrop-filter: blur(6px)) {
+          .pgx-btn { background: rgba(255, 255, 255, 0.72); backdrop-filter: blur(6px); }
+          .pgx-btn:hover:not(:disabled) { background: rgba(255, 255, 255, 0.85); }
+        }
+      }
+
+      /* Compact in-flow controls on small phones (they sit below the stage). */
+      @media (max-width: 639px) {
+        .pgx-btn { width: 40px; height: 40px; }
+        .pgx-btn svg { width: 16px; height: 16px; }
       }
 
       @media (prefers-reduced-motion: reduce) {

@@ -2,6 +2,7 @@ import { Injectable } from '@angular/core';
 import { Project } from '../models/project.model';
 import { Equipment } from '../models/equipment.model';
 import { Expertise } from '../models/expertise.model';
+import type { ProjectMapEntry } from '../../shared/components/project-map/project-map.types';
 
 @Injectable({
   providedIn: 'root'
@@ -74,7 +75,8 @@ export class MockDataService {
       imageUrl: 'https://images.unsplash.com/photo-1581092160562-40aa08e78837?w=800&q=80',
       galleryUrls: [
         'https://images.unsplash.com/photo-1581092160562-40aa08e78837?w=800&q=80'
-      ]
+      ],
+      locationGeo: { name: 'Nabeul, Tunisie', latitude: 36.4512, longitude: 10.7354 }
     },
     {
       id: 3,
@@ -89,7 +91,8 @@ export class MockDataService {
       imageUrl: 'https://images.unsplash.com/photo-1504307651254-35680f356dfd?w=800&q=80',
       galleryUrls: [
         'https://images.unsplash.com/photo-1504307651254-35680f356dfd?w=800&q=80'
-      ]
+      ],
+      locationGeo: { name: 'Djerba, Tunisie', latitude: 33.8629, longitude: 10.8484 }
     },
     {
       id: 4,
@@ -104,7 +107,8 @@ export class MockDataService {
       imageUrl: 'https://images.unsplash.com/photo-1581092795360-fd1ca04f0952?w=800&q=80',
       galleryUrls: [
         'https://images.unsplash.com/photo-1581092795360-fd1ca04f0952?w=800&q=80'
-      ]
+      ],
+      locationGeo: { name: 'Mégrine, Grand Tunis, Tunisie', latitude: 36.7558, longitude: 10.3122 }
     },
     {
       id: 5,
@@ -119,7 +123,8 @@ export class MockDataService {
       imageUrl: 'https://images.unsplash.com/photo-1486325212027-8081e485255e?w=800&q=80',
       galleryUrls: [
         'https://images.unsplash.com/photo-1486325212027-8081e485255e?w=800&q=80'
-      ]
+      ],
+      locationGeo: { name: 'Tunis, Tunisie', latitude: 36.8065, longitude: 10.1815 }
     },
     {
       id: 6,
@@ -134,7 +139,8 @@ export class MockDataService {
       imageUrl: 'https://images.unsplash.com/photo-1504917595217-d4dc5ebe6122?w=800&q=80',
       galleryUrls: [
         'https://images.unsplash.com/photo-1504917595217-d4dc5ebe6122?w=800&q=80'
-      ]
+      ],
+      locationGeo: { name: 'Béja, Tunisie', latitude: 36.7256, longitude: 9.1817 }
     }
   ];
 
@@ -271,6 +277,31 @@ export class MockDataService {
     const prev = this.projects[(index - 1 + total) % total];
     const next = this.projects[(index + 1) % total];
     return { prev, next, index, total };
+  }
+
+  /**
+   * Projects with valid coordinates, shaped for the interactive Leaflet map.
+   * Projects lacking `locationGeo` coordinates are excluded so the map never
+   * renders an invalid LatLng.
+   */
+  getProjectMapEntries(): ProjectMapEntry[] {
+    const entries: ProjectMapEntry[] = [];
+    for (const p of this.projects) {
+      const g = p.locationGeo;
+      if (!g || g.latitude === undefined || g.longitude === undefined) {
+        continue;
+      }
+      entries.push({
+        id: p.id,
+        title: p.title,
+        location: g.city ?? g.name,
+        category: p.category,
+        latitude: g.latitude,
+        longitude: g.longitude,
+        previewImage: p.media?.cover ?? p.imageUrl,
+      });
+    }
+    return entries;
   }
 
   getProjectsByCategory(category: Project['category']): Project[] {

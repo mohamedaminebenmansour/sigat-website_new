@@ -280,5 +280,12 @@
   "footer_address": "2000, Amira Building 20 Mars, Le Bardo, Tunisia",
   "footer_email": "contact@sigat.tn",
   "footer_phone": "+216 XX XXX XXX",
-  "footer_copyright": "© 2025 SIGAT. All rights reserved."
+  "footer_copyright": "© 2025 SIGAT. All rights reserved.",
+  "project_map_title": "Projects on the map",
+  "project_map_subtitle": "Our project sites at a glance across Tunisia",
+  "map_legend_projects": "Other projects",
+  "map_legend_current": "Current project",
+  "map_all_projects": "All projects",
+  "map_view_project": "View project",
+  "map_tile_error": "Unable to load map tiles."
 }

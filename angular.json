@@ -35,8 +35,8 @@
             ],
 
             "styles": [
-              "src/styles.css"
-            ],
+              "src/styles.css",
+            "node_modules/leaflet/dist/leaflet.css"],
             "scripts": []
           },
 
@@ -107,8 +107,8 @@
             ],
 
             "styles": [
-              "src/styles.css"
-            ],
+              "src/styles.css",
+            "node_modules/leaflet/dist/leaflet.css"],
             "scripts": []
           }
         },
