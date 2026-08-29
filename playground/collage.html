@@ -1,0 +1,38 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>5-Panel Collage Playground</title>
+  <!-- The stylesheet lives next to this file. Keep both in the same folder. -->
+  <link rel="stylesheet" href="collage.css" />
+</head>
+<body>
+
+  <!-- ================================================================
+       MAIN CONTAINER ("the stage")
+       Everything inside is positioned absolutely against this box.
+       Its size defines the coordinate space (percentages of width/height)
+       for all five panels. Change .collage-stage in the CSS to resize it.
+       ================================================================ -->
+  <div class="collage-stage">
+
+    <!-- Panel 1: CENTER — the dominant, largest card (light blue). -->
+    <div class="panel panel-1">CENTER — Foundation</div>
+
+    <!-- Panel 2: TOP-RIGHT corner (light gray). Sits UNDER the center. -->
+    <div class="panel panel-2">TOP RIGHT — Excavation</div>
+
+    <!-- Panel 3: BOTTOM-RIGHT corner (light green). Sits ABOVE the center. -->
+    <div class="panel panel-3">BOTTOM RIGHT — Scaffolding</div>
+
+    <!-- Panel 4: BOTTOM-LEFT corner (light amber). Sits ABOVE the center. -->
+    <div class="panel panel-4">BOTTOM LEFT — Concrete Pour</div>
+
+    <!-- Panel 5: TOP-LEFT corner (light purple). Sits UNDER the center. -->
+    <div class="panel panel-5">TOP LEFT — Steel Frame</div>
+
+  </div>
+
+</body>
+</html>

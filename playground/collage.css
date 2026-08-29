@@ -1,0 +1,247 @@
+/* ============================================================
+   5-PANEL COLLAGE PLAYGROUND
+   Open collage.html in your browser, edit values here, save,
+   and refresh (or keep DevTools open and edit live) to tune
+   the layout until it feels right.
+
+   Layout model:
+     .collage-stage is "position: relative", so every .panel's
+     top/left percentages are measured from the stage box.
+     z-index decides who covers whom when panels overlap.
+   ============================================================ */
+
+/* ------------------------------------------------------------
+   THE STAGE (main container)
+   ------------------------------------------------------------ */
+.collage-stage {
+  /* Relative positioning: REQUIRED. It makes this box the
+     reference frame for all absolutely positioned panels.
+     If you change this to 'static', the panels will position
+     against the page instead and the layout will break. */
+  position: relative;
+
+  /* Stage size: the canvas you are composing on.
+     Increase width/height for a bigger canvas; the panels use
+     percentage coordinates, so they scale with the stage. */
+  width: 900px;
+  height: 640px;
+
+  /* Soft off-white background as requested. Try #f5f3ee,
+     #fbf7f0, or any tone that matches your site. */
+  background: #faf9f6;
+
+  /* Visible boundary: a hairline border + soft shadow so you can
+     always see where the stage ends while you are tweaking.
+     Remove both for production. */
+  border: 1px solid #e5e2da;
+  box-shadow: 0 12px 40px -18px rgba(15, 23, 42, 0.25);
+
+  /* Center the stage on the page horizontally with breathing room.
+     Purely cosmetic for the playground. */
+  margin: 48px auto;
+}
+
+/* ------------------------------------------------------------
+   SHARED PANEL BASE
+   Common look for all five panels. Edit once, applies to all.
+   ------------------------------------------------------------ */
+.panel {
+  /* Absolute positioning: REQUIRED. Each panel is placed at its
+     own top/left inside the stage (see the per-panel rules). */
+  position: absolute;
+
+  /* Flexbox centering: keeps the label text centered inside the
+     panel. Cosmetic only - safe to delete. */
+  display: flex;
+  align-items: center;
+  justify-content: center;
+
+  /* Label typography. Change font-size/weight/letter-spacing to
+     taste; color is dark slate for contrast on pastel fills. */
+  font-family: system-ui, sans-serif;
+  font-size: 14px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  color: #1e293b;
+
+  /* Rounded corners. Bigger = softer look; 0 = square. */
+  border-radius: 16px;
+
+  /* Hairline border so overlaps read clearly against each other. */
+  border: 1px solid rgba(15, 23, 42, 0.16);
+
+  /* Soft drop shadow: adds depth. First two values = x/y offset,
+     third = blur, fourth = spread, last = color+opacity. */
+  box-shadow: 0 18px 40px -20px rgba(15, 23, 42, 0.5);
+
+  /* Prevents the label text from selecting while you drag-tune.
+     Cosmetic only. */
+  user-select: none;
+}
+
+/* ------------------------------------------------------------
+   PANEL 1: CENTER — "Foundation"
+   The dominant card. Change 'width'/'height' to resize it;
+   nudge 'top' up/down to rebalance the whole composition.
+   ------------------------------------------------------------ */
+.panel-1 {
+  /* Horizontal anchor: 50% + translateX(-50%) keeps it perfectly
+     centered. To shift it, change BOTH 'left' and the -50% in
+     'transform' by the same amount (e.g. left 54% / -46%). */
+  left: 50%;
+
+  /* Vertical anchor: distance from the stage's top edge to the
+     TOP of this panel. Lower value = move up. */
+  top: 29%;
+
+  /* Size: percentage of the STAGE (not the viewport). Largest
+     card of the five - keep it clearly bigger than every corner. */
+  width: 52%;
+  height: 42%;
+
+  /* Stacking order: 30 = above the top corners (26), below the
+     bottom corners (34). Swap numbers to change who covers whom. */
+  z-index: 30;
+
+  /* Placeholder fill: light blue. Any CSS color works. */
+  background: #bfdbfe;
+
+  /* Rotation: 0deg = perfectly straight. Small values (1-3deg)
+     feel editorial; remove the rotate() to keep it straight. */
+  transform: translateX(-50%) rotate(0deg);
+}
+
+/* ------------------------------------------------------------
+   PANEL 2: TOP-RIGHT — "Excavation"
+   Tucks into the upper-right corner and DIPS UNDER the center
+   (its inner edge is covered by Panel 1). Move it with 'top'
+   and 'left'; 'width'/'height' resize it.
+   ------------------------------------------------------------ */
+.panel-2 {
+  /* Horizontal anchor: 80% puts its center near the right edge.
+     Lower it (e.g. 74%) to slide toward the center = more overlap. */
+  left: 80%;
+
+  /* Vertical anchor: small value = hugging the top edge.
+     Increase to push it down and deepen the overlap with Panel 1. */
+  top: 10%;
+
+  /* Size: distinctly different from the other corners on purpose. */
+  width: 30%;
+  height: 24%;
+
+  /* Stacking: 26 < center's 30, so the center covers its inner edge. */
+  z-index: 26;
+
+  /* Placeholder fill: light gray. */
+  background: #e2e8f0;
+
+  /* Slight clockwise tilt for the editorial look. */
+  transform: translateX(-50%) rotate(1.8deg);
+}
+
+/* ------------------------------------------------------------
+   PANEL 3: BOTTOM-RIGHT — "Scaffolding"
+   Lower-right corner. Sits ABOVE the center: only its top strip
+   (~10-15% of the center's height) covers Panel 1's bottom-right
+   corner. Keep it AWAY from Panel 2 (vertical gap) and Panel 4
+   (horizontal gap) so it feels isolated.
+   ------------------------------------------------------------ */
+.panel-3 {
+  /* Horizontal anchor: 82% parks it bottom-right. Lower = slide left. */
+  left: 82%;
+
+  /* Vertical anchor: 66% means its top edge overlaps the center's
+     bottom by roughly 11% of the center's height. Raise = more
+     coverage of the center; lower = less. */
+  top: 66%;
+
+  /* Size: the SMALLEST corner, on purpose (visual variety). */
+  width: 28%;
+  height: 22%;
+
+  /* Stacking: 34 > center's 30, so IT covers the center here. */
+  z-index: 34;
+
+  /* Placeholder fill: light green. */
+  background: #bbf7d0;
+
+  /* Slight counter-clockwise tilt. */
+  transform: translateX(-50%) rotate(-1.4deg);
+}
+
+/* ------------------------------------------------------------
+   PANEL 4: BOTTOM-LEFT — "Concrete Pour"
+   Lower-left corner, also ABOVE the center. Rotate it the
+   OPPOSITE way to Panel 5 (which is +3.5deg) so the two left
+   panels' facing corners sweep toward each other - that is the
+   "left-side conflict" effect.
+   ------------------------------------------------------------ */
+.panel-4 {
+  /* Horizontal anchor: 18% parks it bottom-left. Raise = slide right. */
+  left: 18%;
+
+  /* Vertical anchor: 66% = same depth as Panel 3 for balance.
+     Adjust independently if you want an asymmetrical baseline. */
+  top: 66%;
+
+  /* Size: mid-size corner (bigger than Panel 3, smaller than Panel 5). */
+  width: 32%;
+  height: 25%;
+
+  /* Stacking: 34 > center's 30 - covers the center's bottom-left. */
+  z-index: 34;
+
+  /* Placeholder fill: light amber. */
+  background: #fde68a;
+
+  /* Counter-clockwise tilt - mirror of Panel 5's +3.5deg.
+     This opposing pair creates the left-side layered conflict. */
+  transform: translateX(-50%) rotate(-3.5deg);
+}
+
+/* ------------------------------------------------------------
+   PANEL 5: TOP-LEFT — "Steel Frame"
+   Upper-left corner, UNDER the center (its inner edge is covered
+   by Panel 1). It is the largest corner: an intentional asymmetry
+   against the smaller bottom pair.
+   ------------------------------------------------------------ */
+.panel-5 {
+  /* Horizontal anchor: 22% parks it top-left. Raise = slide right
+     toward the center (more overlap with Panel 1). */
+  left: 22%;
+
+  /* Vertical anchor: 8% hugs the top edge; its bottom edge dips
+     under the center's top-left corner. */
+  top: 8%;
+
+  /* Size: the LARGEST corner - a deliberate asymmetry. */
+  width: 34%;
+  height: 27%;
+
+  /* Stacking: 26 < center's 30 - the center covers its inner edge. */
+  z-index: 26;
+
+  /* Placeholder fill: light purple. */
+  background: #ddd6fe;
+
+  /* Clockwise tilt - mirror of Panel 4's -3.5deg (left conflict). */
+  transform: translateX(-50%) rotate(3.5deg);
+}
+
+/* ------------------------------------------------------------
+   SMALL SCREENS (optional preview aid)
+   The playground uses a fixed 900px canvas; this scales the whole
+   stage down so you can preview it on a phone. Delete this block
+   if you only tune on desktop.
+   ------------------------------------------------------------ */
+@media (max-width: 960px) {
+  .collage-stage {
+    /* Scale factor: 0.42 shrinks the 900px canvas to fit mobile.
+       Adjust between 0.3-0.9 to preview at different sizes. */
+    transform: scale(0.42);
+    transform-origin: top center;
+    margin: 24px auto;
+  }
+}
+

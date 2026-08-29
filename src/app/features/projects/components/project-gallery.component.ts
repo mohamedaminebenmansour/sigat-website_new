@@ -43,10 +43,12 @@ const SWIPE_MAX_DY_PX = 80;
 
       /* ------------------------------------------------------------------
        * Editorial CORNER composition: CENTER + TOP-LEFT / TOP-RIGHT /
-       * BOTTOM-LEFT / BOTTOM-RIGHT. The four corners intentionally overlap
-       * the center's corners ("framing conflict") while the center (z 50)
-       * stays fully readable. Rank drives position, size, rotation, z-index
-       * and opacity; each card physically animates into its new slot.
+       * BOTTOM-LEFT / BOTTOM-RIGHT, all with different sizes. Z-order:
+       * BOTTOM pair (34) covers the CENTER (30) slightly (~11% of its
+       * height); the CENTER covers the TOP pair (26). Opposing left-pair
+       * rotations create the editorial side conflict. Rank drives position,
+       * size, rotation, z-index and opacity; each card physically animates
+       * into its new slot. All 5 slots are always valid and visible.
        * ------------------------------------------------------------------ */
       .pgx-stage {
         position: relative;
@@ -96,46 +98,62 @@ const SWIPE_MAX_DY_PX = 80;
       .pgx-layer:not(.pgx-r0) img { filter: brightness(0.95) saturate(0.96); }
 
       /* ------------------------- MOBILE (default) ---------------------
-       * Dedicated corner geometry: dominant center (74%), four small
-       * corners tucked toward the edges with shallow dips over the
-       * center's corners. No horizontal escape. */
-      .pgx-r0 { --w: 74%; --x: 0%;    --y: 24%; --s: 1;    --r: 18px; --rot: 0deg;  z-index: 50; }
-      .pgx-r1 { --w: 34%; --x: 30%;   --y: 9%;  --s: 0.94; --r: 14px; --rot: 1.8deg;  z-index: 30; }
-      .pgx-r2 { --w: 32%; --x: 30%;   --y: 60%; --s: 0.9;  --r: 14px; --rot: -1.4deg; z-index: 26; }
-      .pgx-r3 { --w: 32%; --x: -30%;  --y: 62%; --s: 0.9;  --r: 14px; --rot: 1.2deg;  z-index: 26; }
-      .pgx-r4 { --w: 34%; --x: -30%;  --y: 13%; --s: 0.94; --r: 14px; --rot: -1.6deg; z-index: 30; }
-      .pgx-rh { --w: 40%; --x: 0%;    --y: 30%; --s: 0.8;  --r: 14px; --rot: 0.6deg;  z-index: 20; opacity: 0; pointer-events: none; }
+       * Corner geometry, z-order: BOTTOM pair (34) > CENTER (30) > TOP
+       * pair (26). Bottom corners cover the center slightly (~11% of its
+       * height); the center covers the top corners. All four secondary
+       * sizes differ. No horizontal escape. */
+      .pgx-r0 { --w: 72%; --x: 0%;    --y: 25%;  --s: 1;    --r: 18px; --rot: 0deg;  z-index: 30; }
+      .pgx-r1 { --w: 32%; --x: 28%;   --y: 11%;  --s: 0.94; --r: 14px; --rot: 1.8deg;  z-index: 26; }
+      .pgx-r2 { --w: 28%; --x: 28%;   --y: 62.5%;--s: 0.9;  --r: 14px; --rot: -1.4deg; z-index: 34; }
+      .pgx-r3 { --w: 30%; --x: -28%;  --y: 62%;  --s: 0.92; --r: 14px; --rot: -3deg;   z-index: 34; }
+      .pgx-r4 { --w: 34%; --x: -29%;  --y: 8%;   --s: 0.94; --r: 14px; --rot: 3deg;    z-index: 26; }
+      .pgx-rh { --w: 40%; --x: 0%;    --y: 30%;  --s: 0.8;  --r: 14px; --rot: 0.6deg;  z-index: 20; opacity: 0; pointer-events: none; }
 
       /* ------------------------------ TABLET --------------------------
-       * Same 5-slot concept: slightly larger center, moderate overlap. */
+       * Same relationships, compressed: bottom corners still overlap the
+       * center from ABOVE; top corners still sit UNDER the center. */
       @media (min-width: 768px) {
-        .pgx-stage { height: clamp(520px, 86vw, 600px); }
-        .pgx-r0 { --w: 56%; --y: 26%; --r: 20px; }
-        .pgx-r1 { --w: 32%; --x: 34%; --y: 6%;  --rot: 1.7deg; }
-        .pgx-r2 { --w: 31%; --x: 34%; --y: 66%; --rot: -1.4deg; }
-        .pgx-r3 { --w: 31%; --x: -34%; --y: 64%; --rot: 1.2deg; }
-        .pgx-r4 { --w: 32%; --x: -34%; --y: 4%;  --rot: -1.5deg; }
+        .pgx-stage { height: clamp(520px, 96vw, 600px); }
+        .pgx-r0 { --w: 54%; --y: 28%; --r: 20px; }
+        .pgx-r1 { --w: 30%; --x: 30%;  --y: 9%;  --rot: 1.7deg; }
+        .pgx-r2 { --w: 28%; --x: 31%;  --y: 65%; --rot: -1.4deg; }
+        .pgx-r3 { --w: 30%; --x: -32%; --y: 65%; --rot: -3.2deg; }
+        .pgx-r4 { --w: 32%; --x: -28%; --y: 7%;  --rot: 3.2deg; }
       }
 
       /* ----------------------------- DESKTOP --------------------------
-       * Full composition: large center (54%) with four 28-30% corners
-       * whose inner edges intersect the center's corners. */
+       * Full composition: large center (52%) framed by four differently
+       * sized corners (34/30/32/28). Bottom pair overlaps the center by
+       * ~11% of its height and covers it; top pair dips under it. The
+       * opposing left-pair rotations create the editorial side conflict. */
       @media (min-width: 1024px) {
-        .pgx-stage { height: clamp(560px, 92vw, 640px); }
-        .pgx-r0 { --w: 54%; --y: 28%; --r: 22px; box-shadow: 0 34px 68px -26px rgba(15, 23, 42, 0.6); }
-        .pgx-r1 { --w: 30%; --x: 34.5%; --y: 7%;   --s: 0.96; --rot: 1.8deg; }
-        .pgx-r2 { --w: 30%; --x: 34%;   --y: 68%;  --s: 0.96; --rot: -1.4deg; }
-        .pgx-r3 { --w: 28%; --x: -34%;  --y: 66%;  --s: 0.92; --rot: 1.2deg; }
-        .pgx-r4 { --w: 30%; --x: -34.5%; --y: 8.5%; --s: 0.96; --rot: -1.6deg; }
+        .pgx-stage { height: clamp(560px, 94vw, 660px); }
+        .pgx-r0 { --w: 52%; --y: 29%; --r: 22px; box-shadow: 0 34px 68px -26px rgba(15, 23, 42, 0.6); }
+        .pgx-r1 { --w: 30%; --x: 30%;   --y: 10%; --s: 0.96; --rot: 1.8deg; }
+        .pgx-r2 { --w: 28%; --x: 32%;   --y: 66%; --s: 0.96; --rot: -1.4deg; }
+        .pgx-r3 { --w: 32%; --x: -32%;  --y: 66%; --s: 0.94; --rot: -3.5deg; }
+        .pgx-r4 { --w: 34%; --x: -28%;  --y: 8%;  --s: 0.96; --rot: 3.5deg; }
       }
 
-      /* Hover (fine pointers only): subtle lift / reveal, never aggressive. */
+      /* Hover (fine pointers only): subtle lift / reveal, never aggressive.
+         Bottom pair rises above siblings (may cover center - it already
+         does); TOP pair is capped BELOW the center so the center image is
+         never obscured by a hovered top corner. */
       @media (hover: hover) and (pointer: fine) {
-        .pgx-layer:not(.pgx-r0):hover {
+        .pgx-r2:hover,
+        .pgx-r3:hover {
           --lift: -5px;
-          --s: 1.03;
+          --s: 1.02;
           opacity: 1;
-          z-index: 40;
+          z-index: 38;
+          box-shadow: 0 28px 54px -24px rgba(15, 23, 42, 0.55);
+        }
+        .pgx-r1:hover,
+        .pgx-r4:hover {
+          --lift: -5px;
+          --s: 1.02;
+          opacity: 1;
+          z-index: 29;
           box-shadow: 0 28px 54px -24px rgba(15, 23, 42, 0.55);
         }
         .pgx-layer:not(.pgx-r0):hover img { filter: none; }
@@ -251,7 +269,7 @@ const SWIPE_MAX_DY_PX = 80;
         (pointerdown)="onPointerDown($event)"
         (pointerup)="onPointerUp($event)"
       >
-        @for (src of images(); track src; let i = $index) {
+        @for (src of validImages(); track src; let i = $index) {
           @if (!hasFailed(src)) {
             <button
               type="button"
@@ -280,7 +298,7 @@ const SWIPE_MAX_DY_PX = 80;
           class="pgx-btn pgx-btn--prev"
           (click)="previous()"
           aria-label="Previous image"
-          [disabled]="images().length < 2"
+          [disabled]="validImages().length < 2"
         >
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
                stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
@@ -297,7 +315,7 @@ const SWIPE_MAX_DY_PX = 80;
           class="pgx-btn pgx-btn--next"
           (click)="next()"
           aria-label="Next image"
-          [disabled]="images().length < 2"
+          [disabled]="validImages().length < 2"
         >
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
                stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
@@ -331,6 +349,13 @@ export class ProjectGalleryComponent {
     return this.failedImages().has(src);
   }
 
+  /** Sources that are actually loadable. The stack is built ONLY from these,
+   *  so a broken image frees its slot and the next valid image fills it —
+   *  the gallery renders one card per valid image (up to 5 slots). */
+  protected readonly validImages = computed(() =>
+    this.images().filter(src => !this.failedImages().has(src)),
+  );
+
   private timer: ReturnType<typeof setTimeout> | null = null;
   private swipeStart: { x: number; y: number; t: number } | null = null;
   private lastSwipeAt = 0;
@@ -350,14 +375,14 @@ export class ProjectGalleryComponent {
 
   /** Compact 01 / 05 counter. */
   readonly counter = computed(() => {
-    const total = String(this.images().length).padStart(2, '0');
+    const total = String(this.validImages().length).padStart(2, '0');
     const current = String(this.activeIndex() + 1).padStart(2, '0');
     return { current, total };
   });
 
   /** Circular distance from the principal image (0 = principal). */
   rankOf(i: number): number {
-    const n = this.images().length || 1;
+    const n = this.validImages().length || 1;
     return (i - this.activeIndex() + n) % n;
   }
 
@@ -372,7 +397,7 @@ export class ProjectGalleryComponent {
   }
 
   altFor(i: number): string {
-    return this.images().length ? `${this.altText()} ${i + 1}` : '';
+    return this.validImages().length ? `${this.altText()} ${i + 1}` : '';
   }
 
   /** Gracefully drop a broken image from the stack (no broken-image icon). */
@@ -423,7 +448,7 @@ export class ProjectGalleryComponent {
   onPointerUp(ev: PointerEvent): void {
     const start = this.swipeStart;
     this.swipeStart = null;
-    if (!start || this.images().length < 2) return;
+    if (!start || this.validImages().length < 2) return;
     if (Date.now() - start.t > 800) return;
 
     const dx = ev.clientX - start.x;
@@ -441,7 +466,7 @@ export class ProjectGalleryComponent {
   // -------------------------------------------------------------------
 
   private step(dir: 1 | -1): void {
-    const n = this.images().length;
+    const n = this.validImages().length;
     if (n < 2) return;
     this.activeIndex.update(v => (v + dir + n) % n);
     this.scheduleAutoplay(INTERACTION_RESUME_MS);
@@ -449,10 +474,10 @@ export class ProjectGalleryComponent {
 
   private scheduleAutoplay(ms: number): void {
     this.clearTimer();
-    if (this.reduceMotion || this.images().length < 2) return;
+    if (this.reduceMotion || this.validImages().length < 2) return;
     this.timer = setTimeout(() => {
       this.timer = null;
-      this.activeIndex.update(v => (v + 1) % (this.images().length || 1));
+      this.activeIndex.update(v => (v + 1) % (this.validImages().length || 1));
       this.scheduleAutoplay(GALLERY_AUTOPLAY_MS);
     }, ms);
   }
