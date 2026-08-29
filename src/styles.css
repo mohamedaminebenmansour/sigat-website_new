@@ -510,12 +510,47 @@ html {
 
 .pm-wrap {
   position: relative;
+  /* Create a LOCAL stacking context. Leaflet injects its own panes/controls
+     with page-relative z-indexes (markers 600, popups 700, controls 800-1000);
+     without this they leak above the site's fixed navbar (z-index 50). Isolating
+     contains ALL of them here, so the whole map stays below the navbar while a
+     sensible hierarchy is preserved inside: markers < card(700) < controls. */
+  isolation: isolate;
   width: 100%;
   border-radius: 0.75rem;
   overflow: hidden;
   border: 1px solid #e2e8f0;
   box-shadow: 0 10px 30px -18px rgba(15, 23, 42, 0.45);
   background: #eef2f7;
+}
+
+/* Smart-positioned project card. Positioned in TS relative to the marker, and
+   ALWAYS kept fully inside the visible map area (never clipped). Opacity +
+   transform animates the open/close; visibility hides it from tab order when
+   closed. z-index 700 sits above markers/legend but below Leaflet's controls. */
+.pm-card {
+  position: absolute;
+  left: 0;
+  top: 0;
+  z-index: 700;
+  max-width: calc(100% - 24px);
+  opacity: 0;
+  visibility: hidden;
+  transform: translateY(4px);
+  transition: opacity 180ms ease, transform 180ms ease, visibility 0s linear 180ms;
+  pointer-events: none;
+}
+.pm-card--open {
+  opacity: 1;
+  visibility: visible;
+  transform: translateY(0);
+  transition: opacity 180ms ease, transform 180ms ease;
+  pointer-events: auto;
+}
+@media (prefers-reduced-motion: reduce) {
+  .pm-card {
+    transition: none;
+  }
 }
 
 /* The actual Leaflet container. MUST have a real rendered height. */
@@ -703,8 +738,13 @@ html {
 /* ---- Popup preview card --------------------------------------- */
 .pm-popup {
   min-width: 200px;
+  width: max-content;
+  max-width: 100%;
   overflow: hidden;
   border-radius: 0.6rem;
+  background: #ffffff;
+  border: 1px solid #e2e8f0;
+  box-shadow: 0 12px 34px -16px rgba(15, 23, 42, 0.5);
 }
 
 .pm-popup img.pm-popup-img {

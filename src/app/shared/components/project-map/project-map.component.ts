@@ -25,6 +25,12 @@ import { toDivIcon } from './project-map.types';
   template: `
     <div class="pm-wrap">
       <div #stage class="pm-stage"></div>
+      <div
+        #card
+        class="pm-card"
+        [class.pm-card--open]="cardOpen()"
+        aria-live="polite"
+      ></div>
 
       @if (tileError()) {
         <div class="pm-error" role="alert">{{ 'map_tile_error' | translate }}</div>
@@ -53,12 +59,16 @@ export class ProjectMapComponent {
   readonly currentProjectId = input<number | undefined>(undefined);
 
   private readonly stage = viewChild<ElementRef<HTMLDivElement>>('stage');
+  private readonly cardEl = viewChild<ElementRef<HTMLDivElement>>('card');
   private readonly router = inject(Router);
   private readonly translateService = inject(TranslateService);
   private readonly cfg: MapConfig = inject(MAP_CONFIG);
   private readonly destroyRef = inject(DestroyRef);
 
   protected readonly tileError = signal(false);
+
+  /** Whether the smart-positioned project card is currently visible. */
+  protected readonly cardOpen = signal(false);
 
   private map: L.Map | null = null;
   private markers = new Map<number, L.Marker>();
@@ -73,6 +83,10 @@ export class ProjectMapComponent {
    */
   private hoveredId: number | null = null;
   private closeTimer: ReturnType<typeof setTimeout> | null = null;
+  /** The marker whose card is currently shown (for positioning + hover class). */
+  private activeCardMarker: L.Marker | null = null;
+  /** Cached card size so repositioning on pan/zoom never forces a reflow. */
+  private cardSizes: { w: number; h: number } | null = null;
   /** One-time check: on touch-only devices there is no real hover, so we keep
    *  popups open (tap to show, CTA to navigate) rather than closing on the
    *  synthetic mouseout that browsers emit after a tap. */
@@ -144,6 +158,14 @@ export class ProjectMapComponent {
       .on('tileerror', () => this.tileError.set(true))
       .addTo(this.map);
 
+    // Keep the (open) project card glued to its marker while the map pans,
+    // zooms, or its container resizes. Leaflet emits 'move'/'zoom' during real
+    // interaction and 'resize' when the container (incl. window/orientation)
+    // changes - so no polling and no extra window listeners are needed. All of
+    // these are removed with map.remove() in teardown().
+    this.map.on('move zoom', () => this.positionCard(false));
+    this.map.on('resize', () => this.positionCard(true));
+
     this.createMarkers(entries);
     this.initialized = true;
     this.applyCurrent(this.currentProjectId());
@@ -172,43 +194,33 @@ export class ProjectMapComponent {
       }
 
       // Every marker gets the same preview card (project-specific state differs
-      // only by visual class, never by availability).
-      // NOTE: autoPan stays disabled so opening a preview never pans the marker
-      // out from under the cursor (edge markers would instantly flicker closed
-      // and clicks would be cancelled by the pan).
-      marker.bindPopup(() => this.buildPopup(entry, isCurrent), {
-        maxWidth: 280,
-        autoPan: false,
-        autoPanPadding: [12, 12],
-        closeButton: false,
-      });
+      // only by visual class, never by availability). The card is rendered into
+      // a smart-positioned layer (see showCard/positionCard) instead of a native
+      // Leaflet popup, so it stays fully inside the map at every edge.
 
       // Click: other projects navigate immediately; the current project opens
       // its preview. On touch-only devices the first tap opens the preview and
-      // the popup CTA (or a second tap on the marker) is what navigates.
+      // the card CTA (or a second tap on the marker) is what navigates.
       marker.on('click', (ev) => {
         ev.originalEvent.stopPropagation();
         if (entry.id !== this.currentProjectId() && !this.isTouchOnly) {
           this.navigateToProject(entry);
         } else {
-          this.openMarker(marker, entry.id);
+          this.showCard(entry, marker);
         }
       });
 
-      // Hover: identical for ALL markers - set hover state + open preview.
+      // Hover: identical for ALL markers - set hover state + open the card.
       marker.on('mouseover', () => {
         if (this.isTouchOnly) return;
-        this.clearCloseTimer();
-        this.hoveredId = entry.id;
-        marker.getElement()?.classList.add('pm-marker--hover');
-        this.openRequestedMarker(marker, entry.id);
+        this.showCard(entry, marker);
       });
       // mouseout fires when leaving the marker. We only schedule a close; the
-      // tiny delay (and the timer cancel in mouseover / popup mouseenter) lets
-      // the pointer travel onto the popup or to another marker cleanly.
+      // tiny delay (and the timer cancel in mouseover / card mouseenter) lets
+      // the pointer travel onto the card or to another marker cleanly.
       marker.on('mouseout', (e) => {
         if (this.isTouchOnly) return;
-        this.mouseOutOfMarker(marker, e, entry.id);
+        this.mouseOutOfMarker(marker, entry.id);
       });
 
       this.markers.set(entry.id, marker);
@@ -219,15 +231,75 @@ export class ProjectMapComponent {
     }
   }
 
-  /** Open a marker's popup, closing any other popup first (one at a time). */
-  private openRequestedMarker(marker: L.Marker, id: number): void {
-    this.hoveredId = id;
-    marker.openPopup();
+  /** Open (or switch) the project card for a marker + glue it to the marker. */
+  private showCard(entry: ProjectMapEntry, marker: L.Marker): void {
+    const card = this.cardEl()?.nativeElement;
+    if (!card) return;
+
+    this.clearCloseTimer();
+    this.hoveredId = entry.id;
+    this.activeCardMarker = marker;
+    marker.getElement()?.classList.add('pm-marker--hover');
+
+    // Rebuild content (fresh node per open - its listeners die with it).
+    card.replaceChildren(this.buildPopup(entry, entry.id === this.currentProjectId()));
+    this.positionCard(true);
+    this.cardOpen.set(true);
   }
 
-  private openMarker(marker: L.Marker, id: number): void {
+  /** Close the project card for good. */
+  private hideCard(): void {
     this.clearCloseTimer();
-    this.openRequestedMarker(marker, id);
+    this.hoveredId = null;
+    const marker = this.activeCardMarker;
+    this.activeCardMarker = null;
+    this.cardSizes = null;
+    marker?.getElement()?.classList.remove('pm-marker--hover');
+    this.cardOpen.set(false);
+  }
+
+  /**
+   * Position the card so it is ALWAYS fully inside the visible map area.
+   *
+   * - Uses real stage/card measurements (no hard-coded pixel sizes).
+   * - Horizontal: center on the marker, then clamp - a marker near the right
+   *   edge shifts the card left, near the left edge shifts it right.
+   * - Vertical: prefer above the marker; if there is not enough room above,
+   *   flip below. Both are clamped to the stage with a 12px safety margin.
+   * - `rescale` re-measures the card (on open/resize); otherwise we reuse the
+   *   cached size so panning is cheap.
+   */
+  private positionCard(rescale: boolean): void {
+    const card = this.cardEl()?.nativeElement;
+    const stageEl = this.stage()?.nativeElement;
+    if (!card || !stageEl || !this.map || !this.activeCardMarker) return;
+
+    if (rescale || !this.cardSizes) {
+      this.cardSizes = { w: card.offsetWidth, h: card.offsetHeight };
+    }
+    const { w, h } = this.cardSizes;
+    const stageW = stageEl.clientWidth;
+    const stageH = stageEl.clientHeight;
+    const margin = 12;
+
+    const pt = this.map.latLngToContainerPoint(this.activeCardMarker.getLatLng());
+
+    // Horizontal: center on marker, clamp into the stage.
+    const maxX = stageW - w - margin;
+    let x = pt.x - w / 2;
+    x = Math.max(margin, Math.min(x, maxX));
+
+    // Vertical: prefer above the marker; flip below when there is no room.
+    let y = pt.y - h - margin;
+    if (y < margin) {
+      y = Math.min(pt.y + margin, stageH - h - margin);
+    } else if (y + h > stageH - margin) {
+      y = stageH - h - margin;
+    }
+    y = Math.max(margin, y);
+
+    card.style.left = `${Math.round(x)}px`;
+    card.style.top = `${Math.round(y)}px`;
   }
 
   private clearCloseTimer(): void {
@@ -239,25 +311,18 @@ export class ProjectMapComponent {
 
   /**
    * Leave a marker. We do NOT close immediately: a short timer allows the
-   * pointer to move onto the marker's own popup. If it moves to another marker
-   * first (mouseover) or onto the popup (mouseenter), the timer is cancelled.
+   * pointer to move onto the marker's own card. If it moves to another marker
+   * first (mouseover) or onto the card (mouseenter), the timer is cancelled.
    */
-  private mouseOutOfMarker(
-    marker: L.Marker,
-    e: L.LeafletMouseEvent,
-    id: number,
-  ): void {
+  private mouseOutOfMarker(marker: L.Marker, id: number): void {
     marker.getElement()?.classList.remove('pm-marker--hover');
-    // If we've already moved onto a different marker, do nothing (that
-    // marker's mouseover owns the state now).
     this.clearCloseTimer();
     this.closeTimer = setTimeout(() => {
       this.closeTimer = null;
       // Only close if we're still on THIS marker - a subsequent mouseover on
-      // another marker / popup cancels the timer.
+      // another marker / card cancels the timer.
       if (this.hoveredId === id) {
-        this.hoveredId = null;
-        marker.closePopup();
+        this.hideCard();
       }
     }, 120);
   }
@@ -266,9 +331,7 @@ export class ProjectMapComponent {
   private async navigateToProject(entry: ProjectMapEntry): Promise<void> {
     if (!entry || !Number.isFinite(entry.id)) return;
 
-    this.clearCloseTimer();
-    this.hoveredId = null;
-    this.map?.closePopup();
+    this.hideCard();
 
     try {
       await this.router.navigate(['/projects', entry.id]);
@@ -368,15 +431,11 @@ protected fitAll(): void {
     body.append(title, loc, cta);
     root.append(img, body);
 
-    // Hover keep-open: entering the popup (from the marker) cancels the close
-    // timer; leaving the popup entirely closes the preview immediately. Fresh
+    // Hover keep-open: entering the card (from the marker) cancels the close
+    // timer; leaving the card entirely closes the preview immediately. Fresh
     // node per open, so these listeners die with the node - no leaks.
     root.addEventListener('mouseenter', () => this.clearCloseTimer());
-    root.addEventListener('mouseleave', () => {
-      this.clearCloseTimer();
-      this.hoveredId = null;
-      this.map?.closePopup();
-    });
+    root.addEventListener('mouseleave', () => this.hideCard());
 
     return root;
   }
@@ -396,6 +455,9 @@ protected fitAll(): void {
     this.observer = null;
     this.clearCloseTimer();
     this.hoveredId = null;
+    this.activeCardMarker = null;
+    this.cardSizes = null;
+    this.cardOpen.set(false);
     this.markers.clear();
     if (this.map) {
       this.map.remove();
