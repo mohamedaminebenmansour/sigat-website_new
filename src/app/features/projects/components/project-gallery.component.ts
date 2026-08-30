@@ -37,6 +37,23 @@ const SWIPE_MAX_DY_PX = 80;
   imports: [NgOptimizedImage],
   styles: [
     `
+      /* ==============================================================
+       * HOW TO TWEAK THIS GALLERY
+       * To resize/move/rotate a panel, edit the --w, --x, --y, --rot
+       * values in the "MY CUSTOM OVERRIDES" block at the BOTTOM of
+       * this styles array. It sits AFTER every media query, so its
+       * values always win on every screen size. Save + refresh the
+       * browser to see changes.
+       *
+       * Variable legend (consumed by the .pgx-layer rule below):
+       *   --w   width  (% of stage width)
+       *   --x   horizontal offset from stage center (negative = left)
+       *   --y   top edge (%, of stage height; negative = up)
+       *   --rot tilt (positive = clockwise, negative = counter)
+       *   --s   overall scale (1 = natural)
+       *   --r   corner radius
+       *   --lift upward nudge on hover (px)
+       * ============================================================== */
       :host { display: block; }
 
       .pgx { position: relative; isolation: isolate; width: 100%; max-width: 680px; margin-inline: auto; }
@@ -102,11 +119,81 @@ const SWIPE_MAX_DY_PX = 80;
        * pair (26). Bottom corners cover the center slightly (~11% of its
        * height); the center covers the top corners. All four secondary
        * sizes differ. No horizontal escape. */
-      .pgx-r0 { --w: 72%; --x: 0%;    --y: 25%;  --s: 1;    --r: 18px; --rot: 0deg;  z-index: 30; }
-      .pgx-r1 { --w: 32%; --x: 28%;   --y: 11%;  --s: 0.94; --r: 14px; --rot: 1.8deg;  z-index: 26; }
-      .pgx-r2 { --w: 28%; --x: 28%;   --y: 62.5%;--s: 0.9;  --r: 14px; --rot: -1.4deg; z-index: 34; }
-      .pgx-r3 { --w: 30%; --x: -28%;  --y: 62%;  --s: 0.92; --r: 14px; --rot: -3deg;   z-index: 34; }
-      .pgx-r4 { --w: 34%; --x: -29%;  --y: 8%;   --s: 0.94; --r: 14px; --rot: 3deg;    z-index: 26; }
+      .pgx-r0 {
+        /* CHANGE THIS to make the panel wider/narrower (percentage of stage width) */
+        --w: 72%;
+        /* CHANGE THIS to move it left/right (negative = left, positive = right) */
+        --x: 0%;
+        /* CHANGE THIS to move it up/down (negative = up, positive = down) */
+        --y: 25%;
+        /* CHANGE THIS to tilt the panel (positive = clockwise, negative = counter) */
+        --rot: 0deg;
+        /* CHANGE THIS to scale the whole card (1 = natural size) */
+        --s: 1;
+        /* CHANGE THIS to corner roundness */
+        --r: 18px;
+        z-index: 30;
+      }
+      .pgx-r1 {
+        /* CHANGE THIS to make the panel wider/narrower (percentage of stage width) */
+        --w: 32%;
+        /* CHANGE THIS to move it left/right (negative = left, positive = right) */
+        --x: 28%;
+        /* CHANGE THIS to move it up/down (negative = up, positive = down) */
+        --y: 11%;
+        /* CHANGE THIS to tilt the panel (positive = clockwise, negative = counter) */
+        --rot: 1.8deg;
+        /* CHANGE THIS to scale the whole card (1 = natural size) */
+        --s: 0.94;
+        /* CHANGE THIS to corner roundness */
+        --r: 14px;
+        z-index: 26;
+      }
+      .pgx-r2 {
+        /* CHANGE THIS to make the panel wider/narrower (percentage of stage width) */
+        --w: 28%;
+        /* CHANGE THIS to move it left/right (negative = left, positive = right) */
+        --x: 28%;
+        /* CHANGE THIS to move it up/down (negative = up, positive = down) */
+        --y: 62.5%;
+        /* CHANGE THIS to tilt the panel (positive = clockwise, negative = counter) */
+        --rot: -1.4deg;
+        /* CHANGE THIS to scale the whole card (1 = natural size) */
+        --s: 0.9;
+        /* CHANGE THIS to corner roundness */
+        --r: 14px;
+        z-index: 34;
+      }
+      .pgx-r3 {
+        /* CHANGE THIS to make the panel wider/narrower (percentage of stage width) */
+        --w: 30%;
+        /* CHANGE THIS to move it left/right (negative = left, positive = right) */
+        --x: -28%;
+        /* CHANGE THIS to move it up/down (negative = up, positive = down) */
+        --y: 62%;
+        /* CHANGE THIS to tilt the panel (positive = clockwise, negative = counter) */
+        --rot: -3deg;
+        /* CHANGE THIS to scale the whole card (1 = natural size) */
+        --s: 0.92;
+        /* CHANGE THIS to corner roundness */
+        --r: 14px;
+        z-index: 34;
+      }
+      .pgx-r4 {
+        /* CHANGE THIS to make the panel wider/narrower (percentage of stage width) */
+        --w: 34%;
+        /* CHANGE THIS to move it left/right (negative = left, positive = right) */
+        --x: -29%;
+        /* CHANGE THIS to move it up/down (negative = up, positive = down) */
+        --y: 8%;
+        /* CHANGE THIS to tilt the panel (positive = clockwise, negative = counter) */
+        --rot: 3deg;
+        /* CHANGE THIS to scale the whole card (1 = natural size) */
+        --s: 0.94;
+        /* CHANGE THIS to corner roundness */
+        --r: 14px;
+        z-index: 26;
+      }
       .pgx-rh { --w: 40%; --x: 0%;    --y: 30%;  --s: 0.8;  --r: 14px; --rot: 0.6deg;  z-index: 20; opacity: 0; pointer-events: none; }
 
       /* ------------------------------ TABLET --------------------------
@@ -114,11 +201,81 @@ const SWIPE_MAX_DY_PX = 80;
        * center from ABOVE; top corners still sit UNDER the center. */
       @media (min-width: 768px) {
         .pgx-stage { height: clamp(520px, 96vw, 600px); }
-        .pgx-r0 { --w: 54%; --y: 28%; --r: 20px; }
-        .pgx-r1 { --w: 30%; --x: 30%;  --y: 9%;  --rot: 1.7deg; }
-        .pgx-r2 { --w: 28%; --x: 31%;  --y: 65%; --rot: -1.4deg; }
-        .pgx-r3 { --w: 30%; --x: -32%; --y: 65%; --rot: -3.2deg; }
-        .pgx-r4 { --w: 32%; --x: -28%; --y: 7%;  --rot: 3.2deg; }
+      .pgx-r0 {
+        /* CHANGE THIS to make the panel wider/narrower (percentage of stage width) */
+        --w: 54%;
+        /* CHANGE THIS to move it left/right (negative = left, positive = right) */
+        --x: ;
+        /* CHANGE THIS to move it up/down (negative = up, positive = down) */
+        --y: 28%;
+        /* CHANGE THIS to tilt the panel (positive = clockwise, negative = counter) */
+        --rot: ;
+        /* CHANGE THIS to scale the whole card (1 = natural size) */
+        --s: ;
+        /* CHANGE THIS to corner roundness */
+        --r: 20px;
+        z-index: ;
+      }
+      .pgx-r1 {
+        /* CHANGE THIS to make the panel wider/narrower (percentage of stage width) */
+        --w: 30%;
+        /* CHANGE THIS to move it left/right (negative = left, positive = right) */
+        --x: 30%;
+        /* CHANGE THIS to move it up/down (negative = up, positive = down) */
+        --y: 9%;
+        /* CHANGE THIS to tilt the panel (positive = clockwise, negative = counter) */
+        --rot: 1.7deg;
+        /* CHANGE THIS to scale the whole card (1 = natural size) */
+        --s: ;
+        /* CHANGE THIS to corner roundness */
+        --r: ;
+        z-index: ;
+      }
+      .pgx-r2 {
+        /* CHANGE THIS to make the panel wider/narrower (percentage of stage width) */
+        --w: 28%;
+        /* CHANGE THIS to move it left/right (negative = left, positive = right) */
+        --x: 31%;
+        /* CHANGE THIS to move it up/down (negative = up, positive = down) */
+        --y: 65%;
+        /* CHANGE THIS to tilt the panel (positive = clockwise, negative = counter) */
+        --rot: -1.4deg;
+        /* CHANGE THIS to scale the whole card (1 = natural size) */
+        --s: ;
+        /* CHANGE THIS to corner roundness */
+        --r: ;
+        z-index: ;
+      }
+      .pgx-r3 {
+        /* CHANGE THIS to make the panel wider/narrower (percentage of stage width) */
+        --w: 30%;
+        /* CHANGE THIS to move it left/right (negative = left, positive = right) */
+        --x: -32%;
+        /* CHANGE THIS to move it up/down (negative = up, positive = down) */
+        --y: 65%;
+        /* CHANGE THIS to tilt the panel (positive = clockwise, negative = counter) */
+        --rot: -3.2deg;
+        /* CHANGE THIS to scale the whole card (1 = natural size) */
+        --s: ;
+        /* CHANGE THIS to corner roundness */
+        --r: ;
+        z-index: ;
+      }
+      .pgx-r4 {
+        /* CHANGE THIS to make the panel wider/narrower (percentage of stage width) */
+        --w: 32%;
+        /* CHANGE THIS to move it left/right (negative = left, positive = right) */
+        --x: -28%;
+        /* CHANGE THIS to move it up/down (negative = up, positive = down) */
+        --y: 7%;
+        /* CHANGE THIS to tilt the panel (positive = clockwise, negative = counter) */
+        --rot: 3.2deg;
+        /* CHANGE THIS to scale the whole card (1 = natural size) */
+        --s: ;
+        /* CHANGE THIS to corner roundness */
+        --r: ;
+        z-index: ;
+      }
       }
 
       /* ----------------------------- DESKTOP --------------------------
@@ -128,11 +285,81 @@ const SWIPE_MAX_DY_PX = 80;
        * opposing left-pair rotations create the editorial side conflict. */
       @media (min-width: 1024px) {
         .pgx-stage { height: clamp(560px, 94vw, 660px); }
-        .pgx-r0 { --w: 52%; --y: 29%; --r: 22px; box-shadow: 0 34px 68px -26px rgba(15, 23, 42, 0.6); }
-        .pgx-r1 { --w: 30%; --x: 30%;   --y: 10%; --s: 0.96; --rot: 1.8deg; }
-        .pgx-r2 { --w: 28%; --x: 32%;   --y: 66%; --s: 0.96; --rot: -1.4deg; }
-        .pgx-r3 { --w: 32%; --x: -32%;  --y: 66%; --s: 0.94; --rot: -3.5deg; }
-        .pgx-r4 { --w: 34%; --x: -28%;  --y: 8%;  --s: 0.96; --rot: 3.5deg; }
+      .pgx-r0 {
+        /* CHANGE THIS to make the panel wider/narrower (percentage of stage width) */
+        --w: 52%;
+        /* CHANGE THIS to move it left/right (negative = left, positive = right) */
+        --x: ;
+        /* CHANGE THIS to move it up/down (negative = up, positive = down) */
+        --y: 29%;
+        /* CHANGE THIS to tilt the panel (positive = clockwise, negative = counter) */
+        --rot: ;
+        /* CHANGE THIS to scale the whole card (1 = natural size) */
+        --s: ;
+        /* CHANGE THIS to corner roundness */
+        --r: 22px;
+        z-index: ;
+      }
+      .pgx-r1 {
+        /* CHANGE THIS to make the panel wider/narrower (percentage of stage width) */
+        --w: 30%;
+        /* CHANGE THIS to move it left/right (negative = left, positive = right) */
+        --x: 30%;
+        /* CHANGE THIS to move it up/down (negative = up, positive = down) */
+        --y: 10%;
+        /* CHANGE THIS to tilt the panel (positive = clockwise, negative = counter) */
+        --rot: 1.8deg;
+        /* CHANGE THIS to scale the whole card (1 = natural size) */
+        --s: 0.96;
+        /* CHANGE THIS to corner roundness */
+        --r: ;
+        z-index: ;
+      }
+      .pgx-r2 {
+        /* CHANGE THIS to make the panel wider/narrower (percentage of stage width) */
+        --w: 28%;
+        /* CHANGE THIS to move it left/right (negative = left, positive = right) */
+        --x: 32%;
+        /* CHANGE THIS to move it up/down (negative = up, positive = down) */
+        --y: 66%;
+        /* CHANGE THIS to tilt the panel (positive = clockwise, negative = counter) */
+        --rot: -1.4deg;
+        /* CHANGE THIS to scale the whole card (1 = natural size) */
+        --s: 0.96;
+        /* CHANGE THIS to corner roundness */
+        --r: ;
+        z-index: ;
+      }
+      .pgx-r3 {
+        /* CHANGE THIS to make the panel wider/narrower (percentage of stage width) */
+        --w: 32%;
+        /* CHANGE THIS to move it left/right (negative = left, positive = right) */
+        --x: -32%;
+        /* CHANGE THIS to move it up/down (negative = up, positive = down) */
+        --y: 66%;
+        /* CHANGE THIS to tilt the panel (positive = clockwise, negative = counter) */
+        --rot: -3.5deg;
+        /* CHANGE THIS to scale the whole card (1 = natural size) */
+        --s: 0.94;
+        /* CHANGE THIS to corner roundness */
+        --r: ;
+        z-index: ;
+      }
+      .pgx-r4 {
+        /* CHANGE THIS to make the panel wider/narrower (percentage of stage width) */
+        --w: 34%;
+        /* CHANGE THIS to move it left/right (negative = left, positive = right) */
+        --x: -28%;
+        /* CHANGE THIS to move it up/down (negative = up, positive = down) */
+        --y: 8%;
+        /* CHANGE THIS to tilt the panel (positive = clockwise, negative = counter) */
+        --rot: 3.5deg;
+        /* CHANGE THIS to scale the whole card (1 = natural size) */
+        --s: 0.96;
+        /* CHANGE THIS to corner roundness */
+        --r: ;
+        z-index: ;
+      }
       }
 
       /* Hover (fine pointers only): subtle lift / reveal, never aggressive.
@@ -254,6 +481,92 @@ const SWIPE_MAX_DY_PX = 80;
 
       @media (prefers-reduced-motion: reduce) {
         .pgx-layer { transition-duration: 1ms; }
+      }
+
+      /* ==============================================================
+       * MY CUSTOM OVERRIDES - change here to see immediate changes
+       * --------------------------------------------------------------
+       * Edit --w / --x / --y / --rot (and optionally --s / --r /
+       * --lift) below. This block is the LAST declaration of these
+       * selectors, so it wins over the mobile/tablet/desktop blocks
+       * above on EVERY screen size (same specificity => source order
+       * decides). Values below are the current live desktop values,
+       * so the gallery looks identical until you change something.
+       * ============================================================== */
+      .pgx-r0 {
+        /* CHANGE THIS to make the panel wider/narrower (percentage of stage width) */
+        --w: 52%;
+        /* CHANGE THIS to move it left/right (negative = left, positive = right) */
+        --x: 0%;
+        /* CHANGE THIS to move it up/down (negative = up, positive = down) */
+        --y: 29%;
+        /* CHANGE THIS to tilt the panel (positive = clockwise, negative = counter) */
+        --rot: 0deg;
+        /* CHANGE THIS to scale the whole card (1 = natural size) */
+        --s: 1;
+        /* CHANGE THIS to corner roundness */
+        --r: 22px;
+        z-index: ;
+      }
+      .pgx-r1 {
+        /* CHANGE THIS to make the panel wider/narrower (percentage of stage width) */
+        --w: 48%;
+        /* CHANGE THIS to move it left/right (negative = left, positive = right) */
+        --x: 20%;
+        /* CHANGE THIS to move it up/down (negative = up, positive = down) */
+        --y: 10%;
+        /* CHANGE THIS to tilt the panel (positive = clockwise, negative = counter) */
+        --rot: 1.8deg;
+        /* CHANGE THIS to scale the whole card (1 = natural size) */
+        --s: 0.96;
+        /* CHANGE THIS to corner roundness */
+        --r: 14px;
+        z-index: ;
+      }
+      .pgx-r2 {
+        /* CHANGE THIS to make the panel wider/narrower (percentage of stage width) */
+        --w: 48%;
+        /* CHANGE THIS to move it left/right (negative = left, positive = right) */
+        --x: 26%;
+        /* CHANGE THIS to move it up/down (negative = up, positive = down) */
+        --y: 60%;
+        /* CHANGE THIS to tilt the panel (positive = clockwise, negative = counter) */
+        --rot: -1.4deg;
+        /* CHANGE THIS to scale the whole card (1 = natural size) */
+        --s: 0.96;
+        /* CHANGE THIS to corner roundness */
+        --r: 14px;
+        z-index: ;
+      }
+      .pgx-r3 {
+        /* CHANGE THIS to make the panel wider/narrower (percentage of stage width) */
+        --w: 50%;
+        /* CHANGE THIS to move it left/right (negative = left, positive = right) */
+        --x: -32%;
+        /* CHANGE THIS to move it up/down (negative = up, positive = down) */
+        --y: 54%;
+        /* CHANGE THIS to tilt the panel (positive = clockwise, negative = counter) */
+        --rot: -3.5deg;
+        /* CHANGE THIS to scale the whole card (1 = natural size) */
+        --s: 0.94;
+        /* CHANGE THIS to corner roundness */
+        --r: 14px;
+        z-index: ;
+      }
+      .pgx-r4 {
+        /* CHANGE THIS to make the panel wider/narrower (percentage of stage width) */
+        --w: 55%;
+        /* CHANGE THIS to move it left/right (negative = left, positive = right) */
+        --x: -28%;
+        /* CHANGE THIS to move it up/down (negative = up, positive = down) */
+        --y: 14%;
+        /* CHANGE THIS to tilt the panel (positive = clockwise, negative = counter) */
+        --rot: 3.5deg;
+        /* CHANGE THIS to scale the whole card (1 = natural size) */
+        --s: 0.96;
+        /* CHANGE THIS to corner roundness */
+        --r: 14px;
+        z-index: ;
       }
     `,
   ],
