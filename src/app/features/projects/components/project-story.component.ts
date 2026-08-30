@@ -189,6 +189,7 @@ const pad2 = (n: number): string => String(n).padStart(2, '0');
               <app-project-gallery
                 [images]="gallery()"
                 [altText]="project().title"
+                [cover]="project().media?.cover || ''"
               />
               <p class="relative z-20 mt-5 inline-block rounded-lg border border-slate-900/5 bg-white/70 px-2.5 py-1.5 text-xs font-semibold uppercase tracking-[0.16em] text-gray-500 backdrop-blur-[5px]">
                 {{ 'project_gallery' | translate }}

@@ -3,32 +3,40 @@ import {
   Component,
   DestroyRef,
   computed,
+  effect,
   inject,
   input,
   signal,
 } from '@angular/core';
 import { DOCUMENT, NgOptimizedImage } from '@angular/common';
 
-/** Autoplay interval between automatic stack rotations (single scheduler). */
 const GALLERY_AUTOPLAY_MS = 3000;
-/** Grace period after a manual interaction before autoplay resumes. */
 const INTERACTION_RESUME_MS = 3000;
-/** Horizontal distance (px) required for a swipe to register. */
 const SWIPE_THRESHOLD_PX = 42;
-/** Max vertical travel (px) still treated as a horizontal swipe. */
 const SWIPE_MAX_DY_PX = 80;
+const SLOT_TRANSITION_MS = 700;
 
-/**
- * Stacked / offset editorial project gallery.
- *
- * The stack is a logical circular ordering: the source image array is never
- * mutated. Each image's distance from the active index (its "rank") drives a
- * deterministic CSS position/rotation/scale, so when the active index changes
- * every layer physically animates from its old slot into its new one.
- *
- * Rank map (desktop): 0 = principal (center, full size), 1..3 = supporting
- * layers behind, >= 4 = hidden entry slot (images slide in from there).
- */
+const SLOT_DEFS = [
+  { id: 'center', cssClass: 'pgx-r0' },
+  { id: 'topRight', cssClass: 'pgx-r1' },
+  { id: 'bottomRight', cssClass: 'pgx-r2' },
+  { id: 'bottomLeft', cssClass: 'pgx-r3' },
+  { id: 'topLeft', cssClass: 'pgx-r4' },
+] as const;
+
+type SlotId = (typeof SLOT_DEFS[number])['id'];
+type SlotIndex = 0 | 1 | 2 | 3 | 4;
+
+interface SlotDisplay {
+  id: SlotId;
+  cssClass: string;
+  currentSrc: string;
+  nextSrc: string;
+  alt: string;
+  index: SlotIndex;
+  isCenter: boolean;
+  showNext: boolean;
+}
 
 @Component({
   selector: 'app-project-gallery',
@@ -114,6 +122,23 @@ const SWIPE_MAX_DY_PX = 80;
 
       .pgx-layer:not(.pgx-r0) img { filter: brightness(0.95) saturate(0.96); }
 
+      /* Crossfade: stable slot content swap (never moves the slot itself). */
+      .pgx-img-stack {
+        position: absolute;
+        inset: 0;
+        overflow: hidden;
+      }
+
+      .pgx-img {
+        transition: opacity 700ms ease;
+        will-change: opacity;
+      }
+
+      .pgx-img-hidden {
+        opacity: 0;
+        pointer-events: none;
+      }
+
       /* ------------------------- MOBILE (default) ---------------------
        * Corner geometry, z-order: BOTTOM pair (34) > CENTER (30) > TOP
        * pair (26). Bottom corners cover the center slightly (~11% of its
@@ -121,7 +146,7 @@ const SWIPE_MAX_DY_PX = 80;
        * sizes differ. No horizontal escape. */
       .pgx-r0 {
         /* CHANGE THIS to make the panel wider/narrower (percentage of stage width) */
-        --w: 72%;
+        --w: 82%;
         /* CHANGE THIS to move it left/right (negative = left, positive = right) */
         --x: 0%;
         /* CHANGE THIS to move it up/down (negative = up, positive = down) */
@@ -136,11 +161,11 @@ const SWIPE_MAX_DY_PX = 80;
       }
       .pgx-r1 {
         /* CHANGE THIS to make the panel wider/narrower (percentage of stage width) */
-        --w: 32%;
+        --w: 62%;
         /* CHANGE THIS to move it left/right (negative = left, positive = right) */
         --x: 28%;
         /* CHANGE THIS to move it up/down (negative = up, positive = down) */
-        --y: 11%;
+        --y: 21%;
         /* CHANGE THIS to tilt the panel (positive = clockwise, negative = counter) */
         --rot: 1.8deg;
         /* CHANGE THIS to scale the whole card (1 = natural size) */
@@ -151,11 +176,11 @@ const SWIPE_MAX_DY_PX = 80;
       }
       .pgx-r2 {
         /* CHANGE THIS to make the panel wider/narrower (percentage of stage width) */
-        --w: 28%;
+        --w: 48%;
         /* CHANGE THIS to move it left/right (negative = left, positive = right) */
         --x: 28%;
         /* CHANGE THIS to move it up/down (negative = up, positive = down) */
-        --y: 62.5%;
+        --y: 72.5%;
         /* CHANGE THIS to tilt the panel (positive = clockwise, negative = counter) */
         --rot: -1.4deg;
         /* CHANGE THIS to scale the whole card (1 = natural size) */
@@ -166,11 +191,11 @@ const SWIPE_MAX_DY_PX = 80;
       }
       .pgx-r3 {
         /* CHANGE THIS to make the panel wider/narrower (percentage of stage width) */
-        --w: 30%;
+        --w: 50%;
         /* CHANGE THIS to move it left/right (negative = left, positive = right) */
         --x: -28%;
         /* CHANGE THIS to move it up/down (negative = up, positive = down) */
-        --y: 62%;
+        --y: 72%;
         /* CHANGE THIS to tilt the panel (positive = clockwise, negative = counter) */
         --rot: -3deg;
         /* CHANGE THIS to scale the whole card (1 = natural size) */
@@ -185,7 +210,7 @@ const SWIPE_MAX_DY_PX = 80;
         /* CHANGE THIS to move it left/right (negative = left, positive = right) */
         --x: -29%;
         /* CHANGE THIS to move it up/down (negative = up, positive = down) */
-        --y: 8%;
+        --y: 18%;
         /* CHANGE THIS to tilt the panel (positive = clockwise, negative = counter) */
         --rot: 3deg;
         /* CHANGE THIS to scale the whole card (1 = natural size) */
@@ -194,7 +219,6 @@ const SWIPE_MAX_DY_PX = 80;
         --r: 14px;
         z-index: 26;
       }
-      .pgx-rh { --w: 40%; --x: 0%;    --y: 30%;  --s: 0.8;  --r: 14px; --rot: 0.6deg;  z-index: 20; opacity: 0; pointer-events: none; }
 
       /* ------------------------------ TABLET --------------------------
        * Same relationships, compressed: bottom corners still overlap the
@@ -387,7 +411,7 @@ const SWIPE_MAX_DY_PX = 80;
         .pgx-r0:hover { --lift: -2px; }
       }
 
-.pgx-controls {
+      .pgx-controls {
         margin-top: 0.9rem;
         display: flex;
         align-items: center;
@@ -481,6 +505,7 @@ const SWIPE_MAX_DY_PX = 80;
 
       @media (prefers-reduced-motion: reduce) {
         .pgx-layer { transition-duration: 1ms; }
+        .pgx-img { transition-duration: 1ms; }
       }
 
       /* ==============================================================
@@ -582,96 +607,89 @@ const SWIPE_MAX_DY_PX = 80;
         (pointerdown)="onPointerDown($event)"
         (pointerup)="onPointerUp($event)"
       >
-        @for (src of validImages(); track src; let i = $index) {
-          @if (!hasFailed(src)) {
-            <button
-              type="button"
-              [class]="'pgx-layer ' + layerClass(i)"
-              (click)="onLayerClick(i)"
-              [attr.aria-label]="altFor(i)"
-              [attr.aria-current]="i === activeIndex() ? 'true' : null"
-            >
+        @for (slot of displaySlots(); track slot.id) {
+          <button
+            type="button"
+            [class]="'pgx-layer ' + slot.cssClass"
+            (click)="onLayerClick(slot.index)"
+            [attr.aria-label]="slot.alt"
+            [attr.aria-current]="slot.isCenter ? 'true' : null"
+          >
+            <span class="pgx-img-stack">
               <img
-                [ngSrc]="src"
+                [ngSrc]="slot.currentSrc"
                 width="1280"
                 height="960"
-                [alt]="altFor(i)"
-                [loading]="i === activeIndex() ? 'eager' : 'lazy'"
-                [attr.fetchpriority]="i === activeIndex() ? 'high' : null"
-                (error)="onImgError(src)"
+                class="pgx-img pgx-img-a"
+                [class.pgx-img-hidden]="slot.showNext"
+                [alt]="slot.alt"
+                [loading]="slot.isCenter ? 'eager' : 'lazy'"
+                [attr.fetchpriority]="slot.isCenter ? 'high' : null"
+                (error)="onImgError(slot.currentSrc)"
               />
-            </button>
-          }
+              <img
+                [src]="slot.nextSrc"
+                width="1280"
+                height="960"
+                class="pgx-img pgx-img-b"
+                [class.pgx-img-hidden]="!slot.showNext"
+                [alt]="slot.alt"
+                loading="lazy"
+                aria-hidden="true"
+                (error)="onImgError(slot.nextSrc)"
+              />
+            </span>
+          </button>
         }
       </div>
 
-      <div class="pgx-controls">
-        <button
-          type="button"
-          class="pgx-btn pgx-btn--prev"
-          (click)="previous()"
-          aria-label="Previous image"
-          [disabled]="validImages().length < 2"
-        >
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
-               stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-            <path d="M15 19l-7-7 7-7" />
-          </svg>
-        </button>
+      @if (displaySlots().length >= 2) {
+        <div class="pgx-controls">
+          <button
+            type="button"
+            class="pgx-btn pgx-btn--prev"
+            (click)="previous()"
+            aria-label="Previous image"
+            [disabled]="displaySlots().length < 2"
+          >
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+                 stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+              <path d="M15 19l-7-7 7-7" />
+            </svg>
+          </button>
 
-        <p class="pgx-counter" aria-live="polite">
-          {{ counter().current }} / {{ counter().total }}
-        </p>
+          <p class="pgx-counter" aria-live="polite">
+            {{ counter().current }} / {{ counter().total }}
+          </p>
 
-        <button
-          type="button"
-          class="pgx-btn pgx-btn--next"
-          (click)="next()"
-          aria-label="Next image"
-          [disabled]="validImages().length < 2"
-        >
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
-               stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-            <path d="M9 5l7 7-7 7" />
-          </svg>
-        </button>
-      </div>
+          <button
+            type="button"
+            class="pgx-btn pgx-btn--next"
+            (click)="next()"
+            aria-label="Next image"
+            [disabled]="displaySlots().length < 2"
+          >
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+                 stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+              <path d="M9 5l7 7-7 7" />
+            </svg>
+          </button>
+        </div>
+      }
     </div>
   `,
 })
 export class ProjectGalleryComponent {
   readonly images = input<string[]>([]);
   readonly altText = input<string>('');
+  readonly cover = input<string>('');
 
   private readonly document = inject(DOCUMENT);
   private readonly destroyRef = inject(DestroyRef);
 
-  /** Index (into the original, immutable array) of the principal image. */
-  readonly activeIndex = signal(0);
+  readonly offset = signal(0);
 
-  /**
-   * Sources whose <img> failed to load. Failed images are removed from the
-   * stack gracefully (no broken-image icon); the remaining layers keep the
-   * composition functional. Immutable updates keep OnPush change detection
-   * correct.
-   */
   private readonly failedImages = signal<ReadonlySet<string>>(new Set<string>());
-
-  /** True once the given source has failed to load (hidden from the stack). */
-  protected hasFailed(src: string): boolean {
-    return this.failedImages().has(src);
-  }
-
-  /** Sources that are actually loadable. The stack is built ONLY from these,
-   *  so a broken image frees its slot and the next valid image fills it —
-   *  the gallery renders one card per valid image (up to 5 slots). */
-  protected readonly validImages = computed(() =>
-    this.images().filter(src => !this.failedImages().has(src)),
-  );
-
-  private timer: ReturnType<typeof setTimeout> | null = null;
-  private swipeStart: { x: number; y: number; t: number } | null = null;
-  private lastSwipeAt = 0;
 
   private readonly reduceMotion: boolean =
     typeof matchMedia !== 'undefined' &&
@@ -681,39 +699,82 @@ export class ProjectGalleryComponent {
     typeof matchMedia !== 'undefined' &&
     matchMedia('(hover: hover) and (pointer: fine)').matches;
 
+  private timer: ReturnType<typeof setTimeout> | null = null;
+  private transitionTimer: ReturnType<typeof setTimeout> | null = null;
+  private swipeStart: { x: number; y: number; t: number } | null = null;
+  private lastSwipeAt = 0;
+
+  private readonly displayedSrcs = signal<string[]>([]);
+
   constructor() {
     this.scheduleAutoplay(GALLERY_AUTOPLAY_MS);
     this.destroyRef.onDestroy(() => this.clearTimer());
+
+    effect(() => {
+      const slots = this.displaySlots();
+      const hasTransition = slots.some(s => s.showNext);
+      if (hasTransition && slots.length > 0) {
+        if (this.transitionTimer) clearTimeout(this.transitionTimer);
+        this.transitionTimer = setTimeout(() => {
+          this.displayedSrcs.set(slots.map(s => s.showNext ? s.nextSrc : s.currentSrc));
+          this.transitionTimer = null;
+        }, SLOT_TRANSITION_MS);
+      }
+    });
   }
 
-  /** Compact 01 / 05 counter. */
+  readonly galleryImages = computed(() => {
+    const raw = this.images();
+    const cover = this.cover();
+    const all = [cover, ...raw].filter((src): src is string => !!src && src.trim() !== '');
+    const seen = new Set<string>();
+    const unique: string[] = [];
+    for (const src of all) {
+      if (!seen.has(src)) {
+        seen.add(src);
+        unique.push(src);
+      }
+    }
+    return unique.filter(src => !this.failedImages().has(src));
+  });
+
+  readonly displaySlots = computed<SlotDisplay[]>(() => {
+    const images = this.galleryImages();
+    const n = images.length;
+    if (n === 0) return [];
+
+    const off = ((this.offset() % n) + n) % n;
+    const count = Math.min(5, n);
+    const displayed = this.displayedSrcs();
+
+    return Array.from({ length: count }, (_, i) => {
+      const src = images[(off + i) % n];
+      const displayedSrc = i < displayed.length ? displayed[i] : src;
+      const showNext = displayed.length > 0 && displayedSrc !== src;
+
+      return {
+        id: SLOT_DEFS[i].id as SlotId,
+        cssClass: SLOT_DEFS[i].cssClass,
+        currentSrc: showNext ? displayedSrc : src,
+        nextSrc: showNext ? src : displayedSrc,
+        alt: `${this.altText()} ${((off + i) % n) + 1}`,
+        index: i as SlotIndex,
+        isCenter: i === 0,
+        showNext,
+      };
+    });
+  });
+
   readonly counter = computed(() => {
-    const total = String(this.validImages().length).padStart(2, '0');
-    const current = String(this.activeIndex() + 1).padStart(2, '0');
+    const images = this.galleryImages();
+    const n = images.length;
+    if (n === 0) return { current: '00', total: '00' };
+    const currentIdx = ((this.offset() % n) + n) % n;
+    const current = String(currentIdx + 1).padStart(2, '0');
+    const total = String(n).padStart(2, '0');
     return { current, total };
   });
 
-  /** Circular distance from the principal image (0 = principal). */
-  rankOf(i: number): number {
-    const n = this.validImages().length || 1;
-    return (i - this.activeIndex() + n) % n;
-  }
-
-  /** Deterministic slot class for a layer at rank r.
-   *  Corner composition: 0 = CENTER, 1 = TOP-RIGHT, 2 = BOTTOM-RIGHT,
-   *  3 = BOTTOM-LEFT, 4 = TOP-LEFT, >= 5 = hidden entry slot. */
-  layerClass(i: number): string {
-    const r = this.rankOf(i);
-    if (r === 0) return 'pgx-r0';
-    if (r >= 1 && r <= 4) return `pgx-r${r}`;
-    return 'pgx-rh';
-  }
-
-  altFor(i: number): string {
-    return this.validImages().length ? `${this.altText()} ${i + 1}` : '';
-  }
-
-  /** Gracefully drop a broken image from the stack (no broken-image icon). */
   onImgError(src: string): void {
     this.failedImages.update(prev => {
       if (prev.has(src)) return prev;
@@ -731,19 +792,23 @@ export class ProjectGalleryComponent {
     this.step(-1);
   }
 
-  /** Clicking any image promotes it to principal and resets the countdown. */
-  onLayerClick(i: number): void {
-    // Ignore the synthetic click that follows a swipe gesture.
+  onLayerClick(slotIndex: SlotIndex): void {
+    const images = this.galleryImages();
+    const n = images.length;
+    if (n < 2) return;
     if (Date.now() - this.lastSwipeAt < 350) return;
-    if (i === this.activeIndex()) {
+
+    if (slotIndex === 0) {
       this.scheduleAutoplay(INTERACTION_RESUME_MS);
       return;
     }
-    this.activeIndex.set(i);
+
+    const currentOffset = ((this.offset() % n) + n) % n;
+    const newOffset = (currentOffset + slotIndex) % n;
+    this.offset.set(newOffset);
     this.scheduleAutoplay(INTERACTION_RESUME_MS);
   }
 
-  /** Desktop only: hovering the stage pauses the whole scheduler. */
   onStagePointerEnter(): void {
     if (this.hoverCapable && !this.reduceMotion) this.clearTimer();
   }
@@ -761,7 +826,7 @@ export class ProjectGalleryComponent {
   onPointerUp(ev: PointerEvent): void {
     const start = this.swipeStart;
     this.swipeStart = null;
-    if (!start || this.validImages().length < 2) return;
+    if (!start || this.galleryImages().length < 2) return;
     if (Date.now() - start.t > 800) return;
 
     const dx = ev.clientX - start.x;
@@ -774,23 +839,20 @@ export class ProjectGalleryComponent {
     this.step(forward ? 1 : -1);
   }
 
-  // -------------------------------------------------------------------
-  //  Single autoplay scheduler (one chained timeout, always cleaned up)
-  // -------------------------------------------------------------------
-
   private step(dir: 1 | -1): void {
-    const n = this.validImages().length;
+    const n = this.galleryImages().length;
     if (n < 2) return;
-    this.activeIndex.update(v => (v + dir + n) % n);
+    this.offset.update(v => (v + dir + n) % n);
     this.scheduleAutoplay(INTERACTION_RESUME_MS);
   }
 
   private scheduleAutoplay(ms: number): void {
     this.clearTimer();
-    if (this.reduceMotion || this.validImages().length < 2) return;
+    const images = this.galleryImages();
+    if (this.reduceMotion || images.length < 2) return;
     this.timer = setTimeout(() => {
       this.timer = null;
-      this.activeIndex.update(v => (v + 1) % (this.validImages().length || 1));
+      this.offset.update(v => (v + 1) % (this.galleryImages().length || 1));
       this.scheduleAutoplay(GALLERY_AUTOPLAY_MS);
     }, ms);
   }
@@ -799,6 +861,10 @@ export class ProjectGalleryComponent {
     if (this.timer !== null) {
       clearTimeout(this.timer);
       this.timer = null;
+    }
+    if (this.transitionTimer !== null) {
+      clearTimeout(this.transitionTimer);
+      this.transitionTimer = null;
     }
   }
 }
