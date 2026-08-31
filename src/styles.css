@@ -52,7 +52,10 @@ html {
   /* Responsive geometric tuning (rem units, clamped per breakpoint). */
   --values-r: clamp(9.4rem, 23.5vw, 12.6rem);   /* orbit radius (card center on path) */
   --values-card-size: clamp(10.5rem, 15vw, 11.25rem); /* circular card size */
-  --values-center: clamp(7rem, 10.8vw, 7.9rem);   /* center circle size */
+  /* Center circle sized as the clear focal point: larger than every orbit card
+     while its radius stays under the nearest card inner edge (r - card/2) so
+     the six cards are never overlapped at any breakpoint. */
+  --values-center: clamp(11rem, 19vw, 13.5rem);   /* center circle size */
   position: relative;
   padding: 2.5rem 0 3rem;
   /* Continuous-surface rhythm: white flows into a whisper-light blue-gray so
@@ -129,29 +132,91 @@ html {
     gap: 0.3rem;
   }
 
-  .values-center-core i {
-    font-size: 1.35rem;
-    color: #1e3a8a;
+  /* Dynamic content block: re-created on every active-value change, so this
+     enter animation gives the premium fade/scale transition. The circle itself
+     is never removed — only this inner content swaps. */
+  .values-center-content {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 0.35rem;
+    animation: values-center-content-in 0.55s cubic-bezier(0.22, 1, 0.36, 1) both;
+  }
+
+  .values-center-icon {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 3rem;
+    height: 3rem;
+    border-radius: 9999px;
+    background: linear-gradient(135deg, #1e3a8a 0%, #3b5bdb 100%);
+    color: #ffffff;
+    box-shadow: 0 8px 20px rgba(30, 58, 138, 0.32);
+  }
+
+  .values-center-icon i {
+    font-size: 1.5rem;
+    line-height: 1;
   }
 
   .values-center-title {
-    font-size: 0.95rem;
+    font-size: clamp(0.95rem, 1.4vw, 1.15rem);
     font-weight: 800;
-    letter-spacing: 0.03em;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
     color: #1e3a8a;
     margin: 0;
-    line-height: 1.1;
+    line-height: 1.15;
+    max-width: calc(var(--values-center) * 0.74);
+    padding-inline: 0.25rem;
   }
 
-  .values-center-subtitle {
-    font-size: 0.68rem;
-    line-height: 1.35;
-    color: rgba(30, 58, 138, 0.78);
-    display: block;
-    /* Contained inside the disc: constrained measure + inline padding so the
-       supporting phrase never reaches the circular boundary. */
-    max-width: calc(var(--values-center) * 0.78);
-    padding-inline: 0.25rem;
+  .values-center-desc {
+    font-size: clamp(0.72rem, 1vw, 0.8rem);
+    line-height: 1.45;
+    color: rgba(30, 58, 138, 0.82);
+    margin: 0;
+    /* Contained inside the disc: constrained measure so the description never
+       reaches the circular boundary, whatever the language line count. */
+    max-width: calc(var(--values-center) * 0.72);
+    padding-inline: 0.35rem;
+  }
+
+  /* Pagination dots synchronized with the front orbit value. */
+  .values-center-dots {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.5rem;
+    margin-top: 0.55rem;
+  }
+
+  .values-center-dot {
+    appearance: none;
+    width: 0.55rem;
+    height: 0.55rem;
+    padding: 0;
+    border: 0;
+    border-radius: 9999px;
+    background: rgba(30, 58, 138, 0.22);
+    cursor: pointer;
+    transition: background-color 0.3s ease-out, transform 0.3s ease-out;
+  }
+
+  .values-center-dot:hover {
+    background: rgba(30, 58, 138, 0.45);
+  }
+
+  .values-center-dot:focus-visible {
+    outline: 2px solid rgba(30, 58, 138, 0.6);
+    outline-offset: 3px;
+  }
+
+  .values-center-dot.active {
+    background: #1e3a8a;
+    transform: scale(1.35);
   }
 
   .values-slot {
@@ -188,6 +253,17 @@ html {
   to {
     opacity: 1;
     transform: translate(-50%, -50%) scale(1);
+  }
+}
+
+@keyframes values-center-content-in {
+  from {
+    opacity: 0;
+    transform: translateY(8px) scale(0.96);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
   }
 }
 
@@ -317,9 +393,15 @@ html {
 /* ---- Reduced motion --------------------------------------------- */
 @media (prefers-reduced-motion: reduce) {
   .values-slot,
-  .values-center {
+  .values-center,
+  .values-center-content,
+  .values-center-dot {
     animation: none;
     transition: none;
+  }
+  .values-center-content {
+    opacity: 1;
+    transform: none;
   }
   .values-slot {
     opacity: 1;

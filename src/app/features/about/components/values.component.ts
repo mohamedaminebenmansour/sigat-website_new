@@ -1,6 +1,7 @@
 import {
   Component,
   signal,
+  computed,
   AfterViewInit,
   OnDestroy,
   ViewChild,
@@ -48,13 +49,8 @@ const REVEAL_STAGGER_MS = 140;
         display: block;
       }
 
-      /* The center disc (>=768px) holds only the descriptive sentence after the
-         duplicated title was removed. Slightly larger type rebalances the disc
-         so it reads as a confident anchor without needing to resize the circle.
-         Component-scoped, so it wins over the global rule for this element. */
-      .values-center-subtitle {
-        font-size: 0.75rem;
-      }
+      /* The center disc (>=768px) now presents the focused orbit value
+         dynamically; the old static subtitle rule is no longer needed. */
 
       /* The center disc already carries this sentence on >=768px, so the header
          subtitle is hidden there and restored on mobile (project "md" breakpoint
@@ -96,11 +92,35 @@ const REVEAL_STAGGER_MS = 140;
           <div class="values-ring-outer" aria-hidden="true"></div>
           <div class="values-ring-inner" aria-hidden="true"></div>
 
-          <!-- Center -->
-          <div class="values-center" aria-hidden="true">
+          <!-- Center: large dynamic display of the currently focused value.
+               The circular container stays mounted; only its content swaps. -->
+          <div class="values-center">
             <div class="values-center-core">
-              <i class="fa-solid fa-helmet-safety" aria-hidden="true"></i>
-              <span class="values-center-subtitle">{{ 'values_center_subtitle' | translate }}</span>
+              @for (v of [activeCenterValue()]; track v.id) {
+                <div class="values-center-content">
+                  <span class="values-center-icon" aria-hidden="true">
+                    <i [class]="v.icon"></i>
+                  </span>
+                  <h3 class="values-center-title">{{ v.titleKey | translate }}</h3>
+                  <p class="values-center-desc">{{ v.descriptionKey | translate }}</p>
+                </div>
+              }
+              <div
+                class="values-center-dots"
+                role="group"
+                [attr.aria-label]="'values_title' | translate"
+              >
+                @for (value of values; track value.id) {
+                  <button
+                    type="button"
+                    class="values-center-dot"
+                    [class.active]="isFront(value)"
+                    [attr.aria-current]="isFront(value) ? 'true' : null"
+                    [attr.aria-label]="value.titleKey | translate"
+                    (click)="selectValue(value)"
+                  ></button>
+                }
+              </div>
             </div>
           </div>
 
@@ -150,6 +170,15 @@ export class ValuesComponent implements AfterViewInit, OnDestroy {
 
   /** Visual orbit rotation step (advanced by the single timer). */
   readonly activeOffset = signal(0);
+
+  /**
+   * The value currently occupying the front slot — the single source of truth
+   * for the center display. Read-only: it only reads `activeOffset` through
+   * the existing `slotIndex()` mapping (never writes to signals).
+   */
+  readonly activeCenterValue = computed<CompanyValue>(
+    () => this.values.find((v) => this.slotIndex(v) === FRONT_SLOT) ?? this.values[0]
+  );
 
   /** True while the user interacts with the orbit (hover / focus). */
   readonly isPaused = signal(false);
@@ -246,6 +275,21 @@ export class ValuesComponent implements AfterViewInit, OnDestroy {
    * Mobile disclosure: open the tapped value, or close it if already open.
    * Only one value can be expanded at a time.
    */
+  /**
+   * Pagination navigation: rotate the orbit so `value` reaches the front slot.
+   * Only `activeOffset` changes — the data array is never reordered — and the
+   * dwell timer restarts so autoplay stays consistent after the interaction.
+   */
+  selectValue(value: CompanyValue): void {
+    const index = this.values.indexOf(value);
+    const offset = (FRONT_SLOT - index + SLOT_COUNT) % SLOT_COUNT;
+    if (offset === this.activeOffset()) {
+      return;
+    }
+    this.activeOffset.set(offset);
+    this.scheduleNext();
+  }
+
   toggleMobile(id: string): void {
     this.activeMobileId.update((current) => (current === id ? null : id));
   }
