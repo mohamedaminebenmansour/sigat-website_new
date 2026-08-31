@@ -112,14 +112,17 @@ const REVEAL_STAGGER_MS = 140;
                   <path d="M1 1.8 L8 5 L1 8.2" fill="none" stroke="#1e3a8a" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round" />
                 </marker>
               </defs>
-              <!-- Six curved clockwise arcs, one per inter-card gap. -->
-              <path class="values-arrow" d="M110.45 0.55 A100 100 0 0 1 150 13.4" marker-end="url(#values-arrowhead)" />
-              <path class="values-arrow" d="M191.35 59.33 A100 100 0 0 1 200 100" marker-end="url(#values-arrowhead)" />
+              <!-- Six curved clockwise arcs, one per 60° slot section. Each arc
+                   runs on --values-arrow-r (just OUTSIDE the card ring): it
+                   starts ~6px beyond Card A's outer boundary and the arrowhead
+                   lands ~6px before Card B's outer boundary. -->
+              <path class="values-arrow" d="M105.23 0.14 A100 100 0 0 1 183.87 45.54" marker-end="url(#values-arrowhead)" />
+              <path class="values-arrow" d="M189.1 54.6 A100 100 0 0 1 189.1 145.4" marker-end="url(#values-arrowhead)" />
               <!-- Lead arrow: guides the eye into the front (active) slot. -->
-              <path class="values-arrow values-arrow-lead" d="M180.9 158.78 A100 100 0 0 1 150 186.6" marker-end="url(#values-arrowhead)" />
-              <path class="values-arrow" d="M89.55 199.45 A100 100 0 0 1 50 186.6" marker-end="url(#values-arrowhead)" />
-              <path class="values-arrow" d="M8.65 140.67 A100 100 0 0 1 0 100" marker-end="url(#values-arrowhead)" />
-              <path class="values-arrow" d="M19.1 41.22 A100 100 0 0 1 50 13.4" marker-end="url(#values-arrowhead)" />
+              <path class="values-arrow values-arrow-lead" d="M183.87 154.46 A100 100 0 0 1 105.23 199.86" marker-end="url(#values-arrowhead)" />
+              <path class="values-arrow" d="M94.77 199.86 A100 100 0 0 1 16.13 154.46" marker-end="url(#values-arrowhead)" />
+              <path class="values-arrow" d="M10.9 145.4 A100 100 0 0 1 10.9 54.6" marker-end="url(#values-arrowhead)" />
+              <path class="values-arrow" d="M16.13 45.54 A100 100 0 0 1 54.77 0.14" marker-end="url(#values-arrowhead)" />
             </svg>
           </div>
 

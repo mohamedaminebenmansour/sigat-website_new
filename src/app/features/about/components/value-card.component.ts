@@ -30,7 +30,7 @@ import { CompanyValue } from './values.data';
         height: 100%;
         aspect-ratio: 1 / 1;
         box-sizing: border-box;
-        padding: 0.85rem 1.05rem;
+        padding: 0.7rem 0.8rem;
         border-radius: 9999px;
         overflow: hidden;
         background: linear-gradient(150deg, rgba(255, 255, 255, 0.96) 0%, rgba(226, 232, 240, 0.12) 100%);
@@ -56,10 +56,15 @@ import { CompanyValue } from './values.data';
         align-items: center;
         justify-content: center;
         text-align: center;
-        gap: 0.4rem;
+        gap: 0.35rem;
         width: 100%;
-        max-width: 8.75rem;
+        /* Percentage-based measure so the content capsule always stays inside
+           the circular boundary at any card size. */
+        max-width: 78%;
         margin-inline: auto;
+        /* Long translated words (FR/AR) must wrap, never escape the circle. */
+        overflow-wrap: break-word;
+        hyphens: auto;
       }
 
       .value-card .icon {
@@ -86,7 +91,7 @@ import { CompanyValue } from './values.data';
       }
 
       .value-card h3 {
-        font-size: clamp(0.86rem, 1.3vw, 0.92rem);
+        font-size: clamp(0.78rem, 1.2vw, 0.86rem);
         font-weight: 700;
         letter-spacing: 0.01em;
         line-height: 1.15;
@@ -95,11 +100,12 @@ import { CompanyValue } from './values.data';
       }
 
       .value-card p {
-        font-size: clamp(0.76rem, 1vw, 0.82rem);
-        line-height: 1.34;
+        font-size: clamp(0.66rem, 0.95vw, 0.74rem);
+        line-height: 1.32;
         max-width: 100%;
         margin: 0;
         color: rgba(30, 58, 138, 0.82);
+        overflow-wrap: break-word;
       }
 
       @media (max-width: 767px) {
