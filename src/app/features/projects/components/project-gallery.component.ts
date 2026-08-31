@@ -64,7 +64,7 @@ interface SlotDisplay {
        * ============================================================== */
       :host { display: block; }
 
-      .pgx { position: relative; isolation: isolate; width: 100%; max-width: 680px; margin-inline: auto; }
+      .pgx { position: relative; isolation: isolate; width: 100%; max-width: 680px; margin-inline: auto; overflow: hidden; min-width: 0; }
 
       /* ------------------------------------------------------------------
        * Editorial CORNER composition: CENTER + TOP-LEFT / TOP-RIGHT /
@@ -567,7 +567,7 @@ interface SlotDisplay {
         /* CHANGE THIS to make the panel wider/narrower (percentage of stage width) */
         --w: 50%;
         /* CHANGE THIS to move it left/right (negative = left, positive = right) */
-        --x: -32%;
+        --x: -25%;
         /* CHANGE THIS to move it up/down (negative = up, positive = down) */
         --y: 54%;
         /* CHANGE THIS to tilt the panel (positive = clockwise, negative = counter) */
@@ -582,7 +582,7 @@ interface SlotDisplay {
         /* CHANGE THIS to make the panel wider/narrower (percentage of stage width) */
         --w: 55%;
         /* CHANGE THIS to move it left/right (negative = left, positive = right) */
-        --x: -28%;
+        --x: -22%;
         /* CHANGE THIS to move it up/down (negative = up, positive = down) */
         --y: 14%;
         /* CHANGE THIS to tilt the panel (positive = clockwise, negative = counter) */

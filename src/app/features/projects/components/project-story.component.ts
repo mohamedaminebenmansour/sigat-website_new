@@ -19,9 +19,6 @@ interface StorySection {
   itemKeys?: readonly string[];
 }
 
-/** Number of list items shown while a section is collapsed. */
-const PREVIEW_LIST_ITEMS = 3;
-
 const SECTION_LABEL_KEYS: Record<SectionKey, string> = {
   overview: 'project_overview',
   challenge: 'project_challenge',
@@ -34,14 +31,10 @@ const pad2 = (n: number): string => String(n).padStart(2, '0');
 /**
  * Premium engineering case-study layout.
  *
- * Left column: four disclosure sections (Overview, Challenge, Execution
- * Scope, Equipment). Every section header is a real button; any number of
- * sections can be open at once. Disclosure state is a single immutable
- * signal holding a Set of open section keys.
- *
- * Collapsed sections show an intentionally designed preview (line-clamped
- * paragraph or first list items) - the full content stays in the DOM so it
- * remains crawlable and no text is ever sliced in JS.
+ * Left column: accordion story sections (Overview, Challenge, Execution
+ * Scope, Equipment). Only one section can be open at a time. The first
+ * section is open by default. Disclosure state is a single signal holding
+ * the currently open section key (or null when all are closed).
  *
  * Right column: the stacked editorial gallery (desktop only layout; it
  * stacks below the story on tablet/mobile).
@@ -63,13 +56,14 @@ const pad2 = (n: number): string => String(n).padStart(2, '0');
       }
       @media (prefers-reduced-motion: reduce) {
         .story-item-in { animation: none; }
+        .story-grid { transition: none; }
       }
     `,
   ],
   template: `
     <section class="bg-white py-12 md:py-20">
       <div class="container mx-auto px-4">
-        <div class="grid grid-cols-1 gap-12 lg:grid-cols-[55%_45%] lg:gap-14">
+        <div class="grid grid-cols-1 gap-12 lg:grid-cols-[40%_60%] lg:gap-14">
           <!-- ==================== Story sections ==================== -->
           <div class="min-w-0">
             @for (s of sections(); track s.key; let i = $index) {
@@ -106,48 +100,8 @@ const pad2 = (n: number): string => String(n).padStart(2, '0');
                 </h2>
 
                 <div [id]="panelId(s.key)" role="region" [attr.aria-labelledby]="btnId(s.key)">
-                  <!-- Collapsed preview (folds away when the section opens) -->
                   <div
-                    class="grid transition-[grid-template-rows] duration-500 ease-out"
-                    [style.gridTemplateRows]="isOpen(s.key) ? '0fr' : '1fr'"
-                  >
-                    <div class="min-h-0 overflow-hidden">
-                      <div class="pb-6 pl-11 pr-2 md:pl-11">
-                        @if (isListSection(s.key)) {
-                          <ul class="space-y-2">
-                            @for (key of previewItems(s.key); track key) {
-                              <li class="flex items-start gap-2.5 text-sm text-gray-500">
-                                <span class="mt-2 block h-1 w-1 flex-shrink-0 rounded-full bg-blue-900/50"></span>
-                                <span>{{ key | translate }}</span>
-                              </li>
-                            }
-                          </ul>
-                        } @else {
-                          <p class="line-clamp-2 text-base leading-relaxed text-gray-500">
-                            {{ paragraphFor(s.key) | translate }}
-                          </p>
-                        }
-                        <button
-                          type="button"
-                          (click)="toggle(s.key)"
-                          [attr.aria-expanded]="isOpen(s.key)"
-                          [attr.aria-controls]="panelId(s.key)"
-                          class="mt-3 inline-flex items-center gap-1.5 rounded text-sm font-semibold text-blue-900 transition-colors hover:text-blue-700 focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-900/50"
-                        >
-                          {{ 'project_read_more' | translate }}
-                          <svg viewBox="0 0 24 24" class="h-3.5 w-3.5 rtl:-scale-x-100" fill="none"
-                               stroke="currentColor" stroke-width="2" stroke-linecap="round"
-                               stroke-linejoin="round" aria-hidden="true">
-                            <path d="M9 5l7 7-7 7" />
-                          </svg>
-                        </button>
-                      </div>
-                    </div>
-                  </div>
-
-                  <!-- Expanded content -->
-                  <div
-                    class="grid overflow-hidden transition-[grid-template-rows] duration-500 ease-[cubic-bezier(.22,1,.36,1)]"
+                    class="story-grid grid overflow-hidden transition-[grid-template-rows] duration-500 ease-[cubic-bezier(.22,1,.36,1)]"
                     [style.gridTemplateRows]="isOpen(s.key) ? '1fr' : '0fr'"
                   >
                     <div class="min-h-0">
@@ -205,10 +159,11 @@ export class ProjectStoryComponent {
   readonly project = input.required<Project>();
 
   /**
-   * Single source of truth for disclosure state: the set of open section
-   * keys. Immutable updates keep OnPush change detection predictable.
+   * Single source of truth for accordion state: the currently open section
+   * key, or null when all sections are closed. The first section is open
+   * by default.
    */
-  private readonly expanded = signal<ReadonlySet<SectionKey>>(new Set());
+  private readonly expanded = signal<SectionKey | null>('overview');
 
   /** Sections derived from the project data; optional ones are omitted. */
   readonly sections = computed<StorySection[]>(() => {
@@ -245,20 +200,11 @@ export class ProjectStoryComponent {
   );
 
   isOpen(key: SectionKey): boolean {
-    return this.expanded().has(key);
+    return this.expanded() === key;
   }
 
-  /** Immutable Set update - no mutation of the previous state. */
   toggle(key: SectionKey): void {
-    this.expanded.update(prev => {
-      const next = new Set(prev);
-      if (next.has(key)) {
-        next.delete(key);
-      } else {
-        next.add(key);
-      }
-      return next;
-    });
+    this.expanded.update(prev => (prev === key ? null : key));
   }
 
   paragraphFor(key: SectionKey): string {
@@ -271,10 +217,6 @@ export class ProjectStoryComponent {
 
   itemsFor(key: SectionKey): readonly string[] {
     return this.sections().find(s => s.key === key)?.itemKeys ?? [];
-  }
-
-  previewItems(key: SectionKey): readonly string[] {
-    return this.itemsFor(key).slice(0, PREVIEW_LIST_ITEMS);
   }
 
   protected readonly pad2 = pad2;

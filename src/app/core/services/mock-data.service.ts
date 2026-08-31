@@ -124,7 +124,8 @@ export class MockDataService {
       galleryUrls: [
         'https://images.unsplash.com/photo-1486325212027-8081e485255e?w=800&q=80'
       ],
-      locationGeo: { name: 'Tunis, Tunisie', latitude: 36.8065, longitude: 10.1815 }
+      locationGeo: { name: 'Tunis, Tunisie', latitude: 36.8065, longitude: 10.1815 },
+      isOffice: true
     },
     {
       id: 6,
@@ -287,6 +288,7 @@ export class MockDataService {
   getProjectMapEntries(): ProjectMapEntry[] {
     const entries: ProjectMapEntry[] = [];
     for (const p of this.projects) {
+      if (p.isOffice) continue;
       const g = p.locationGeo;
       if (!g || g.latitude === undefined || g.longitude === undefined) {
         continue;
@@ -302,6 +304,10 @@ export class MockDataService {
       });
     }
     return entries;
+  }
+
+  getOfficeLocation(): Project | undefined {
+    return this.projects.find(p => p.isOffice);
   }
 
   getProjectsByCategory(category: Project['category']): Project[] {

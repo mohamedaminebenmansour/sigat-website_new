@@ -39,6 +39,9 @@ export interface Project {
 
   /** Geographic information for the location/map section. */
   locationGeo?: ProjectGeo;
+
+  /** Marks this entry as the company office rather than a real construction project. */
+  isOffice?: boolean;
 }
 
 export interface ProjectMedia {

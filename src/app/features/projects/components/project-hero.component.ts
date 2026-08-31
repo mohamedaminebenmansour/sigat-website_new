@@ -56,7 +56,7 @@ export interface ProjectHeroData {
       <div class="absolute inset-0 bg-gradient-to-r from-blue-950/50 to-transparent"></div>
 
       <div class="absolute inset-x-0 top-0 z-10">
-        <div class="container mx-auto px-4 pt-10 md:pt-14">
+        <div class="container mx-auto px-4 pt-24 md:pt-28">
           <a
             routerLink="/projects"
             class="inline-flex items-center gap-2 rounded-md text-sm font-medium text-white/85 hover:text-white transition-colors"
