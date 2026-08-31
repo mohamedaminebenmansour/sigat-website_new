@@ -92,6 +92,37 @@ const REVEAL_STAGGER_MS = 140;
           <div class="values-ring-outer" aria-hidden="true"></div>
           <div class="values-ring-inner" aria-hidden="true"></div>
 
+          <!-- Decorative clockwise direction arrows between the fixed orbit
+               slots. Static by design: the arrows belong to the slot geometry,
+               not to the values, so they always stay synchronized with the
+               cards as they step through the orbit. Purely decorative. -->
+          <div class="values-arrow-layer" aria-hidden="true">
+            <svg viewBox="0 0 200 200" focusable="false">
+              <defs>
+                <marker
+                  id="values-arrowhead"
+                  viewBox="0 0 10 10"
+                  refX="5.5"
+                  refY="5"
+                  markerWidth="6"
+                  markerHeight="6"
+                  markerUnits="userSpaceOnUse"
+                  orient="auto"
+                >
+                  <path d="M1 1.8 L8 5 L1 8.2" fill="none" stroke="#1e3a8a" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round" />
+                </marker>
+              </defs>
+              <!-- Six curved clockwise arcs, one per inter-card gap. -->
+              <path class="values-arrow" d="M110.45 0.55 A100 100 0 0 1 150 13.4" marker-end="url(#values-arrowhead)" />
+              <path class="values-arrow" d="M191.35 59.33 A100 100 0 0 1 200 100" marker-end="url(#values-arrowhead)" />
+              <!-- Lead arrow: guides the eye into the front (active) slot. -->
+              <path class="values-arrow values-arrow-lead" d="M180.9 158.78 A100 100 0 0 1 150 186.6" marker-end="url(#values-arrowhead)" />
+              <path class="values-arrow" d="M89.55 199.45 A100 100 0 0 1 50 186.6" marker-end="url(#values-arrowhead)" />
+              <path class="values-arrow" d="M8.65 140.67 A100 100 0 0 1 0 100" marker-end="url(#values-arrowhead)" />
+              <path class="values-arrow" d="M19.1 41.22 A100 100 0 0 1 50 13.4" marker-end="url(#values-arrowhead)" />
+            </svg>
+          </div>
+
           <!-- Center: large dynamic display of the currently focused value.
                The circular container stays mounted; only its content swaps. -->
           <div class="values-center">

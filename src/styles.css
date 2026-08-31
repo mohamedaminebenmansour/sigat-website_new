@@ -98,6 +98,51 @@ html {
     pointer-events: none;
   }
 
+  /* Decorative clockwise direction arrows between the orbit slots.
+     The SVG box is exactly 2 x --values-r, so viewBox user unit 100 sits on
+     the card-center radius: the arrows follow the orbit geometry and scale
+     with it on every breakpoint. Arc portions passing under the opaque card
+     circles are hidden behind them; only the curved tips + arrowheads peek
+     out in the gaps between cards. Painted after the rings and before the
+     center/slots, so it can never cover card or center content. */
+  .values-arrow-layer {
+    position: absolute;
+    left: 50%;
+    top: 50%;
+    width: calc(var(--values-r) * 2);
+    height: calc(var(--values-r) * 2);
+    transform: translate(-50%, -50%);
+    pointer-events: none;
+    animation: values-slot-in 0.55s ease-out both;
+    animation-play-state: paused;
+  }
+
+  .values-orbit.revealed .values-arrow-layer {
+    animation-play-state: running;
+  }
+
+  .values-arrow-layer svg {
+    display: block;
+    width: 100%;
+    height: 100%;
+    overflow: visible;
+  }
+
+  .values-arrow {
+    fill: none;
+    stroke: #1e3a8a;
+    stroke-width: 0.9;
+    stroke-linecap: round;
+    stroke-linejoin: round;
+    opacity: 0.42;
+  }
+
+  /* Slightly stronger directional emphasis on the arrow leading into the
+     fixed front slot (static geometry, so no JS or timers are involved). */
+  .values-arrow-lead {
+    opacity: 0.72;
+  }
+
   /* Central philosophy disc. */
   .values-center {
     position: absolute;
@@ -395,7 +440,8 @@ html {
   .values-slot,
   .values-center,
   .values-center-content,
-  .values-center-dot {
+  .values-center-dot,
+  .values-arrow-layer {
     animation: none;
     transition: none;
   }
