@@ -1,4 +1,4 @@
-import { Component, input } from '@angular/core';
+import { Component, input, output } from '@angular/core';
 import { TranslatePipe } from '@ngx-translate/core';
 import { CompanyValue } from './values.data';
 
@@ -37,6 +37,8 @@ import { CompanyValue } from './values.data';
         border: 1.5px solid rgba(30, 58, 138, 0.22);
         box-shadow: 0 6px 18px rgba(15, 23, 42, 0.14), 0 1px 2px rgba(15, 23, 42, 0.08);
         color: #1e3a8a;
+        font: inherit;
+        cursor: pointer;
         transition: transform 0.35s ease-out, box-shadow 0.35s ease-out;
       }
 
@@ -67,6 +69,11 @@ import { CompanyValue } from './values.data';
         hyphens: auto;
       }
 
+      .value-card .icon,
+      .value-card .title {
+        flex-shrink: 0;
+      }
+
       .value-card .icon {
         display: flex;
         align-items: center;
@@ -90,7 +97,8 @@ import { CompanyValue } from './values.data';
         box-shadow: 0 6px 18px rgba(30, 58, 138, 0.32);
       }
 
-      .value-card h3 {
+      .value-card .title {
+        display: block;
         font-size: clamp(0.78rem, 1.2vw, 0.86rem);
         font-weight: 700;
         letter-spacing: 0.01em;
@@ -99,13 +107,24 @@ import { CompanyValue } from './values.data';
         max-width: 100%;
       }
 
-      .value-card p {
+      .value-card .desc {
+        display: -webkit-box;
         font-size: clamp(0.66rem, 0.95vw, 0.74rem);
         line-height: 1.32;
         max-width: 100%;
         margin: 0;
         color: rgba(30, 58, 138, 0.82);
         overflow-wrap: break-word;
+        /* Progressive disclosure: the description may truncate; icon and title
+           must always stay fully visible. The full text lives in the center. */
+        -webkit-box-orient: vertical;
+        -webkit-line-clamp: 2;
+        overflow: hidden;
+      }
+
+      .value-card:focus-visible {
+        outline: 2px solid rgba(30, 58, 138, 0.6);
+        outline-offset: 3px;
       }
 
       @media (max-width: 767px) {
@@ -123,21 +142,26 @@ import { CompanyValue } from './values.data';
     `
   ],
   template: `
-    <div
+    <button
+      type="button"
       class="value-card"
       [class.active]="active()"
+      [attr.aria-label]="value().titleKey | translate"
+      (click)="select.emit()"
     >
       <div class="value-card__content">
         <span class="icon">
           <i [class]="value().icon" aria-hidden="true"></i>
         </span>
-        <h3>{{ value().titleKey | translate }}</h3>
-        <p>{{ value().descriptionKey | translate }}</p>
+        <span class="title">{{ value().titleKey | translate }}</span>
+        <span class="desc">{{ value().descriptionKey | translate }}</span>
       </div>
-    </div>
+    </button>
   `
 })
 export class ValueCardComponent {
   readonly value = input.required<CompanyValue>();
   readonly active = input(false);
+  /** Emitted when the user activates the card (click / Enter / Space). */
+  readonly select = output<void>();
 }

@@ -122,6 +122,9 @@ html {
     height: calc(var(--values-arrow-r) * 2);
     transform: translate(-50%, -50%);
     pointer-events: none;
+    /* Rotates with the orbit (60deg per step) using the same premium curve
+       as the cards, so cards + arrows move as one physical system. */
+    transition: transform 0.9s cubic-bezier(0.22, 1, 0.36, 1);
     animation: values-slot-in 0.55s ease-out both;
     animation-play-state: paused;
   }
@@ -195,7 +198,7 @@ html {
     align-items: center;
     justify-content: center;
     gap: 0.3rem;
-    animation: values-center-content-in 0.55s cubic-bezier(0.22, 1, 0.36, 1) both;
+    animation: values-center-content-in 0.38s cubic-bezier(0.22, 1, 0.36, 1) both;
   }
 
   .values-center-icon {

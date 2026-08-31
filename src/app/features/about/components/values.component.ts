@@ -93,11 +93,17 @@ const REVEAL_STAGGER_MS = 140;
           <div class="values-ring-inner" aria-hidden="true"></div>
 
           <!-- Decorative clockwise direction arrows between the fixed orbit
-               slots. Static by design: the arrows belong to the slot geometry,
-               not to the values, so they always stay synchronized with the
-               cards as they step through the orbit. Purely decorative. -->
-          <div class="values-arrow-layer" aria-hidden="true">
-            <svg viewBox="0 0 200 200" focusable="false">
+               slots. The layer rotates by 60deg per orbit step with the same
+               easing as the cards, so arrows and cards travel as ONE system;
+               the 6-fold symmetric end state keeps the geometry correct.
+               viewBox has a symmetric margin so no path or arrowhead can ever
+               reach the SVG edge (root cause of the escaping arrow). -->
+          <div
+            class="values-arrow-layer"
+            aria-hidden="true"
+            [style.transform]="'translate(-50%, -50%) rotate(' + activeOffset() * 60 + 'deg)'"
+          >
+            <svg viewBox="-8 -8 216 216" focusable="false">
               <defs>
                 <marker
                   id="values-arrowhead"
@@ -158,10 +164,12 @@ const REVEAL_STAGGER_MS = 140;
             </div>
           </div>
 
-          <!-- Six values on fixed orbit slots (informational, non-interactive) -->
+          <!-- Six values on fixed orbit slots. Each card is an accessible
+               button: activating it focuses that value (orbit rotates, center
+               and dots update, autoplay restarts from the selection). -->
           @for (value of values; track value.id) {
             <div class="values-slot" [style]="slotStyle(value)">
-              <app-value-card [value]="value" [active]="isFront(value)" />
+              <app-value-card [value]="value" [active]="isFront(value)" (select)="selectValue(value)" />
             </div>
           }
         </div>
