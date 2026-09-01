@@ -2,6 +2,10 @@ import {
   ChangeDetectionStrategy,
   Component,
   DestroyRef,
+  ElementRef,
+  ViewChild,
+  ViewChildren,
+  QueryList,
   computed,
   effect,
   inject,
@@ -15,6 +19,7 @@ const INTERACTION_RESUME_MS = 3000;
 const SWIPE_THRESHOLD_PX = 42;
 const SWIPE_MAX_DY_PX = 80;
 const SLOT_TRANSITION_MS = 700;
+const TRAVEL_MS = 900;
 
 const SLOT_DEFS = [
   { id: 'center', cssClass: 'pgx-r0' },
@@ -36,6 +41,33 @@ interface SlotDisplay {
   index: SlotIndex;
   isCenter: boolean;
   showNext: boolean;
+}
+
+interface Traveler {
+  id: number;
+  src: string;
+  /** Current width (px) of the overlay at its start position. */
+  x: number;
+  /** Current height (px) of the overlay at its start position. */
+  y: number;
+  /** Left offset (px) relative to the stage. */
+  left: number;
+  /** Top offset (px) relative to the stage. */
+  top: number;
+  /** Horizontal translation (px) to the destination slot. */
+  tdx: number;
+  /** Vertical translation (px) to the destination slot. */
+  tdy: number;
+  /** Final scale (destination width / start width). */
+  scale: number;
+  /** Focus scale mid-flight (brief overshoot for the incoming card). */
+  focusScale: number;
+  /** Layering during the flight (highest for the incoming card). */
+  z: number;
+  /** True once the overlay is allowed to start its animation. */
+  active: boolean;
+  /** Animation delay (ms) for a subtle cascade of the secondary cards. */
+  delay: number;
 }
 
 @Component({
@@ -80,7 +112,7 @@ interface SlotDisplay {
       .pgx-stage {
         position: relative;
         width: 100%;
-        height: clamp(470px, 126vw, 540px);
+        height: clamp(440px, 130vw, 560px);
         touch-action: pan-y;
       }
 
@@ -234,7 +266,7 @@ interface SlotDisplay {
        * Same relationships, compressed: bottom corners still overlap the
        * center from ABOVE; top corners still sit UNDER the center. */
       @media (min-width: 768px) {
-        .pgx-stage { height: clamp(520px, 96vw, 600px); }
+        .pgx-stage { height: clamp(540px, 72vw, 640px); }
       .pgx-r0 {
         /* CHANGE THIS to make the panel wider/narrower (percentage of stage width) */
         --w: 54%;
@@ -318,7 +350,7 @@ interface SlotDisplay {
        * ~11% of its height and covers it; top pair dips under it. The
        * opposing left-pair rotations create the editorial side conflict. */
       @media (min-width: 1024px) {
-        .pgx-stage { height: clamp(560px, 94vw, 660px); }
+        .pgx-stage { height: clamp(660px, 80vh, 820px); }
       .pgx-r0 {
         /* CHANGE THIS to make the panel wider/narrower (percentage of stage width) */
         --w: 52%;
@@ -618,11 +650,53 @@ interface SlotDisplay {
         --r: 14px;
         z-index: ;
       }
+      /* ------------------------------------------------------------------
+       * Secondary -> Primary TRAVEL overlay.
+       * A temporary clone of the selected image physically flies from its
+       * source slot to the center slot. Keyed move on the GPU only
+       * (translate3d + scale), with a confident settle — no bounce.
+       * ------------------------------------------------------------------ */
+      .pgx-traveler {
+        position: absolute;
+        z-index: var(--pgx-travelz, 60);
+        margin: 0;
+        padding: 0;
+        border-radius: var(--r, 16px);
+        overflow: hidden;
+        background: #0f172a;
+        border: 1px solid rgba(15, 23, 42, 0.14);
+        box-shadow: 0 18px 40px -20px rgba(15, 23, 42, 0.5);
+        pointer-events: none;
+        will-change: transform, opacity;
+        opacity: 0;
+      }
+      .pgx-traveler img {
+        position: absolute;
+        inset: 0;
+        width: 100%;
+        height: 100%;
+        object-fit: cover;
+        user-select: none;
+        -webkit-user-drag: none;
+      }
+      .pgx-traveler--active {
+        animation: pgx-travel 900ms cubic-bezier(0.22, 1, 0.36, 1) forwards;
+      }
+      @keyframes pgx-travel {
+        0%   { opacity: 0; transform: translate3d(0, 0, 0) scale(1); }
+        12%  { opacity: 1; transform: translate3d(0, 0, 0) scale(1); }
+        70%  { opacity: 1; transform: translate3d(var(--tdx), var(--tdy), 0) scale(var(--tf, var(--ts))); }
+        100% { opacity: 1; transform: translate3d(var(--tdx), var(--tdy), 0) scale(var(--ts)); }
+      }
+      @media (prefers-reduced-motion: reduce) {
+        .pgx-traveler { display: none; }
+      }
     `,
   ],
   template: `
     <div class="pgx">
       <div
+        #stageEl
         class="pgx-stage"
         role="group"
         aria-roledescription="carousel"
@@ -634,6 +708,7 @@ interface SlotDisplay {
       >
         @for (slot of displaySlots(); track slot.id) {
           <button
+            #slotEl
             type="button"
             [class]="'pgx-layer ' + slot.cssClass"
             (click)="onLayerClick(slot.index)"
@@ -667,6 +742,27 @@ interface SlotDisplay {
           </button>
         }
       </div>
+
+      @if (travelers().length) {
+        @for (t of travelers(); track t.id) {
+          <div
+            class="pgx-traveler"
+            [class.pgx-traveler--active]="t.active"
+            [style.width.px]="t.x"
+            [style.height.px]="t.y"
+            [style.left.px]="t.left"
+            [style.top.px]="t.top"
+            [style.z-index]="t.z"
+            [style.--tdx]="t.tdx + 'px'"
+            [style.--tdy]="t.tdy + 'px'"
+            [style.--ts]="t.scale"
+            [style.--tf]="t.focusScale"
+            [style.animation-delay]="t.delay + 'ms'"
+          >
+            <img [src]="t.src" [alt]="altText()" draggable="false" />
+          </div>
+        }
+      }
 
       @if (displaySlots().length >= 2) {
         <div class="pgx-controls">
@@ -731,9 +827,23 @@ export class ProjectGalleryComponent {
 
   private readonly displayedSrcs = signal<string[]>([]);
 
+  /** Transition lock (plain field, not a signal): prevents overlapping transitions. */
+  private isTransitioning = false;
+  private travelTimer: ReturnType<typeof setTimeout> | null = null;
+  private travelerId = 0;
+
+  /** Transient secondary<->primary travel overlays rendered in the template. */
+  readonly travelers = signal<Traveler[]>([]);
+
+  @ViewChild('stageEl') private stageEl?: ElementRef<HTMLElement>;
+  @ViewChildren('slotEl') private slotEls?: QueryList<ElementRef<HTMLElement>>;
+
   constructor() {
     this.scheduleAutoplay(GALLERY_AUTOPLAY_MS);
-    this.destroyRef.onDestroy(() => this.clearTimer());
+    this.destroyRef.onDestroy(() => {
+      this.clearTimer();
+      if (this.travelTimer !== null) clearTimeout(this.travelTimer);
+    });
 
     effect(() => {
       const slots = this.displaySlots();
@@ -829,9 +939,11 @@ export class ProjectGalleryComponent {
     }
 
     const currentOffset = ((this.offset() % n) + n) % n;
-    const newOffset = (currentOffset + slotIndex) % n;
-    this.offset.set(newOffset);
-    this.scheduleAutoplay(INTERACTION_RESUME_MS);
+    this.runTransition({
+      sourceSlot: slotIndex,
+      targetOffset: (currentOffset + slotIndex) % n,
+      resumeMs: INTERACTION_RESUME_MS,
+    });
   }
 
   onStagePointerEnter(): void {
@@ -865,10 +977,128 @@ export class ProjectGalleryComponent {
   }
 
   private step(dir: 1 | -1): void {
+    const images = this.galleryImages();
+    const n = images.length;
+    if (n < 2) return;
+    const current = ((this.offset() % n) + n) % n;
+    this.runTransition({
+      sourceSlot: (dir === 1 ? 1 : n - 1) as SlotIndex,
+      targetOffset: (current + dir + n) % n,
+      resumeMs: INTERACTION_RESUME_MS,
+    });
+  }
+
+  /**
+   * Single entry point for EVERY gallery transition (autoplay, arrows,
+   * swipes and direct clicks). Guards against overlapping transitions and
+   * plays the secondary -> primary travel animation, then hands back to
+   * autoplay. All state mutation happens imperatively, never inside a
+   * computed()/effect().
+   */
+  private runTransition(opts: {
+    sourceSlot: SlotIndex;
+    targetOffset: number;
+    resumeMs: number;
+  }): void {
     const n = this.galleryImages().length;
     if (n < 2) return;
-    this.offset.update(v => (v + dir + n) % n);
-    this.scheduleAutoplay(INTERACTION_RESUME_MS);
+    if (this.isTransitioning) return;
+
+    this.isTransitioning = true;
+    this.spawnTravelers(opts.sourceSlot, opts.targetOffset);
+    this.offset.set(((opts.targetOffset % n) + n) % n);
+    this.scheduleAutoplay(opts.resumeMs);
+
+    if (this.travelTimer !== null) clearTimeout(this.travelTimer);
+    this.travelTimer = setTimeout(() => {
+      this.travelers.set([]);
+      this.isTransitioning = false;
+      this.travelTimer = null;
+    }, TRAVEL_MS + 60);
+  }
+
+  /**
+   * FLIP-style spatial transition for EVERY card that changes slot.
+   * Reads the fixed slot rects once (FIRST), computes where each image
+   * lands after the offset change (LAST), then renders a transient overlay
+   * per moving card that flies from its old slot to its new slot on the GPU
+   * (transform/opacity only). The incoming primary gets a subtle focus
+   * overshoot + highest z; secondaries cascade with a tiny stagger and stay
+   * subordinate. Persistent slots crossfade underneath, so no panel is ever
+   * empty. Reads happen BEFORE the offset changes (FRIST positions).
+   *
+   * sourceSlot  - the slot that is currently being promoted (images[off+sourceSlot]).
+   * targetOffset- the offset the gallery will move to for this transition.
+   */
+  private spawnTravelers(sourceSlot: SlotIndex, targetOffset: number): void {
+    if (this.reduceMotion) return;
+    if (!this.slotEls || this.slotEls.length < 2) return;
+    if (!this.stageEl) return;
+
+    const images = this.galleryImages();
+    const n = images.length;
+    const off = ((this.offset() % n) + n) % n;
+    const newOff = ((targetOffset % n) + n) % n;
+    const slotCount = Math.min(5, n);
+
+    const stageRect = this.stageEl.nativeElement.getBoundingClientRect();
+    const rects: DOMRect[] = [];
+    for (let i = 0; i < slotCount; i++) {
+      const r = this.laneRect(i);
+      if (!r) return;
+      rects.push(r);
+    }
+
+    const list: Traveler[] = [];
+
+    for (let i = 0; i < slotCount; i++) {
+      const imgIdx = (off + i) % n;
+      const newSlot = ((imgIdx - newOff) % n + n) % n;
+      // Images that leave the visible window (n > 5) are handled by the
+      // persistent crossfade; only animate cards that stay on screen.
+      if (newSlot >= slotCount) continue;
+
+      const from = rects[i];
+      const to = rects[newSlot];
+      const scale = to.width / from.width;
+      const isNewPrimary = newSlot === 0;
+      const isOldPrimary = i === 0;
+      const delay = isNewPrimary || isOldPrimary ? 0 : 20 + (newSlot % 3) * 20;
+      const focusScale = isNewPrimary ? scale * 1.06 : scale;
+
+      list.push({
+        id: ++this.travelerId,
+        src: images[imgIdx],
+        x: from.width,
+        y: from.height,
+        left: from.left - stageRect.left,
+        top: from.top - stageRect.top,
+        tdx: to.left - from.left,
+        tdy: to.top - from.top,
+        scale,
+        focusScale,
+        z: isNewPrimary ? 90 : isOldPrimary ? 85 : 70,
+        active: false,
+        delay,
+      });
+    }
+
+    this.travelers.set(list);
+    if (typeof requestAnimationFrame !== 'undefined') {
+      requestAnimationFrame(() => {
+        requestAnimationFrame(() => {
+          this.travelers.update(items => items.map(t => ({ ...t, active: true })));
+        });
+      });
+    }
+  }
+
+  /** Read the bounding rect of a live slot element (by slot index). */
+  private laneRect(index: number): DOMRect | null {
+    if (!this.slotEls) return null;
+    const el = this.slotEls.get(index);
+    if (!el) return null;
+    return el.nativeElement.getBoundingClientRect();
   }
 
   private scheduleAutoplay(ms: number): void {
@@ -877,8 +1107,15 @@ export class ProjectGalleryComponent {
     if (this.reduceMotion || images.length < 2) return;
     this.timer = setTimeout(() => {
       this.timer = null;
-      this.offset.update(v => (v + 1) % (this.galleryImages().length || 1));
-      this.scheduleAutoplay(GALLERY_AUTOPLAY_MS);
+      const images = this.galleryImages();
+      const n = images.length;
+      if (n < 2) return;
+      const current = ((this.offset() % n) + n) % n;
+      this.runTransition({
+        sourceSlot: 1,
+        targetOffset: (current + 1) % n,
+        resumeMs: GALLERY_AUTOPLAY_MS,
+      });
     }, ms);
   }
 

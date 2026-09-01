@@ -57,8 +57,8 @@ html {
         orbit radius   = centerR + gap + cardR   (center never touched by cards)
         arrow path     = card-center circle      (invisible; heads only)
   */
-  --values-card-size: clamp(8.25rem, 24.5cqw, 10.5rem);  /* card diameter (scales with orbit width) */
-  --values-center: clamp(12.5rem, 38cqw, 16rem);         /* center diameter (ratio to card kept ~1.55) */
+  --values-card-size: clamp(8.25rem, 26cqw, 11.5rem);   /* card diameter (scales with orbit width) */
+  --values-center: clamp(12.5rem, 40.5cqw, 17.5rem);     /* center diameter (ratio to card kept ~1.55) */
   --values-center-gap: 0.9rem;                           /* center <-> cards breathing room */
   --values-arrow-gap: 0.375rem;                         /* arrow <-> card edge clearance */
   --values-r: calc(
@@ -134,7 +134,7 @@ html {
 @media (min-width: 768px) {
   .values-orbit {
     position: relative;
-    width: min(100%, 42rem);
+    width: min(100%, 45rem);
     aspect-ratio: 1 / 1;
     margin: 0 auto;
     /* Size container: the cqw units in the geometry variables above resolve

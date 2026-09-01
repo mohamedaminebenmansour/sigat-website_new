@@ -30,7 +30,7 @@ import { CompanyValue } from './values.data';
         height: 100%;
         aspect-ratio: 1 / 1;
         box-sizing: border-box;
-        padding: 0.7rem 0.8rem;
+        padding: 0.5rem 0.6rem;
         border-radius: 9999px;
         overflow: hidden;
         background: linear-gradient(150deg, rgba(255, 255, 255, 0.96) 0%, rgba(226, 232, 240, 0.12) 100%);
@@ -58,11 +58,11 @@ import { CompanyValue } from './values.data';
         align-items: center;
         justify-content: center;
         text-align: center;
-        gap: 0.35rem;
+        gap: 0.2rem;
         width: 100%;
         /* Percentage-based measure so the content capsule always stays inside
            the circular boundary at any card size. */
-        max-width: 78%;
+        max-width: 90%;
         margin-inline: auto;
         /* Long translated words (FR/AR) must wrap, never escape the circle. */
         overflow-wrap: break-word;
@@ -79,15 +79,15 @@ import { CompanyValue } from './values.data';
         align-items: center;
         justify-content: center;
         flex-shrink: 0;
-        width: 2.25rem;
-        height: 2.25rem;
+        width: 1.9rem;
+        height: 1.9rem;
         border-radius: 9999px;
         background: rgba(30, 58, 138, 0.07);
         color: #1e40af;
       }
 
       .value-card .icon i {
-        font-size: 1.12rem;
+        font-size: 1rem;
         line-height: 1;
       }
 
@@ -100,9 +100,9 @@ import { CompanyValue } from './values.data';
       .value-card .title {
         display: block;
         /* Scales with the orbit container (cqw resolves against the nearest
-           ancestor size container, .values-orbit) so larger cards carry
-           proportionally larger text. */
-        font-size: clamp(0.8rem, 2.4cqw, 0.95rem);
+           ancestor size container, .values-orbit). Conservative sizes so the
+           FULL un-truncated text fits inside the circular card. */
+        font-size: clamp(0.72rem, 1.9cqw, 0.84rem);
         font-weight: 700;
         letter-spacing: 0.01em;
         line-height: 1.15;
@@ -111,18 +111,15 @@ import { CompanyValue } from './values.data';
       }
 
       .value-card .desc {
-        display: -webkit-box;
-        font-size: clamp(0.68rem, 1.9cqw, 0.8rem);
-        line-height: 1.32;
+        /* No line clamping: the full translated description is always shown.
+           The card geometry + conservative font sizes keep it inside the
+           circle (longest FR string fits with margin). */
+        font-size: clamp(0.6rem, 1.6cqw, 0.72rem);
+        line-height: 1.3;
         max-width: 100%;
         margin: 0;
         color: rgba(30, 58, 138, 0.82);
         overflow-wrap: break-word;
-        /* Progressive disclosure: the description may truncate; icon and title
-           must always stay fully visible. The full text lives in the center. */
-        -webkit-box-orient: vertical;
-        -webkit-line-clamp: 2;
-        overflow: hidden;
       }
 
       .value-card:focus-visible {
@@ -134,6 +131,15 @@ import { CompanyValue } from './values.data';
         .value-card {
           height: auto;
           padding: 1rem 0.9rem;
+        }
+        /* Compact disclosure pills on mobile: keep the 2-line truncation here
+           (the full text is shown in the expanding panel below the trigger).
+           The desktop/tablet orbit cards above show the FULL text. */
+        .value-card .desc {
+          display: -webkit-box;
+          -webkit-box-orient: vertical;
+          -webkit-line-clamp: 2;
+          overflow: hidden;
         }
       }
 
