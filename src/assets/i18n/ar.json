@@ -10,7 +10,6 @@
   "nav_partner_cta": "كن شريكاً",
   "nav_quick_links": "روابط سريعة",
   "nav_media": "الوسائط",
-
   "media_subtitle": "صور وفيديوهات مشاريعنا في الأشغال العامة والبنية التحتية الهيدروليكية.",
   "media_item_dam_title": "سد سوسة",
   "media_item_dam_desc": "إنشاء سد تجميعي والبنية التحتية المرافقة له.",
@@ -30,11 +29,9 @@
   "media_item_video_equipment_desc": "فيديو لآلاتنا أثناء التشغيل.",
   "media_item_video_site_title": "موقع أثناء العمل (فيديو)",
   "media_item_video_site_desc": "فيديو لموقع بناء قيد الإنجاز.",
-
   "social_facebook": "فيسبوك",
   "social_linkedin": "لينكد إن",
   "social_instagram": "إنستغرام",
-
   "home_hero_title": "البناء العام والبنية التحتية الهيدروليكية",
   "home_hero_subtitle": "تقديم التميز في الهندسة والبناء ومشاريع البنية التحتية في تونس وخارجها منذ عام 2010.",
   "home_hero_btn_projects": "عرض مشاريعنا",
@@ -64,7 +61,6 @@
   "home_project_2_location": "Hassi Messaoud، الجزائر",
   "home_project_3_title": "تطوير المنطقة الصناعية",
   "home_project_3_location": "Sétif، الجزائر",
-
   "expertise_title": "خبراتنا",
   "expertise_subtitle": "خدمات هندسية وإنشائية متخصصة تُقدم بدقة وتميز",
   "expertise_hydraulic_title": "البنية التحتية الهيدروليكية",
@@ -77,9 +73,7 @@
   "expertise_generic_capabilities": "القدرات الرئيسية",
   "expertise_back": "العودة إلى الخبرات",
   "expertise_not_found": "لم يتم العثور على مجال الخبرة",
-
   "project_view": "عرض المشروع",
-
   "projects_title": "مشاريعنا",
   "projects_subtitle": "استعرض محفظتنا من المشاريع الهيدروليكية والإنشائية في جميع أنحاء تونس",
   "projects_filter_all": "الكل",
@@ -132,7 +126,6 @@
   "project_1_metric_2_label": "أسرّة مربوطة",
   "project_1_metric_3_label": "صمامات مركّبة",
   "project_1_metric_4_label": "مدة الأشغال",
-
   "contact_title": "اتصل بنا",
   "contact_subtitle": "هل لديك سؤال أو مشروع في ذهنك؟ يسعدنا التواصل معك.",
   "contact_address": "عنواننا",
@@ -164,7 +157,6 @@
   "contact_form_subject_required": "الرجاء تحديد موضوع",
   "contact_form_message_required": "الرسالة مطلوبة",
   "contact_form_success": "شكراً لرسالتك! سنعاود الاتصال بك قريباً.",
-
   "contact_hero_title": "لنبنِ معاً شيئاً ذا أهمية.",
   "contact_hero_subtitle": "من البنية التحتية الهيدروليكية إلى أعمال البناء المعقدة، اكتب لنا عن مشروعك وسيتواصل فريقنا معك.",
   "contact_hero_btn_primary": "بدء مشروع",
@@ -237,17 +229,14 @@
   "contact_cta_title": "لديك مشروع في ذهنك؟",
   "contact_cta_subtitle": "دعنا نناقش كيف يمكن لـ SIGAT دعمك.",
   "contact_cta_btn": "بدء مشروع",
-
   "contact_visit_eyebrow": "زيارة SIGAT",
   "contact_visit_title": "ابحث عن SIGAT",
   "contact_visit_subtitle": "خطط لطريقك إلى مكتبنا.",
   "contact_visit_office_label": "مكتب SIGAT",
   "contact_visit_directions": "احصل على الاتجاهات",
   "contact_visit_directions_hint": "يفتح في خرائط جوجل",
-
   "capabilities_title": "إمكانياتنا",
   "capabilities_subtitle": "أسطول معدات حديثة يمكننا من تنفيذ مشاريع من أي حجم",
-
   "hse_title": "HSE والجودة",
   "hse_subtitle": "التزامنا بالصحة والسلامة والبيئة والتميز في الجودة",
   "hse_health_title": "الصحة والسلامة",
@@ -269,7 +258,6 @@
   "hse_cert_2_subtitle": "الإدارة البيئية",
   "hse_cert_3_title": "ISO 45001:2018",
   "hse_cert_3_subtitle": "الصحة والسلامة المهنية",
-
   "partnerships_hero_title": "كن شريكاً مع SIGAT",
   "partnerships_hero_subtitle": "ابنِ شراكات دائمة مع شركة رائدة موثوقة في الهندسة والبنية التحتية.",
   "partnerships_benefits_title": "لماذا الشراكة مع SIGAT",
@@ -299,7 +287,6 @@
   "partnerships_cta_title": "هل أنت مستعد للبدء؟",
   "partnerships_cta_subtitle": "قم بتنزيل ملف الشركة التعريفي لمعرفة المزيد عن قدراتنا وسجلنا وكيف يمكننا العمل معاً.",
   "partnerships_cta_btn": "تنزيل ملف الشركة",
-
   "about_page_title": "حول SIGAT",
   "about_page_breadcrumb": "الرئيسية / من نحن",
   "about_story_title": "قصتنا",
@@ -337,11 +324,10 @@
   "about_geo_region_1": "تونس الكبرى",
   "about_geo_region_2": "وطن القبلة والشمال الشرقي",
   "about_geo_region_3": "الساحل والوسط",
-
   "about_story_highlight": "هيكل مرن في خدمة المشاريع الكبرى: تجمع سيجات بين استجابة فريق متماسك والقدرة التقنية اللازمة للعمل في مواقع البنية التحتية الكبرى في جميع أنحاء تونس.",
-
   "values_title": "قيمنا",
   "values_subtitle": "المبادئ التي توجه كل مشاريعنا.",
+  "values_intro": "قيمنا هي أساس التزامنا: فهي توجّه كل قرار نتخذه، وطريقة تعاوننا، والمعايير التي نلتزم بها في كل إنجاز.",
   "values_center_subtitle": "المبادئ التي توجه كل مشاريعنا.",
   "values_quality_title": "الجودة",
   "values_quality_desc": "أعمال مطابقة للمعايير، موثوقة ودائمة.",

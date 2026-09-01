@@ -10,7 +10,6 @@
   "nav_partner_cta": "Become a Partner",
   "nav_quick_links": "Quick Links",
   "nav_media": "Media",
-
   "media_subtitle": "Images and videos of our public works and hydraulic infrastructure projects.",
   "media_item_dam_title": "Sousse Dam",
   "media_item_dam_desc": "Construction of a retention dam and its associated infrastructure.",
@@ -30,11 +29,9 @@
   "media_item_video_equipment_desc": "Video of our machinery in operation.",
   "media_item_video_site_title": "Site in Action (video)",
   "media_item_video_site_desc": "Video of a construction site in progress.",
-
   "social_facebook": "Facebook",
   "social_linkedin": "LinkedIn",
   "social_instagram": "Instagram",
-
   "home_hero_title": "General Construction & Hydraulic Infrastructure",
   "home_hero_subtitle": "Delivering excellence in engineering, construction, and infrastructure projects across Tunisia and beyond since 2010.",
   "home_hero_btn_projects": "View Our Projects",
@@ -64,7 +61,6 @@
   "home_project_2_location": "Hassi Messaoud, Algeria",
   "home_project_3_title": "Industrial Zone Development",
   "home_project_3_location": "Sétif, Algeria",
-
   "expertise_title": "Our Expertise",
   "expertise_subtitle": "Specialized engineering and construction services delivered with precision and excellence",
   "expertise_hydraulic_title": "Hydraulic Infrastructure",
@@ -77,9 +73,7 @@
   "expertise_generic_capabilities": "Key Capabilities",
   "expertise_back": "Back to Expertise",
   "expertise_not_found": "Expertise area not found",
-
   "project_view": "View project",
-
   "projects_title": "Our Projects",
   "projects_subtitle": "Explore our portfolio of hydraulic and construction projects across Tunisia",
   "projects_filter_all": "All",
@@ -132,7 +126,6 @@
   "project_1_metric_2_label": "Households connected",
   "project_1_metric_3_label": "Valves installed",
   "project_1_metric_4_label": "Works duration",
-
   "contact_title": "Get In Touch",
   "contact_subtitle": "Have a question or project in mind? We'd love to hear from you.",
   "contact_address": "Our Address",
@@ -164,7 +157,6 @@
   "contact_form_subject_required": "Please select a subject",
   "contact_form_message_required": "Message is required",
   "contact_form_success": "Thank you for your message! We will get back to you shortly.",
-
   "contact_hero_title": "Let's build something that matters.",
   "contact_hero_subtitle": "From hydraulic infrastructure to complex construction works, tell us about your project and our team will get back to you.",
   "contact_hero_btn_primary": "Start a project",
@@ -237,17 +229,14 @@
   "contact_cta_title": "Have a project in mind?",
   "contact_cta_subtitle": "Let's discuss how SIGAT can support you.",
   "contact_cta_btn": "Start a project",
-
   "contact_visit_eyebrow": "Visit SIGAT",
   "contact_visit_title": "Find SIGAT",
   "contact_visit_subtitle": "Plan your route to our office.",
   "contact_visit_office_label": "SIGAT Office",
   "contact_visit_directions": "Get directions",
   "contact_visit_directions_hint": "Opens in Google Maps",
-
   "capabilities_title": "Our Capabilities",
   "capabilities_subtitle": "State-of-the-art equipment fleet enabling us to deliver projects of any scale",
-
   "hse_title": "HSE & Quality",
   "hse_subtitle": "Our commitment to health, safety, environment, and quality excellence",
   "hse_health_title": "Health & Safety",
@@ -269,7 +258,6 @@
   "hse_cert_2_subtitle": "Environmental Management",
   "hse_cert_3_title": "ISO 45001:2018",
   "hse_cert_3_subtitle": "Occupational Health & Safety",
-
   "partnerships_hero_title": "Partner with SIGAT",
   "partnerships_hero_subtitle": "Build lasting partnerships with a trusted leader in engineering and infrastructure.",
   "partnerships_benefits_title": "Why Partner With SIGAT",
@@ -299,7 +287,6 @@
   "partnerships_cta_title": "Ready to Get Started?",
   "partnerships_cta_subtitle": "Download our company profile to learn more about our capabilities, track record, and how we can work together.",
   "partnerships_cta_btn": "Download Company Profile",
-
   "about_page_title": "About SIGAT",
   "about_page_breadcrumb": "Home / About Us",
   "about_story_title": "Our Story",
@@ -337,11 +324,10 @@
   "about_geo_region_1": "Greater Tunis",
   "about_geo_region_2": "Cap Bon & North-East",
   "about_geo_region_3": "Sahel & Central Region",
-
   "about_story_highlight": "An agile structure for major projects: SIGAT combines the responsiveness of a close-knit team with the technical capacity required to work on major infrastructure sites across Tunisia.",
-
   "values_title": "Our Values",
   "values_subtitle": "The principles that guide each of our projects.",
+  "values_intro": "Our values are the foundation of our commitment: they guide every decision we make, the way we collaborate, and the standards we bring to each project.",
   "values_center_subtitle": "The principles that guide each of our projects.",
   "values_quality_title": "Quality",
   "values_quality_desc": "Works that are compliant with standards, reliable and durable.",

@@ -70,6 +70,76 @@ html {
   /* Continuous-surface rhythm: white flows into a whisper-light blue-gray so
      Story -> Values -> Projects reads as one presentation, not three bands. */
   background: linear-gradient(180deg, #ffffff 0%, #f4f7fc 100%);
+  /* Local clip: the decorative background layer (inset:0) can never create
+     horizontal page overflow. The orbit itself is width-bounded and unaffected. */
+  overflow: hidden;
+}
+
+/* Decorative washed engineering/construction photo behind the section.
+   A dedicated layer with its OWN opacity + filter, so the section text keeps
+   full opacity and crispness — the image simply disappears into the white
+   gradient. Decorative only: aria-hidden + pointer-events: none in markup. */
+.values-background {
+  position: absolute;
+  inset: 0;
+  background: url('/assets/media/gallery/20231222-pipeline.webp') center / cover no-repeat;
+  opacity: 0.1;
+  filter: grayscale(0.9) brightness(1.12) contrast(0.92);
+  pointer-events: none;
+}
+
+/* All section content sits above the background layer. */
+.values-content {
+  position: relative;
+}
+
+/* ---- Two-column composition: editorial left, orbit right ------------
+   ONE section, two visual columns. The orbit stays the hero and keeps its
+   own 36rem sizing; the left column is an editorial introduction.
+   <1024px: stacked vertically (orbit centered) — based on available space.
+   RTL: grid tracks follow document direction, so the editorial column
+   flips to the right automatically in Arabic; the orbit is unchanged. */
+.values-grid {
+  display: block;
+}
+
+@media (min-width: 768px) {
+  .values-grid {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+    gap: 1.5rem;
+    align-items: center;
+  }
+
+  .values-editorial {
+    text-align: center;
+    max-width: 40rem;
+    margin-inline: auto;
+  }
+
+  .values-editorial .values-intro {
+    margin-inline: auto;
+  }
+}
+
+@media (min-width: 1024px) {
+  .values-grid {
+    /* Balanced split with a floor for the text column; `minmax(0, 1.2fr)`
+       lets the orbit column shrink safely instead of overflowing. */
+    grid-template-columns: minmax(260px, 0.8fr) minmax(0, 1.2fr);
+    gap: 3rem;
+    text-align: start;
+  }
+
+  .values-editorial {
+    text-align: start;
+    max-width: none;
+    margin-inline: 0;
+  }
+
+  .values-editorial .values-intro {
+    margin-inline: 0;
+  }
 }
 
 .values-container {
@@ -118,8 +188,8 @@ html {
     position: absolute;
     left: 50%;
     top: 50%;
-    width: calc(var(--values-arrow-r) * 2);
-    height: calc(var(--values-arrow-r) * 2);
+    width: calc(var(--values-arrow-r) * 2.2);
+    height: calc(var(--values-arrow-r) * 2.2);
     transform: translate(-50%, -50%);
     pointer-events: none;
     /* Rotates with the orbit (60deg per step) using the same premium curve
@@ -143,7 +213,9 @@ html {
   .values-arrow {
     fill: none;
     stroke: #1e3a8a;
-    stroke-width: 0.9;
+    /* 0.83 user units renders the same px thickness the previous 0.9 did,
+       because the viewBox now maps 100 units = --values-arrow-r exactly. */
+    stroke-width: 0.83;
     stroke-linecap: round;
     stroke-linejoin: round;
     opacity: 0.42;
@@ -228,6 +300,27 @@ html {
     line-height: 1.15;
     max-width: calc(var(--values-center) * 0.74);
     padding-inline: 0.25rem;
+  }
+
+  /* Subtle warm gold accent under the center value name: a premium
+     engineering/construction touch. Purely decorative, tiny footprint —
+     the blue/white identity remains dominant. */
+  .values-center-title::after {
+    content: "";
+    display: block;
+    width: 2.25rem;
+    height: 2px;
+    margin: 0.35rem auto 0;
+    border-radius: 9999px;
+    background: linear-gradient(
+      90deg,
+      rgba(212, 160, 23, 0) 0%,
+      #d4a017 30%,
+      #e3b53c 50%,
+      #d4a017 70%,
+      rgba(212, 160, 23, 0) 100%
+    );
+    box-shadow: 0 0 6px rgba(212, 160, 23, 0.4);
   }
 
   .values-center-desc {
@@ -332,6 +425,11 @@ html {
 @media (max-width: 767px) {
   .values-orbit {
     display: none !important;
+  }
+
+  /* Even more subtle on small screens to protect readability. */
+  .values-background {
+    opacity: 0.06;
   }
 
   .values-mobile {

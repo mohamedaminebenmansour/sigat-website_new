@@ -26,6 +26,48 @@ const SLOT_ANGLES = [-90, -30, 30, 90, 150, 210];
 /** The slot that carries the "active / front" emphasis (bottom-most). */
 const FRONT_SLOT = 3;
 
+/** Uniform angular clearance (degrees) between an arrow tip and a card boundary. */
+const ARROW_CLEARANCE_DEG = 3;
+
+/** SVG user-space orbit geometry of the arrow layer: the viewBox is sized so
+ *  that radius 100 user units renders at exactly --values-arrow-r px — the
+ *  circle that runs --values-arrow-gap OUTSIDE every card boundary. */
+const ARROW_SVG_RADIUS = 100;
+const ARROW_SVG_CENTER = 100;
+
+/** Point on the card-center orbit circle at `angleDeg` (0 = right, clockwise). */
+function pointOnOrbit(angleDeg: number): string {
+  const rad = (angleDeg * Math.PI) / 180;
+  const fmt = (v: number) => String(Number(v.toFixed(2)));
+  return (
+    fmt(ARROW_SVG_CENTER + ARROW_SVG_RADIUS * Math.cos(rad)) +
+    ' ' +
+    fmt(ARROW_SVG_CENTER + ARROW_SVG_RADIUS * Math.sin(rad))
+  );
+}
+
+/**
+ * The six arrow paths, derived from the ONE orbit geometry model (SLOT_ANGLES
+ * + orbit radius). Segment i connects slot i -> slot (i + 1) % SLOT_COUNT,
+ * running on the card-center orbit circle trimmed by a uniform clearance at
+ * both card boundaries. The end angle is normalized (+360°) so the final
+ * F -> A segment is a normal 60° clockwise step — never a wrap-around jump.
+ * The "lead" segment is the one entering the front (active) slot.
+ */
+const ARROW_PATHS: readonly { d: string; lead: boolean }[] = SLOT_ANGLES.map(
+  (startAngle, i) => {
+    const start = startAngle + ARROW_CLEARANCE_DEG;
+    let end = SLOT_ANGLES[(i + 1) % SLOT_COUNT] - ARROW_CLEARANCE_DEG;
+    if (end <= start) {
+      end += 360;
+    }
+    return {
+      d: `M ${pointOnOrbit(start)} A ${ARROW_SVG_RADIUS} ${ARROW_SVG_RADIUS} 0 0 1 ${pointOnOrbit(end)}`,
+      lead: (i + 1) % SLOT_COUNT === FRONT_SLOT
+    };
+  }
+);
+
 /** How long each orbit state stays visible before the next step. */
 const DWELL_MS = 4000;
 
@@ -49,38 +91,61 @@ const REVEAL_STAGGER_MS = 140;
         display: block;
       }
 
-      /* The center disc (>=768px) now presents the focused orbit value
-         dynamically; the old static subtitle rule is no longer needed. */
-
-      /* The center disc already carries this sentence on >=768px, so the header
-         subtitle is hidden there and restored on mobile (project "md" breakpoint
-         of 767px). ::ng-deep is required because the subtitle <p> lives inside
-         the child SectionHeaderComponent; scoping it under .values-header keeps
-         the rule local to this component's header instance. display:none avoids
-         reserving layout space on desktop/tablet. */
-      .values-header ::ng-deep p {
-        display: none;
+      /* The header (title + subtitle) now lives in the LEFT editorial column
+         of the two-column layout, so the old rule that force-hid the header
+         subtitle on >=768px is no longer needed. The intro paragraph below
+         the header carries the general values philosophy (values_intro). */
+      .values-editorial {
+        min-width: 0; /* never let long translated words widen the grid track */
       }
 
-      @media (max-width: 767px) {
-        .values-header ::ng-deep p {
-          display: block;
-        }
+      /* Left-align the shared section header inside the editorial column (its
+         own default is centered). Scoped ::ng-deep because the markup belongs
+         to the child SectionHeaderComponent; it only affects this instance. */
+      .values-editorial ::ng-deep app-section-header > div {
+        text-align: start;
+        margin-bottom: 0;
+      }
+      .values-editorial ::ng-deep app-section-header .flex {
+        justify-content: flex-start;
+      }
+      .values-editorial ::ng-deep app-section-header p {
+        margin-inline: 0;
+      }
+
+      .values-intro {
+        margin: 0;
+        max-width: 34rem;
+        font-size: clamp(0.95rem, 1.15vw, 1.05rem);
+        line-height: 1.7;
+        color: rgba(30, 58, 138, 0.85);
+        overflow-wrap: break-word;
       }
     `
   ],
   template: `
     <section class="values-section">
-      <div class="values-container mx-auto px-4">
-        <app-section-header
-          class="values-header"
-          [title]="'values_title' | translate"
-          [subtitle]="'values_subtitle' | translate"
-        />
+      <!-- Decorative washed engineering photo: an absolutely positioned layer
+           with its own opacity/filter so the content above stays fully opaque.
+           Decorative only (aria-hidden) and pointer-events: none. -->
+      <div class="values-background" aria-hidden="true"></div>
 
-        <!-- Desktop / tablet: automatic orbit presentation (observe only) -->
-        <div
-          class="values-orbit"
+      <div class="values-container values-content mx-auto px-4">
+        <div class="values-grid">
+          <!-- LEFT: editorial introduction (static, presentational only).
+               Does not name individual values — the orbit presents those. -->
+          <div class="values-editorial">
+            <app-section-header
+              class="values-header"
+              [title]="'values_title' | translate"
+              [subtitle]="'values_subtitle' | translate"
+            />
+            <p class="values-intro">{{ 'values_intro' | translate }}</p>
+          </div>
+
+          <!-- RIGHT: the existing interactive orbit (design unchanged). -->
+          <div
+            class="values-orbit"
           #orbitShell
           (mouseenter)="onEnterZone()"
           (mouseleave)="onLeaveZone()"
@@ -96,14 +161,15 @@ const REVEAL_STAGGER_MS = 140;
                slots. The layer rotates by 60deg per orbit step with the same
                easing as the cards, so arrows and cards travel as ONE system;
                the 6-fold symmetric end state keeps the geometry correct.
-               viewBox has a symmetric margin so no path or arrowhead can ever
-               reach the SVG edge (root cause of the escaping arrow). -->
+               viewBox spans 220 units mapped onto 2.2 x --values-arrow-r, so
+               radius 100 = --values-arrow-r exactly, with a 10-unit symmetric
+               margin so no arrowhead can reach the SVG edge. -->
           <div
             class="values-arrow-layer"
             aria-hidden="true"
             [style.transform]="'translate(-50%, -50%) rotate(' + activeOffset() * 60 + 'deg)'"
           >
-            <svg viewBox="-8 -8 216 216" focusable="false">
+            <svg viewBox="-10 -10 220 220" focusable="false">
               <defs>
                 <marker
                   id="values-arrowhead"
@@ -115,21 +181,24 @@ const REVEAL_STAGGER_MS = 140;
                   markerUnits="userSpaceOnUse"
                   orient="auto"
                 >
-                  <path d="M1 1.8 L8 5 L1 8.2" fill="none" stroke="#1e3a8a" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round" />
+                  <path d="M1 1.8 L8 5 L1 8.2" fill="none" stroke="#1e3a8a" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round" />
                 </marker>
               </defs>
-              <!-- Six curved clockwise arcs, one per 60° slot section. Each arc
-                   runs on --values-arrow-r (just OUTSIDE the card ring): it
-                   starts ~6px beyond Card A's outer boundary and the arrowhead
-                   lands ~6px before Card B's outer boundary. -->
-              <path class="values-arrow" d="M105.23 0.14 A100 100 0 0 1 183.87 45.54" marker-end="url(#values-arrowhead)" />
-              <path class="values-arrow" d="M189.1 54.6 A100 100 0 0 1 189.1 145.4" marker-end="url(#values-arrowhead)" />
-              <!-- Lead arrow: guides the eye into the front (active) slot. -->
-              <path class="values-arrow values-arrow-lead" d="M183.87 154.46 A100 100 0 0 1 105.23 199.86" marker-end="url(#values-arrowhead)" />
-              <path class="values-arrow" d="M94.77 199.86 A100 100 0 0 1 16.13 154.46" marker-end="url(#values-arrowhead)" />
-              <path class="values-arrow" d="M10.9 145.4 A100 100 0 0 1 10.9 54.6" marker-end="url(#values-arrowhead)" />
-              <path class="values-arrow" d="M16.13 45.54 A100 100 0 0 1 54.77 0.14" marker-end="url(#values-arrowhead)" />
-            </svg>
+                            <!-- Six curved clockwise arcs, ONE per 60° slot section, generated
+                   from the same orbit geometry as the cards (SLOT_ANGLES + uniform
+                   card clearance, wrap-around normalized). Each arc runs on the
+                   card-center orbit radius: it starts just beyond Card A’s boundary
+                   and the arrowhead lands just before Card B’s boundary. The lead
+                   segment guides the eye into the front (active) slot. -->
+              @for (arrow of arrowPaths; track $index) {
+                <path
+                  class="values-arrow"
+                  [class.values-arrow-lead]="arrow.lead"
+                  [attr.d]="arrow.d"
+                  marker-end="url(#values-arrowhead)"
+                />
+              }
+              </svg>
           </div>
 
           <!-- Center: large dynamic display of the currently focused value.
@@ -172,7 +241,9 @@ const REVEAL_STAGGER_MS = 140;
               <app-value-card [value]="value" [active]="isFront(value)" (select)="selectValue(value)" />
             </div>
           }
+          </div>
         </div>
+        <!-- /.values-grid -->
 
         <!-- Mobile: compact interactive disclosure (explore) -->
         <ul class="values-mobile" role="list">
@@ -209,6 +280,9 @@ const REVEAL_STAGGER_MS = 140;
 })
 export class ValuesComponent implements AfterViewInit, OnDestroy {
   readonly values = COMPANY_VALUES;
+
+  /** Generated arrow geometry (same orbit model as the cards). */
+  readonly arrowPaths = ARROW_PATHS;
 
   /** Visual orbit rotation step (advanced by the single timer). */
   readonly activeOffset = signal(0);
