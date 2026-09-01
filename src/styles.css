@@ -66,7 +66,9 @@ html {
     var(--values-r) + var(--values-card-size) / 2 + var(--values-arrow-gap)
   );                                                    /* arrow path radius (outside cards) */
   position: relative;
-  padding: 1.75rem 0 2.25rem;
+  /* Vertical rhythm matched to the Company Story section so the two sections
+     read as one continuous composition. */
+  padding-block: clamp(3rem, 5vw + 1.5rem, 5.5rem);
   /* Continuous-surface rhythm: white flows into a whisper-light blue-gray so
      Story -> Values -> Projects reads as one presentation, not three bands. */
   background: linear-gradient(180deg, #ffffff 0%, #f4f7fc 100%);
@@ -82,7 +84,10 @@ html {
 .values-background {
   position: absolute;
   inset: 0;
-  background: url('/assets/media/gallery/20231222-pipeline.webp') center / cover no-repeat;
+  /* Relative (no leading slash) so the builder resolves and bundles the file
+     at build time — the emitted URL works on any deploy path (root, GitHub
+     Pages sub-path), unlike '/assets/...' which only works at the root. */
+  background: url('assets/media/gallery/20231222-pipeline.webp') center / cover no-repeat;
   opacity: 0.1;
   filter: grayscale(0.9) brightness(1.12) contrast(0.92);
   pointer-events: none;
@@ -94,62 +99,33 @@ html {
 }
 
 /* ---- Two-column composition: editorial left, orbit right ------------
-   ONE section, two visual columns. The orbit stays the hero and keeps its
-   own 36rem sizing; the left column is an editorial introduction.
-   <1024px: stacked vertically (orbit centered) — based on available space.
-   RTL: grid tracks follow document direction, so the editorial column
-   flips to the right automatically in Arabic; the orbit is unchanged. */
+   EXACT clone of the Company Story layout system (.cs-layout): same
+   max-width, same centering, same 46/54 proportions and gutters, so the
+   two sections are pixel-consistent. RTL: grid tracks follow document
+   direction, so the editorial column flips automatically in Arabic. */
 .values-grid {
-  display: block;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 2.5rem; /* mobile */
+  align-items: center;
+  max-width: 75rem;
+  margin-inline: auto;
 }
 
 @media (min-width: 768px) {
   .values-grid {
-    display: grid;
-    grid-template-columns: minmax(0, 1fr);
-    gap: 1.5rem;
-    align-items: center;
-  }
-
-  .values-editorial {
-    text-align: center;
-    max-width: 40rem;
-    margin-inline: auto;
-  }
-
-  .values-editorial .values-intro {
-    margin-inline: auto;
+    gap: 3rem; /* tablet */
   }
 }
 
 @media (min-width: 1024px) {
   .values-grid {
-    /* Balanced split with a floor for the text column; `minmax(0, 1.2fr)`
-       lets the orbit column shrink safely instead of overflowing. */
-    grid-template-columns: minmax(260px, 0.8fr) minmax(0, 1.2fr);
-    gap: 3rem;
-    text-align: start;
+    /* Same proportions as the Company Story layout (46/54 with a 4.5rem
+       gutter); `minmax(0, 54fr)` lets the orbit column shrink safely instead
+       of overflowing, and still leaves >=36rem for the orbit. */
+    grid-template-columns: minmax(0, 46fr) minmax(0, 54fr);
+    gap: 4.5rem; /* desktop */
   }
-
-  .values-editorial {
-    text-align: start;
-    max-width: none;
-    margin-inline: 0;
-  }
-
-  .values-editorial .values-intro {
-    margin-inline: 0;
-  }
-}
-
-.values-container {
-  position: relative;
-}
-
-/* Tighten the shared section header only inside the Values section so the
-   orbit sits close to the heading without a large blank band. */
-.values-section .values-header {
-  margin-bottom: 1.25rem !important;
 }
 
 /* ---- Desktop / tablet orbit ------------------------------------- */

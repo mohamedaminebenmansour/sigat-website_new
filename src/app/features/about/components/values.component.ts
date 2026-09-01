@@ -102,9 +102,12 @@ const REVEAL_STAGGER_MS = 140;
         min-width: 0; /* never let long translated words widen the grid track */
       }
 
-      /* Left-align the shared section header inside the editorial column (its
-         own default is centered). Scoped ::ng-deep because the markup belongs
-         to the child SectionHeaderComponent; it only affects this instance. */
+      /* Left-align + typographically match the shared section header inside
+         the editorial column (its own defaults are centered / text-3xl).
+         Sizes mirror the Company Story (.cs-title / .cs-text) so the two
+         sections read identically. Scoped ::ng-deep because the markup
+         belongs to the child SectionHeaderComponent; only this instance is
+         affected. */
       .values-editorial ::ng-deep app-section-header > div {
         text-align: start;
         margin-bottom: 0;
@@ -112,17 +115,36 @@ const REVEAL_STAGGER_MS = 140;
       .values-editorial ::ng-deep app-section-header .flex {
         justify-content: flex-start;
       }
+      .values-editorial ::ng-deep app-section-header h2 {
+        margin: 0;
+        font-size: clamp(1.75rem, 1.15rem + 2.2vw, 2.5rem);
+        font-weight: 700;
+        line-height: 1.15;
+        letter-spacing: -0.015em;
+        color: #0f172a;
+      }
       .values-editorial ::ng-deep app-section-header p {
-        margin-inline: 0;
+        margin: 0;
+        margin-top: 1.25rem;
+        font-size: 1rem;
+        line-height: 1.75;
+        color: #475569;
       }
 
+      /* Intro paragraph mirrors .cs-text exactly. */
       .values-intro {
         margin: 0;
         max-width: 34rem;
-        font-size: clamp(0.95rem, 1.15vw, 1.05rem);
-        line-height: 1.7;
-        color: rgba(30, 58, 138, 0.85);
+        font-size: 1rem;
+        line-height: 1.75;
+        color: #475569;
         overflow-wrap: break-word;
+      }
+
+      @media (min-width: 1024px) {
+        .values-intro {
+          font-size: 1.0625rem;
+        }
       }
     `
   ],
@@ -133,7 +155,7 @@ const REVEAL_STAGGER_MS = 140;
            Decorative only (aria-hidden) and pointer-events: none. -->
       <div class="values-background" aria-hidden="true"></div>
 
-      <div class="values-container values-content mx-auto px-4">
+      <div class="container values-content mx-auto px-4">
         <div class="values-grid">
           <!-- LEFT: editorial introduction (static, presentational only).
                Does not name individual values — the orbit presents those. -->
