@@ -7,7 +7,6 @@ import {
   ViewChildren,
   QueryList,
   computed,
-  effect,
   inject,
   input,
   signal,
@@ -18,8 +17,7 @@ const GALLERY_AUTOPLAY_MS = 3000;
 const INTERACTION_RESUME_MS = 3000;
 const SWIPE_THRESHOLD_PX = 42;
 const SWIPE_MAX_DY_PX = 80;
-const SLOT_TRANSITION_MS = 700;
-const TRAVEL_MS = 900;
+const TRAVEL_MS = 950;
 
 const SLOT_DEFS = [
   { id: 'center', cssClass: 'pgx-r0' },
@@ -32,42 +30,14 @@ const SLOT_DEFS = [
 type SlotId = (typeof SLOT_DEFS[number])['id'];
 type SlotIndex = 0 | 1 | 2 | 3 | 4;
 
-interface SlotDisplay {
-  id: SlotId;
-  cssClass: string;
-  currentSrc: string;
-  nextSrc: string;
-  alt: string;
-  index: SlotIndex;
-  isCenter: boolean;
-  showNext: boolean;
-}
-
-interface Traveler {
-  id: number;
+interface GalleryCard {
+  key: number;
   src: string;
-  /** Current width (px) of the overlay at its start position. */
-  x: number;
-  /** Current height (px) of the overlay at its start position. */
-  y: number;
-  /** Left offset (px) relative to the stage. */
-  left: number;
-  /** Top offset (px) relative to the stage. */
-  top: number;
-  /** Horizontal translation (px) to the destination slot. */
-  tdx: number;
-  /** Vertical translation (px) to the destination slot. */
-  tdy: number;
-  /** Final scale (destination width / start width). */
-  scale: number;
-  /** Focus scale mid-flight (brief overshoot for the incoming card). */
-  focusScale: number;
-  /** Layering during the flight (highest for the incoming card). */
-  z: number;
-  /** True once the overlay is allowed to start its animation. */
-  active: boolean;
-  /** Animation delay (ms) for a subtle cascade of the secondary cards. */
-  delay: number;
+  /** Visual slot index (0 = primary center). */
+  slot: SlotIndex;
+  cssClass: string;
+  alt: string;
+  isCenter: boolean;
 }
 
 @Component({
@@ -138,13 +108,18 @@ interface Traveler {
         border: 1px solid rgba(15, 23, 42, 0.14);
         box-shadow: 0 18px 40px -20px rgba(15, 23, 42, 0.5);
         transform: translateX(-50%) translateY(var(--lift, 0px))
-                   rotate(var(--rot, 0deg)) scale(var(--s, 1));
+                   rotate(var(--rot, 0deg)) scale(var(--s, 1))
+                   var(--flip, scale(1) translate(0));
         transition:
+          left 750ms cubic-bezier(0.22, 1, 0.36, 1),
+          top 750ms cubic-bezier(0.22, 1, 0.36, 1),
+          width 750ms cubic-bezier(0.22, 1, 0.36, 1),
           transform 750ms cubic-bezier(0.22, 1, 0.36, 1),
           opacity 550ms ease,
           box-shadow 550ms ease;
         will-change: transform, opacity;
       }
+      .pgx-layer.pgx-flipping { transition: none !important; }
 
       .pgx-layer:focus-visible {
         outline: 2px solid #ffffff;
@@ -650,47 +625,6 @@ interface Traveler {
         --r: 14px;
         z-index: ;
       }
-      /* ------------------------------------------------------------------
-       * Secondary -> Primary TRAVEL overlay.
-       * A temporary clone of the selected image physically flies from its
-       * source slot to the center slot. Keyed move on the GPU only
-       * (translate3d + scale), with a confident settle — no bounce.
-       * ------------------------------------------------------------------ */
-      .pgx-traveler {
-        position: absolute;
-        z-index: var(--pgx-travelz, 60);
-        margin: 0;
-        padding: 0;
-        border-radius: var(--r, 16px);
-        overflow: hidden;
-        background: #0f172a;
-        border: 1px solid rgba(15, 23, 42, 0.14);
-        box-shadow: 0 18px 40px -20px rgba(15, 23, 42, 0.5);
-        pointer-events: none;
-        will-change: transform, opacity;
-        opacity: 0;
-      }
-      .pgx-traveler img {
-        position: absolute;
-        inset: 0;
-        width: 100%;
-        height: 100%;
-        object-fit: cover;
-        user-select: none;
-        -webkit-user-drag: none;
-      }
-      .pgx-traveler--active {
-        animation: pgx-travel 900ms cubic-bezier(0.22, 1, 0.36, 1) forwards;
-      }
-      @keyframes pgx-travel {
-        0%   { opacity: 0; transform: translate3d(0, 0, 0) scale(1); }
-        12%  { opacity: 1; transform: translate3d(0, 0, 0) scale(1); }
-        70%  { opacity: 1; transform: translate3d(var(--tdx), var(--tdy), 0) scale(var(--tf, var(--ts))); }
-        100% { opacity: 1; transform: translate3d(var(--tdx), var(--tdy), 0) scale(var(--ts)); }
-      }
-      @media (prefers-reduced-motion: reduce) {
-        .pgx-traveler { display: none; }
-      }
     `,
   ],
   template: `
@@ -706,72 +640,37 @@ interface Traveler {
         (pointerdown)="onPointerDown($event)"
         (pointerup)="onPointerUp($event)"
       >
-        @for (slot of displaySlots(); track slot.id) {
+        @for (card of cards(); track card.key) {
           <button
             #slotEl
             type="button"
-            [class]="'pgx-layer ' + slot.cssClass"
-            (click)="onLayerClick(slot.index)"
-            [attr.aria-label]="slot.alt"
-            [attr.aria-current]="slot.isCenter ? 'true' : null"
+            [class]="'pgx-layer ' + card.cssClass"
+            (click)="onLayerClick(card.slot)"
+            [attr.aria-label]="card.alt"
+            [attr.aria-current]="card.isCenter ? 'true' : null"
           >
-            <span class="pgx-img-stack">
-              <img
-                [ngSrc]="slot.currentSrc"
-                width="1280"
-                height="960"
-                class="pgx-img pgx-img-a"
-                [class.pgx-img-hidden]="slot.showNext"
-                [alt]="slot.alt"
-                [loading]="slot.isCenter ? 'eager' : 'lazy'"
-                [attr.fetchpriority]="slot.isCenter ? 'high' : null"
-                (error)="onImgError(slot.currentSrc)"
-              />
-              <img
-                [src]="slot.nextSrc"
-                width="1280"
-                height="960"
-                class="pgx-img pgx-img-b"
-                [class.pgx-img-hidden]="!slot.showNext"
-                [alt]="slot.alt"
-                loading="lazy"
-                aria-hidden="true"
-                (error)="onImgError(slot.nextSrc)"
-              />
-            </span>
+            <img
+              [ngSrc]="card.src"
+              width="1280"
+              height="960"
+              class="pgx-img"
+              [alt]="card.alt"
+              [loading]="card.isCenter ? 'eager' : 'lazy'"
+              [attr.fetchpriority]="card.isCenter ? 'high' : null"
+              (error)="onImgError(card.src)"
+            />
           </button>
         }
       </div>
 
-      @if (travelers().length) {
-        @for (t of travelers(); track t.id) {
-          <div
-            class="pgx-traveler"
-            [class.pgx-traveler--active]="t.active"
-            [style.width.px]="t.x"
-            [style.height.px]="t.y"
-            [style.left.px]="t.left"
-            [style.top.px]="t.top"
-            [style.z-index]="t.z"
-            [style.--tdx]="t.tdx + 'px'"
-            [style.--tdy]="t.tdy + 'px'"
-            [style.--ts]="t.scale"
-            [style.--tf]="t.focusScale"
-            [style.animation-delay]="t.delay + 'ms'"
-          >
-            <img [src]="t.src" [alt]="altText()" draggable="false" />
-          </div>
-        }
-      }
-
-      @if (displaySlots().length >= 2) {
+      @if (cards().length >= 2) {
         <div class="pgx-controls">
           <button
             type="button"
             class="pgx-btn pgx-btn--prev"
             (click)="previous()"
             aria-label="Previous image"
-            [disabled]="displaySlots().length < 2"
+            [disabled]="cards().length < 2"
           >
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
                  stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
@@ -788,7 +687,7 @@ interface Traveler {
             class="pgx-btn pgx-btn--next"
             (click)="next()"
             aria-label="Next image"
-            [disabled]="displaySlots().length < 2"
+            [disabled]="cards().length < 2"
           >
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
                  stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
@@ -825,15 +724,9 @@ export class ProjectGalleryComponent {
   private swipeStart: { x: number; y: number; t: number } | null = null;
   private lastSwipeAt = 0;
 
-  private readonly displayedSrcs = signal<string[]>([]);
-
   /** Transition lock (plain field, not a signal): prevents overlapping transitions. */
   private isTransitioning = false;
   private travelTimer: ReturnType<typeof setTimeout> | null = null;
-  private travelerId = 0;
-
-  /** Transient secondary<->primary travel overlays rendered in the template. */
-  readonly travelers = signal<Traveler[]>([]);
 
   @ViewChild('stageEl') private stageEl?: ElementRef<HTMLElement>;
   @ViewChildren('slotEl') private slotEls?: QueryList<ElementRef<HTMLElement>>;
@@ -843,18 +736,6 @@ export class ProjectGalleryComponent {
     this.destroyRef.onDestroy(() => {
       this.clearTimer();
       if (this.travelTimer !== null) clearTimeout(this.travelTimer);
-    });
-
-    effect(() => {
-      const slots = this.displaySlots();
-      const hasTransition = slots.some(s => s.showNext);
-      if (hasTransition && slots.length > 0) {
-        if (this.transitionTimer) clearTimeout(this.transitionTimer);
-        this.transitionTimer = setTimeout(() => {
-          this.displayedSrcs.set(slots.map(s => s.showNext ? s.nextSrc : s.currentSrc));
-          this.transitionTimer = null;
-        }, SLOT_TRANSITION_MS);
-      }
     });
   }
 
@@ -873,29 +754,23 @@ export class ProjectGalleryComponent {
     return unique.filter(src => !this.failedImages().has(src));
   });
 
-  readonly displaySlots = computed<SlotDisplay[]>(() => {
+  readonly cards = computed<GalleryCard[]>(() => {
     const images = this.galleryImages();
     const n = images.length;
     if (n === 0) return [];
 
     const off = ((this.offset() % n) + n) % n;
     const count = Math.min(5, n);
-    const displayed = this.displayedSrcs();
 
     return Array.from({ length: count }, (_, i) => {
-      const src = images[(off + i) % n];
-      const displayedSrc = i < displayed.length ? displayed[i] : src;
-      const showNext = displayed.length > 0 && displayedSrc !== src;
-
+      const idx = (off + i) % n;
       return {
-        id: SLOT_DEFS[i].id as SlotId,
+        key: idx,
+        src: images[idx],
+        slot: i as SlotIndex,
         cssClass: SLOT_DEFS[i].cssClass,
-        currentSrc: showNext ? displayedSrc : src,
-        nextSrc: showNext ? src : displayedSrc,
-        alt: `${this.altText()} ${((off + i) % n) + 1}`,
-        index: i as SlotIndex,
+        alt: `${this.altText()} ${idx + 1}`,
         isCenter: i === 0,
-        showNext,
       };
     });
   });
@@ -1005,100 +880,90 @@ export class ProjectGalleryComponent {
     if (this.isTransitioning) return;
 
     this.isTransitioning = true;
-    this.spawnTravelers(opts.sourceSlot, opts.targetOffset);
+    this.beginFlip(opts.targetOffset);
     this.offset.set(((opts.targetOffset % n) + n) % n);
     this.scheduleAutoplay(opts.resumeMs);
 
     if (this.travelTimer !== null) clearTimeout(this.travelTimer);
     this.travelTimer = setTimeout(() => {
-      this.travelers.set([]);
       this.isTransitioning = false;
       this.travelTimer = null;
-    }, TRAVEL_MS + 60);
+      this.clearFlipStyles();
+    }, TRAVEL_MS + 80);
   }
 
   /**
-   * FLIP-style spatial transition for EVERY card that changes slot.
-   * Reads the fixed slot rects once (FIRST), computes where each image
-   * lands after the offset change (LAST), then renders a transient overlay
-   * per moving card that flies from its old slot to its new slot on the GPU
-   * (transform/opacity only). The incoming primary gets a subtle focus
-   * overshoot + highest z; secondaries cascade with a tiny stagger and stay
-   * subordinate. Persistent slots crossfade underneath, so no panel is ever
-   * empty. Reads happen BEFORE the offset changes (FRIST positions).
-   *
-   * sourceSlot  - the slot that is currently being promoted (images[off+sourceSlot]).
-   * targetOffset- the offset the gallery will move to for this transition.
+   * FLIP the REAL card elements. Each persistent <img> is keyed by its image
+   * index (`cards().key`), so swapping a card's slot class moves that same DOM
+   * element to a new position. We capture each card's old rect (FIRST), then
+   * after the offset change we re-measure (LAST) and animate the same element
+   * from old -> new via transform/scale + layout transitions. No clone / ghost
+   * / duplicate image element is ever created.
    */
-  private spawnTravelers(sourceSlot: SlotIndex, targetOffset: number): void {
+  private beginFlip(targetOffset: number): void {
     if (this.reduceMotion) return;
-    if (!this.slotEls || this.slotEls.length < 2) return;
-    if (!this.stageEl) return;
+    if (!this.slotEls || !this.stageEl || this.slotEls.length < 1) return;
+    const n = this.galleryImages().length;
+    if (n < 2) return;
 
-    const images = this.galleryImages();
-    const n = images.length;
-    const off = ((this.offset() % n) + n) % n;
-    const newOff = ((targetOffset % n) + n) % n;
-    const slotCount = Math.min(5, n);
+    // FIRST: record every visible card's current rect, keyed by image index.
+    const first = new Map<number, DOMRect>();
+    this.cards().forEach((card, i) => {
+      const el = this.slotEls?.get(i);
+      if (el) first.set(card.key, el.nativeElement.getBoundingClientRect());
+    });
 
-    const stageRect = this.stageEl.nativeElement.getBoundingClientRect();
-    const rects: DOMRect[] = [];
-    for (let i = 0; i < slotCount; i++) {
-      const r = this.laneRect(i);
-      if (!r) return;
-      rects.push(r);
-    }
-
-    const list: Traveler[] = [];
-
-    for (let i = 0; i < slotCount; i++) {
-      const imgIdx = (off + i) % n;
-      const newSlot = ((imgIdx - newOff) % n + n) % n;
-      // Images that leave the visible window (n > 5) are handled by the
-      // persistent crossfade; only animate cards that stay on screen.
-      if (newSlot >= slotCount) continue;
-
-      const from = rects[i];
-      const to = rects[newSlot];
-      const scale = to.width / from.width;
-      const isNewPrimary = newSlot === 0;
-      const isOldPrimary = i === 0;
-      const delay = isNewPrimary || isOldPrimary ? 0 : 20 + (newSlot % 3) * 20;
-      const focusScale = isNewPrimary ? scale * 1.06 : scale;
-
-      list.push({
-        id: ++this.travelerId,
-        src: images[imgIdx],
-        x: from.width,
-        y: from.height,
-        left: from.left - stageRect.left,
-        top: from.top - stageRect.top,
-        tdx: to.left - from.left,
-        tdy: to.top - from.top,
-        scale,
-        focusScale,
-        z: isNewPrimary ? 90 : isOldPrimary ? 85 : 70,
-        active: false,
-        delay,
-      });
-    }
-
-    this.travelers.set(list);
-    if (typeof requestAnimationFrame !== 'undefined') {
+    // The offset change re-renders on the next change-detection cycle; wait two
+    // frames so the DOM reflects the new slot assignments before measuring LAST.
+    requestAnimationFrame(() => {
       requestAnimationFrame(() => {
-        requestAnimationFrame(() => {
-          this.travelers.update(items => items.map(t => ({ ...t, active: true })));
+        if (!this.slotEls) return;
+
+        const moving: { el: HTMLElement; dx: number; dy: number; sx: number }[] = [];
+
+        this.cards().forEach((card, i) => {
+          const ref = this.slotEls?.get(i);
+          if (!ref) return;
+          const f = first.get(card.key);
+          if (!f) return; // entering card (n > 5) => appears in place, no ghost
+
+          const el = ref.nativeElement;
+          const last = el.getBoundingClientRect();
+          const dx = f.left - last.left;
+          const dy = f.top - last.top;
+          const sx = f.width / last.width;
+          if (Math.abs(dx) < 0.5 && Math.abs(dy) < 0.5 && Math.abs(sx - 1) < 0.01) return;
+          moving.push({ el, dx, dy, sx });
+        });
+
+        if (moving.length === 0) return;
+
+        // INVERT: snap each real element back to its old spot (no transition),
+        // measured from the live stage so the values are always viewport-correct.
+        moving.forEach(m => {
+          m.el.classList.add('pgx-flipping');
+          m.el.style.setProperty('--flip', `translate(${m.dx}px, ${m.dy}px) scale(${m.sx})`);
+        });
+        const stage = this.stageEl?.nativeElement;
+        if (stage) void stage.offsetHeight; // force reflow so the inverse is committed
+
+        // PLAY: release the snap; the transition glides each real element to
+        // its natural new slot position.
+        moving.forEach(m => {
+          m.el.classList.remove('pgx-flipping');
+          m.el.style.setProperty('--flip', 'scale(1) translate(0)');
         });
       });
-    }
+    });
   }
 
-  /** Read the bounding rect of a live slot element (by slot index). */
-  private laneRect(index: number): DOMRect | null {
-    if (!this.slotEls) return null;
-    const el = this.slotEls.get(index);
-    if (!el) return null;
-    return el.nativeElement.getBoundingClientRect();
+  /** Remove any leftover inline flip styles once the lock releases. */
+  private clearFlipStyles(): void {
+    if (!this.slotEls) return;
+    this.slotEls.forEach(el => {
+      el.nativeElement.style.removeProperty('--flip');
+      el.nativeElement.classList.remove('pgx-flipping');
+    });
   }
 
   private scheduleAutoplay(ms: number): void {
