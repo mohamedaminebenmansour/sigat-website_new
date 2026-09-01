@@ -26,12 +26,16 @@ const SLOT_ANGLES = [-90, -30, 30, 90, 150, 210];
 /** The slot that carries the "active / front" emphasis (bottom-most). */
 const FRONT_SLOT = 3;
 
-/** Uniform angular clearance (degrees) between an arrow tip and a card boundary. */
-const ARROW_CLEARANCE_DEG = 3;
+/**
+ * Half-width (degrees) of the tiny invisible stub arc that carries each
+ * arrowhead. The stub runs clockwise, so the auto-oriented marker points
+ * along the true circular tangent at the arc midpoint.
+ */
+const ARROW_HEAD_STUB_DEG = 2;
 
 /** SVG user-space orbit geometry of the arrow layer: the viewBox is sized so
- *  that radius 100 user units renders at exactly --values-arrow-r px — the
- *  circle that runs --values-arrow-gap OUTSIDE every card boundary. */
+ *  that radius 100 user units renders at exactly --values-r px — the circle
+ *  passing through the CENTERS of the six value cards. */
 const ARROW_SVG_RADIUS = 100;
 const ARROW_SVG_CENTER = 100;
 
@@ -47,22 +51,21 @@ function pointOnOrbit(angleDeg: number): string {
 }
 
 /**
- * The six arrow paths, derived from the ONE orbit geometry model (SLOT_ANGLES
- * + orbit radius). Segment i connects slot i -> slot (i + 1) % SLOT_COUNT,
- * running on the card-center orbit circle trimmed by a uniform clearance at
- * both card boundaries. The end angle is normalized (+360°) so the final
- * F -> A segment is a normal 60° clockwise step — never a wrap-around jump.
- * The "lead" segment is the one entering the front (active) slot.
+ * The six arrowhead carriers, derived from the ONE orbit geometry model
+ * (SLOT_ANGLES + card-center orbit radius). Segment i spans the 60° arc from
+ * slot i to slot (i + 1) % SLOT_COUNT; only a tiny invisible stub around the
+ * arc MIDPOINT is emitted, and its auto-oriented marker renders the only
+ * visible part: the arrowhead at the exact middle of the connection,
+ * pointing along the clockwise circular tangent. The end angle normalization
+ * is inherent here (cos/sin handle any angle), so F -> A uses the exact same
+ * rule as the other five segments. The "lead" head is the one on the segment
+ * entering the front (active) slot.
  */
 const ARROW_PATHS: readonly { d: string; lead: boolean }[] = SLOT_ANGLES.map(
   (startAngle, i) => {
-    const start = startAngle + ARROW_CLEARANCE_DEG;
-    let end = SLOT_ANGLES[(i + 1) % SLOT_COUNT] - ARROW_CLEARANCE_DEG;
-    if (end <= start) {
-      end += 360;
-    }
+    const mid = startAngle + 180 / SLOT_COUNT;
     return {
-      d: `M ${pointOnOrbit(start)} A ${ARROW_SVG_RADIUS} ${ARROW_SVG_RADIUS} 0 0 1 ${pointOnOrbit(end)}`,
+      d: `M ${pointOnOrbit(mid - ARROW_HEAD_STUB_DEG)} A ${ARROW_SVG_RADIUS} ${ARROW_SVG_RADIUS} 0 0 1 ${pointOnOrbit(mid)}`,
       lead: (i + 1) % SLOT_COUNT === FRONT_SLOT
     };
   }
@@ -176,20 +179,20 @@ const REVEAL_STAGGER_MS = 140;
                   viewBox="0 0 10 10"
                   refX="5.5"
                   refY="5"
-                  markerWidth="6"
-                  markerHeight="6"
+                  markerWidth="8.3"
+                  markerHeight="8.3"
                   markerUnits="userSpaceOnUse"
                   orient="auto"
                 >
                   <path d="M1 1.8 L8 5 L1 8.2" fill="none" stroke="#1e3a8a" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round" />
                 </marker>
               </defs>
-                            <!-- Six curved clockwise arcs, ONE per 60° slot section, generated
-                   from the same orbit geometry as the cards (SLOT_ANGLES + uniform
-                   card clearance, wrap-around normalized). Each arc runs on the
-                   card-center orbit radius: it starts just beyond Card A’s boundary
-                   and the arrowhead lands just before Card B’s boundary. The lead
-                   segment guides the eye into the front (active) slot. -->
+                                          <!-- Six INVISIBLE clockwise arc stubs, ONE per 60° slot section,
+                   generated from the same orbit geometry as the cards (SLOT_ANGLES,
+                   card-center radius). Each stub spans ±2° around the MIDPOINT of
+                   its 60° connection and carries ONLY the arrowhead, auto-oriented
+                   along the circular tangent — the connecting line itself is not
+                   drawn. The lead head sits on the segment entering the front slot. -->
               @for (arrow of arrowPaths; track $index) {
                 <path
                   class="values-arrow"

@@ -188,8 +188,8 @@ html {
     position: absolute;
     left: 50%;
     top: 50%;
-    width: calc(var(--values-arrow-r) * 2.2);
-    height: calc(var(--values-arrow-r) * 2.2);
+    width: calc(var(--values-r) * 2.2);
+    height: calc(var(--values-r) * 2.2);
     transform: translate(-50%, -50%);
     pointer-events: none;
     /* Rotates with the orbit (60deg per step) using the same premium curve
@@ -212,10 +212,10 @@ html {
 
   .values-arrow {
     fill: none;
-    stroke: #1e3a8a;
-    /* 0.83 user units renders the same px thickness the previous 0.9 did,
-       because the viewBox now maps 100 units = --values-arrow-r exactly. */
-    stroke-width: 0.83;
+    /* The connecting line itself is INVISIBLE by design: the path exists only
+       as geometry to position + orient the arrowhead at the arc midpoint.
+       opacity still applies to the arrowhead marker (lead emphasis). */
+    stroke: none;
     stroke-linecap: round;
     stroke-linejoin: round;
     opacity: 0.42;
