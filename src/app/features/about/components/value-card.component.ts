@@ -99,7 +99,10 @@ import { CompanyValue } from './values.data';
 
       .value-card .title {
         display: block;
-        font-size: clamp(0.78rem, 1.2vw, 0.86rem);
+        /* Scales with the orbit container (cqw resolves against the nearest
+           ancestor size container, .values-orbit) so larger cards carry
+           proportionally larger text. */
+        font-size: clamp(0.8rem, 2.4cqw, 0.95rem);
         font-weight: 700;
         letter-spacing: 0.01em;
         line-height: 1.15;
@@ -109,7 +112,7 @@ import { CompanyValue } from './values.data';
 
       .value-card .desc {
         display: -webkit-box;
-        font-size: clamp(0.66rem, 0.95vw, 0.74rem);
+        font-size: clamp(0.68rem, 1.9cqw, 0.8rem);
         line-height: 1.32;
         max-width: 100%;
         margin: 0;

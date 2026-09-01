@@ -55,6 +55,8 @@ interface SlotDisplay {
        *
        * Variable legend (consumed by the .pgx-layer rule below):
        *   --w   width  (% of stage width)
+       *   --h   height (any CSS length, e.g. 260px; overrides the automatic
+       *         4:3 aspect-ratio for that slot — leave unset for auto ratio)
        *   --x   horizontal offset from stage center (negative = left)
        *   --y   top edge (%, of stage height; negative = up)
        *   --rot tilt (positive = clockwise, negative = counter)
@@ -87,7 +89,15 @@ interface SlotDisplay {
         left: calc(50% + var(--x, 0%));
         top: var(--y, 0%);
         width: var(--w, 70%);
-        aspect-ratio: 4 / 3;
+        /* Manual height override: set --h (e.g. 260px) on a slot to fix its
+           height. When --h is unset this computes to auto and the 4:3
+           aspect-ratio below controls the size — behavior unchanged. */
+        height: var(--h, auto);
+        /* If --h is unset the fallback 4 / 3 applies as before. If --h holds
+           a length (e.g. 260px), the var() substitution makes this value
+           invalid at computed-value time, so aspect-ratio resets to its
+           initial value (auto) and the explicit height wins. */
+        aspect-ratio: var(--h, 4 / 3);
         padding: 0;
         overflow: hidden;
         border-radius: var(--r, 16px);
@@ -511,16 +521,23 @@ interface SlotDisplay {
       /* ==============================================================
        * MY CUSTOM OVERRIDES - change here to see immediate changes
        * --------------------------------------------------------------
-       * Edit --w / --x / --y / --rot (and optionally --s / --r /
+       * Edit --w / --x / --y / --rot (and optionally --h / --s / --r /
        * --lift) below. This block is the LAST declaration of these
        * selectors, so it wins over the mobile/tablet/desktop blocks
        * above on EVERY screen size (same specificity => source order
        * decides). Values below are the current live desktop values,
        * so the gallery looks identical until you change something.
+       *
+       * --h: setting it on a slot gives that card a FIXED height and
+       * disables the automatic 4:3 aspect-ratio for it (width stays
+       * controlled by --w). Because this block comes last, an --h set
+       * here applies on every screen size.
        * ============================================================== */
       .pgx-r0 {
         /* CHANGE THIS to make the panel wider/narrower (percentage of stage width) */
         --w: 52%;
+        /* CHANGE THIS to set a fixed height (e.g., 260px) – overrides aspect-ratio */
+        /* --h: 260px; */
         /* CHANGE THIS to move it left/right (negative = left, positive = right) */
         --x: 0%;
         /* CHANGE THIS to move it up/down (negative = up, positive = down) */
@@ -536,6 +553,8 @@ interface SlotDisplay {
       .pgx-r1 {
         /* CHANGE THIS to make the panel wider/narrower (percentage of stage width) */
         --w: 48%;
+        /* CHANGE THIS to set a fixed height (e.g., 260px) – overrides aspect-ratio */
+        /* --h: 260px; */
         /* CHANGE THIS to move it left/right (negative = left, positive = right) */
         --x: 20%;
         /* CHANGE THIS to move it up/down (negative = up, positive = down) */
@@ -551,6 +570,8 @@ interface SlotDisplay {
       .pgx-r2 {
         /* CHANGE THIS to make the panel wider/narrower (percentage of stage width) */
         --w: 48%;
+        /* CHANGE THIS to set a fixed height (e.g., 260px) – overrides aspect-ratio */
+        /* --h: 260px; */
         /* CHANGE THIS to move it left/right (negative = left, positive = right) */
         --x: 26%;
         /* CHANGE THIS to move it up/down (negative = up, positive = down) */
@@ -566,6 +587,8 @@ interface SlotDisplay {
       .pgx-r3 {
         /* CHANGE THIS to make the panel wider/narrower (percentage of stage width) */
         --w: 50%;
+        /* CHANGE THIS to set a fixed height (e.g., 260px) – overrides aspect-ratio */
+        /* --h: 260px; */
         /* CHANGE THIS to move it left/right (negative = left, positive = right) */
         --x: -25%;
         /* CHANGE THIS to move it up/down (negative = up, positive = down) */
@@ -581,6 +604,8 @@ interface SlotDisplay {
       .pgx-r4 {
         /* CHANGE THIS to make the panel wider/narrower (percentage of stage width) */
         --w: 55%;
+        /* CHANGE THIS to set a fixed height (e.g., 260px) – overrides aspect-ratio */
+        /* --h: 260px; */
         /* CHANGE THIS to move it left/right (negative = left, positive = right) */
         --x: -22%;
         /* CHANGE THIS to move it up/down (negative = up, positive = down) */

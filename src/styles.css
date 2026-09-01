@@ -50,14 +50,16 @@ html {
 
 .values-section {
   /* Radial geometry system — every size is derived so the composition stays
-     consistent at any breakpoint:
-       orbit radius   = centerR + gap + cardR   (center never touched by cards)
-       arrow radius   = orbitR + cardR + gap    (arrows wrap OUTSIDE the cards)
-     Verified bounds: center/card ratio 1.56x; adjacent-card gap ~54px;
-     outer extent (arrowR + head) stays inside the 36rem orbit container. */
-  --values-card-size: clamp(8.5rem, 12vw, 9rem);        /* card diameter */
-  --values-center: clamp(12.5rem, 18.5vw, 14rem);       /* center diameter */
-  --values-center-gap: 0.875rem;                        /* center <-> cards breathing room */
+     consistent at any breakpoint. Card/center sizes use cqw and resolve
+     against the .values-orbit size container, so the geometry always fits
+     the available column (worst case ~1024px needs ~493px of the ~497px
+     column; at the 42rem cap: center 38cqw / card 24.5cqw, ratio ~1.55).
+        orbit radius   = centerR + gap + cardR   (center never touched by cards)
+        arrow path     = card-center circle      (invisible; heads only)
+  */
+  --values-card-size: clamp(8.25rem, 24.5cqw, 10.5rem);  /* card diameter (scales with orbit width) */
+  --values-center: clamp(12.5rem, 38cqw, 16rem);         /* center diameter (ratio to card kept ~1.55) */
+  --values-center-gap: 0.9rem;                           /* center <-> cards breathing room */
   --values-arrow-gap: 0.375rem;                         /* arrow <-> card edge clearance */
   --values-r: calc(
     var(--values-center) / 2 + var(--values-card-size) / 2 + var(--values-center-gap)
@@ -132,9 +134,13 @@ html {
 @media (min-width: 768px) {
   .values-orbit {
     position: relative;
-    width: min(100%, 36rem);
+    width: min(100%, 42rem);
     aspect-ratio: 1 / 1;
     margin: 0 auto;
+    /* Size container: the cqw units in the geometry variables above resolve
+       against THIS element's width, so cards/center/radius always fit the
+       available column at every breakpoint (no clipping at narrow desktop). */
+    container-type: inline-size;
   }
 
   /* Decorative rings (thin, subtle, non-interactive). */
@@ -253,8 +259,8 @@ html {
     display: flex;
     align-items: center;
     justify-content: center;
-    width: 2.5rem;
-    height: 2.5rem;
+    width: 2.75rem;
+    height: 2.75rem;
     border-radius: 9999px;
     background: linear-gradient(135deg, #1e3a8a 0%, #3b5bdb 100%);
     color: #ffffff;
@@ -262,12 +268,12 @@ html {
   }
 
   .values-center-icon i {
-    font-size: 1.25rem;
+    font-size: 1.4rem;
     line-height: 1;
   }
 
   .values-center-title {
-    font-size: clamp(0.9rem, 1.3vw, 1.05rem);
+    font-size: clamp(0.95rem, 2.4cqw, 1.2rem);
     font-weight: 800;
     letter-spacing: 0.04em;
     text-transform: uppercase;
@@ -300,7 +306,7 @@ html {
   }
 
   .values-center-desc {
-    font-size: clamp(0.68rem, 0.95vw, 0.76rem);
+    font-size: clamp(0.72rem, 1.9cqw, 0.85rem);
     line-height: 1.45;
     color: rgba(30, 58, 138, 0.82);
     margin: 0;
