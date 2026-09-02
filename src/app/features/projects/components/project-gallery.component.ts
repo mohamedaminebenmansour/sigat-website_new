@@ -528,102 +528,83 @@ interface GalleryCard {
       /* ==============================================================
        * MY CUSTOM OVERRIDES - change here to see immediate changes
        * --------------------------------------------------------------
-       * Edit --w / --x / --y / --rot (and optionally --h / --s / --r /
-       * --lift) below. This block is the LAST declaration of these
-       * selectors, so it wins over the mobile/tablet/desktop blocks
-       * above on EVERY screen size (same specificity => source order
-       * decides). Values below are the current live desktop values,
-       * so the gallery looks identical until you change something.
+       * ASYMMETRIC EDITORIAL COLLAGE (tablet + desktop, >=768px):
+       *   r0  = MAIN / LARGE    (dominant upper-left anchor)
+       *   r1  = UPPER RIGHT     (small, dips over MAIN's top-right)
+       *   r4  = MIDDLE / BACK   (sits behind LOWER-RIGHT/FRONT)
+       *   r3  = LOWER LEFT      (counterweight, overlaps MIDDLE/BACK)
+       *   r2  = LOWER RIGHT/FRONT (strong foreground, overlaps MIDDLE)
+       * Z-index layers the collage:  BACK = r0(2) / r4(3),
+       *   MIDDLE = r4(3),  FRONT = r1(4) / r3(4) / r2(5).
+       * All size/position values are percentages of the live stage and
+       * are measured by the existing FLIP animation, so no animation or
+       * timing logic is touched.
        *
-       * --h: setting it on a slot gives that card a FIXED height and
-       * disables the automatic 4:3 aspect-ratio for it (width stays
-       * controlled by --w). Because this block comes last, an --h set
-       * here applies on every screen size.
+       * This block is the LAST declaration of these selectors and is
+       * gated to >=768px, so it wins over the tablet/desktop blocks on
+       * those sizes while the base mobile layout (<768px) is preserved
+       * unchanged.
+       *
+       * --h gives a slot a FIXED height (%, of stage height) and
+       * disables the automatic 4:3 aspect-ratio for it; width stays
+       * controlled by --w.
        * ============================================================== */
+      @media (min-width: 768px) {
       .pgx-r0 {
-        /* CHANGE THIS to make the panel wider/narrower (percentage of stage width) */
-        --w: 52%;
-        /* CHANGE THIS to set a fixed height (e.g., 260px) – overrides aspect-ratio */
-        /* --h: 260px; */
-        /* CHANGE THIS to move it left/right (negative = left, positive = right) */
-        --x: 0%;
-        /* CHANGE THIS to move it up/down (negative = up, positive = down) */
-        --y: 29%;
-        /* CHANGE THIS to tilt the panel (positive = clockwise, negative = counter) */
+        /* MAIN / LARGE - dominant upper-left anchor */
+        --w: 74%;
+        --h: 42%;
+        --x: -11%;
+        --y: 2%;
         --rot: 0deg;
-        /* CHANGE THIS to scale the whole card (1 = natural size) */
         --s: 1;
-        /* CHANGE THIS to corner roundness */
         --r: 22px;
-        z-index: ;
+        z-index: 2;
       }
       .pgx-r1 {
-        /* CHANGE THIS to make the panel wider/narrower (percentage of stage width) */
-        --w: 48%;
-        /* CHANGE THIS to set a fixed height (e.g., 260px) – overrides aspect-ratio */
-        /* --h: 260px; */
-        /* CHANGE THIS to move it left/right (negative = left, positive = right) */
-        --x: 20%;
-        /* CHANGE THIS to move it up/down (negative = up, positive = down) */
-        --y: 10%;
-        /* CHANGE THIS to tilt the panel (positive = clockwise, negative = counter) */
-        --rot: 1.8deg;
-        /* CHANGE THIS to scale the whole card (1 = natural size) */
-        --s: 0.96;
-        /* CHANGE THIS to corner roundness */
-        --r: 14px;
-        z-index: ;
+        /* UPPER RIGHT - small, partially overlaps MAIN (top-right) */
+        --w: 31.5%;
+        --h: 28%;
+        --x: 33.75%;
+        --y: 17%;
+        --rot: 1.6deg;
+        --s: 1;
+        --r: 16px;
+        z-index: 4;
       }
       .pgx-r2 {
-        /* CHANGE THIS to make the panel wider/narrower (percentage of stage width) */
-        --w: 48%;
-        /* CHANGE THIS to set a fixed height (e.g., 260px) – overrides aspect-ratio */
-        /* --h: 260px; */
-        /* CHANGE THIS to move it left/right (negative = left, positive = right) */
-        --x: 26%;
-        /* CHANGE THIS to move it up/down (negative = up, positive = down) */
+        /* LOWER RIGHT / FRONT - strong foreground layer */
+        --w: 45%;
+        --h: 38%;
+        --x: 17.5%;
         --y: 60%;
-        /* CHANGE THIS to tilt the panel (positive = clockwise, negative = counter) */
-        --rot: -1.4deg;
-        /* CHANGE THIS to scale the whole card (1 = natural size) */
-        --s: 0.96;
-        /* CHANGE THIS to corner roundness */
-        --r: 14px;
-        z-index: ;
+        --rot: -1.2deg;
+        --s: 1;
+        --r: 18px;
+        z-index: 5;
       }
       .pgx-r3 {
-        /* CHANGE THIS to make the panel wider/narrower (percentage of stage width) */
-        --w: 50%;
-        /* CHANGE THIS to set a fixed height (e.g., 260px) – overrides aspect-ratio */
-        /* --h: 260px; */
-        /* CHANGE THIS to move it left/right (negative = left, positive = right) */
-        --x: -25%;
-        /* CHANGE THIS to move it up/down (negative = up, positive = down) */
-        --y: 54%;
-        /* CHANGE THIS to tilt the panel (positive = clockwise, negative = counter) */
-        --rot: -3.5deg;
-        /* CHANGE THIS to scale the whole card (1 = natural size) */
-        --s: 0.94;
-        /* CHANGE THIS to corner roundness */
-        --r: 14px;
-        z-index: ;
+        /* LOWER LEFT - counterweight, overlaps MIDDLE/BACK */
+        --w: 37%;
+        --h: 29.5%;
+        --x: -26.25%;
+        --y: 51%;
+        --rot: -2.2deg;
+        --s: 1;
+        --r: 16px;
+        z-index: 4;
       }
       .pgx-r4 {
-        /* CHANGE THIS to make the panel wider/narrower (percentage of stage width) */
-        --w: 55%;
-        /* CHANGE THIS to set a fixed height (e.g., 260px) – overrides aspect-ratio */
-        /* --h: 260px; */
-        /* CHANGE THIS to move it left/right (negative = left, positive = right) */
-        --x: -22%;
-        /* CHANGE THIS to move it up/down (negative = up, positive = down) */
-        --y: 14%;
-        /* CHANGE THIS to tilt the panel (positive = clockwise, negative = counter) */
-        --rot: 3.5deg;
-        /* CHANGE THIS to scale the whole card (1 = natural size) */
-        --s: 0.96;
-        /* CHANGE THIS to corner roundness */
-        --r: 14px;
-        z-index: ;
+        /* MIDDLE / BACK - sits behind LOWER-RIGHT/FRONT */
+        --w: 48.5%;
+        --h: 33.5%;
+        --x: 6.25%;
+        --y: 39%;
+        --rot: 0.6deg;
+        --s: 1;
+        --r: 18px;
+        z-index: 3;
+      }
       }
     `,
   ],
