@@ -23,6 +23,27 @@ import { NavigationService } from '../../core/navigation/navigation.service';
       .lang-dropdown {
         animation: lang-dropdown-in 0.16s ease-out;
       }
+      /* ==========================================
+         NAVBAR VISUAL TUNING
+         Change these values manually if needed.
+         ========================================== */
+      :host {
+        /* A) Logo size per breakpoint (aspect ratio is preserved
+              automatically via height:auto + object-fit:contain). */
+        --navbar-logo-w: 200px;        /* desktop (>1023px) */
+        --navbar-logo-w-tablet: 165px; /* <=1023px */
+        --navbar-logo-w-mobile: 135px; /* <=767px */
+
+        /* B) Transparent (top-of-page) glass strength.
+              Lower alpha = more transparent. Keep >= ~0.45 so the
+              dark blue navigation text stays readable over busy heroes. */
+        --navbar-transparent-bg: rgba(255, 255, 255, 0.55);
+
+        /* C) Optional glass blur for the top state (px).
+              Blur applies to the content BEHIND the navbar only,
+              never to the navbar's own text/logo/icons. */
+        --navbar-blur: 8px;
+      }
       .brand-zone {
         display: flex;
         align-items: center;
@@ -40,8 +61,9 @@ import { NavigationService } from '../../core/navigation/navigation.service';
         overflow: hidden;
       }
       .brand-zone img {
-        width: 235px;
-        max-width: 235px;
+        /* Adjust logo size here (desktop). */
+        width: var(--navbar-logo-w);
+        max-width: var(--navbar-logo-w);
         height: auto;
         display: block;
         object-fit: contain;
@@ -53,15 +75,28 @@ import { NavigationService } from '../../core/navigation/navigation.service';
           padding-left: 0;
         }
         .brand-zone img {
-          width: 190px;
-          max-width: 190px;
+          /* Adjust logo size here (tablet). */
+          width: var(--navbar-logo-w-tablet);
+          max-width: var(--navbar-logo-w-tablet);
         }
       }
       @media (max-width: 767px) {
         .brand-zone img {
-          width: 150px;
-          max-width: 150px;
+          /* Adjust logo size here (mobile). */
+          width: var(--navbar-logo-w-mobile);
+          max-width: var(--navbar-logo-w-mobile);
         }
+      }
+      /* Transparent glass surface used when the header sits over the
+         hero/gallery at the top of the page (class applied from
+         headerClasses()). Tune via --navbar-transparent-bg and --navbar-blur
+         above. The rgba background alone is the readable fallback when
+         backdrop-filter is unsupported. */
+      .header-top {
+        background: var(--navbar-transparent-bg);
+        -webkit-backdrop-filter: blur(var(--navbar-blur));
+        backdrop-filter: blur(var(--navbar-blur));
+        border-bottom: 1px solid rgba(30, 58, 138, 0.08);
       }
       .header-visible {
         transform: translateY(0);
@@ -262,7 +297,7 @@ export class HeaderComponent {
     const state = visible ? 'header-visible' : 'header-hidden';
     const surface = this.isScrolled()
       ? 'bg-white/85 backdrop-blur-md border-b border-blue-950/10 header-glass'
-      : 'bg-white/70 backdrop-blur-[10px] border-b border-blue-950/10';
+      : 'header-top';
     return `fixed top-0 inset-x-0 z-50 ${state} transition-all duration-300 ${surface} text-blue-950 h-20 md:h-24`;
   }
 
