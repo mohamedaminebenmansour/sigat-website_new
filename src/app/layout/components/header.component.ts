@@ -261,8 +261,8 @@ export class HeaderComponent {
     const visible = this.isScrolled() || this.isVisible() || this.isTouchDevice();
     const state = visible ? 'header-visible' : 'header-hidden';
     const surface = this.isScrolled()
-      ? 'bg-white/85 backdrop-blur-md border-b border-white/20 header-glass'
-      : 'bg-transparent';
+      ? 'bg-white/85 backdrop-blur-md border-b border-blue-950/10 header-glass'
+      : 'bg-white/70 backdrop-blur-[10px] border-b border-blue-950/10';
     return `fixed top-0 inset-x-0 z-50 ${state} transition-all duration-300 ${surface} text-blue-950 h-20 md:h-24`;
   }
 

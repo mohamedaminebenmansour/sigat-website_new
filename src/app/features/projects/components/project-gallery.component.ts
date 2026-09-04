@@ -1,4 +1,5 @@
 import {
+  AfterViewInit,
   ChangeDetectionStrategy,
   Component,
   DestroyRef,
@@ -9,6 +10,7 @@ import {
   computed,
   inject,
   input,
+  isDevMode,
   signal,
 } from '@angular/core';
 import { DOCUMENT, NgOptimizedImage } from '@angular/common';
@@ -110,16 +112,38 @@ interface GalleryCard {
         transform: translateX(-50%) translateY(var(--lift, 0px))
                    rotate(var(--rot, 0deg)) scale(var(--s, 1))
                    var(--flip, scale(1) translate(0));
+        /* PURE FLIP: the layout box (left/top/width) snaps instantly to the new
+           slot; --flip holds the card visually at its old spot and transform
+           glides it there exactly once. Animating left/top/width as well would
+           double the displacement (cards overshoot and get clipped by
+           .pgx overflow:hidden -> sometimes fewer than 5 cards visible). */
         transition:
-          left 750ms cubic-bezier(0.22, 1, 0.36, 1),
-          top 750ms cubic-bezier(0.22, 1, 0.36, 1),
-          width 750ms cubic-bezier(0.22, 1, 0.36, 1),
           transform 750ms cubic-bezier(0.22, 1, 0.36, 1),
           opacity 550ms ease,
           box-shadow 550ms ease;
         will-change: transform, opacity;
       }
       .pgx-layer.pgx-flipping { transition: none !important; }
+
+      /* Secondary -> Primary FOCUS. A single additive pulse (scale via the --s
+         var that already sits in the transform chain,+ shadow,+ subtle brightness)
+         played on ONLY the card being promoted to hero (slot 0). It rides on top
+         of the existing FLIP(no clone, no new element, no duplicate image): the
+         --s multiplier composes multiplicatively with --flip so movement stays intact. */
+      @property --s {
+        syntax: '<number>';
+        inherits: false;
+        initial-value: 1;
+      }
+
+      @keyframes pgx-hero-focus {
+        0%   { --s: 1;   box-shadow: 0 18px 40px -20px rgba(15, 23, 42, 0.5);   filter: none; }
+        35%  { --s: 1.08; box-shadow: 0 34px 66px -22px rgba(15, 23, 42, 0.62); filter: brightness(1.04) saturate(1.03); }
+        100% { --s: 1;   box-shadow: 0 18px 40px -20px rgba(15, 23, 42, 0.5);   filter: none; }
+      }
+      .pgx-layer.pgx-hero-focus {
+        animation: pgx-hero-focus 340ms cubic-bezier(0.22, 1, 0.36, 1) both;
+      }
 
       .pgx-layer:focus-visible {
         outline: 2px solid #ffffff;
@@ -325,7 +349,11 @@ interface GalleryCard {
        * ~11% of its height and covers it; top pair dips under it. The
        * opposing left-pair rotations create the editorial side conflict. */
       @media (min-width: 1024px) {
-        .pgx-stage { height: clamp(660px, 80vh, 820px); }
+        /* Desktop: draw the stage from the LIVE viewport so the gallery fits in
+           ONE screen (no second scroll). Fixed navbar is 6rem (md:h-24)
+           and the gallery is sticky at top-24 (6rem); minus a caption + breathing
+           margin (~4rem) keeps the whole collage above the fold with a small gap. */
+        .pgx-stage { height: clamp(400px, calc(100dvh - 6rem - 4rem), 760px); }
       .pgx-r0 {
         /* CHANGE THIS to make the panel wider/narrower (percentage of stage width) */
         --w: 52%;
@@ -680,7 +708,7 @@ interface GalleryCard {
     </div>
   `,
 })
-export class ProjectGalleryComponent {
+export class ProjectGalleryComponent implements AfterViewInit {
   readonly images = input<string[]>([]);
   readonly altText = input<string>('');
   readonly cover = input<string>('');
@@ -861,6 +889,13 @@ export class ProjectGalleryComponent {
     if (this.isTransitioning) return;
 
     this.isTransitioning = true;
+    // Warm the browser cache for the window that is about to render plus the
+    // images that will ENTER the window next (forward AND backward). Without
+    // this, the freshly created entering card (track by key creates its <img>
+    // only at window-advance time) could show as an empty dark slot while its
+    // bitmap was still downloading -> "sometimes only 4 images visible".
+    this.preloadAround(this.offset());
+    this.preloadAround(opts.targetOffset);
     this.beginFlip(opts.targetOffset);
     this.offset.set(((opts.targetOffset % n) + n) % n);
     this.scheduleAutoplay(opts.resumeMs);
@@ -882,6 +917,7 @@ export class ProjectGalleryComponent {
    * / duplicate image element is ever created.
    */
   private beginFlip(targetOffset: number): void {
+    this.validateVisibleSlots();
     if (this.reduceMotion) return;
     if (!this.slotEls || !this.stageEl || this.slotEls.length < 1) return;
     const n = this.galleryImages().length;
@@ -927,6 +963,20 @@ export class ProjectGalleryComponent {
         });
         const stage = this.stageEl?.nativeElement;
         if (stage) void stage.offsetHeight; // force reflow so the inverse is committed
+// HERO FOCUS: the card being promoted to primary (slot 0) briefly
+        // "takes ownership" (scale + elevation + clarity) as it starts traveling,
+        // so secondary -> primary reads as chose -> hero, NOT just a swap. The pulse
+        // rides the FLIP via the `--s` multiplier (multiplicative with `--flip`): no clone,
+        // no ghost, no second element. Only this one card is affected; secondary ->
+        // secondary and demoted cards are untouched. It runs identically for clicks, arrows,
+        // swipes and autoplay (every transition promotes one card to slot 0).
+
+        const heroAtIdx = this.cards().findIndex(c => c.isCenter);
+        const heroEl =
+          heroAtIdx >=     0   ?   this.slotEls?.get(heroAtIdx)?.nativeElement : undefined;
+        if (heroEl !== undefined && moving.some(m => m.el === heroEl)) {
+          heroEl.classList.add('pgx-hero-focus');
+        }
 
         // PLAY: release the snap; the transition glides each real element to
         // its natural new slot position.
@@ -943,8 +993,65 @@ export class ProjectGalleryComponent {
     if (!this.slotEls) return;
     this.slotEls.forEach(el => {
       el.nativeElement.style.removeProperty('--flip');
-      el.nativeElement.classList.remove('pgx-flipping');
+      el.nativeElement.classList.remove('pgx-flipping', 'pgx-hero-focus');
     });
+  }
+
+  /**
+   * Cache warm-up only — creates NO DOM elements and NO copies in the page.
+   * It fetches the images of the given circular window plus the two images
+   * that will enter the window next (forward and backward), so a card that
+   * Angular creates when the window advances already has its bitmap ready
+   * and never appears as an empty slot. Each URL is warmed at most once.
+   */
+  private readonly preloaded = new Set<string>();
+
+  private preloadAround(offset: number): void {
+    const images = this.galleryImages();
+    const n = images.length;
+    if (n === 0 || typeof Image === 'undefined') return;
+
+    const count = Math.min(5, n);
+    const idxs = new Set<number>();
+    for (let i = 0; i < count; i++) idxs.add((((offset + i) % n) + n) % n);
+    idxs.add((((offset + count) % n) + n) % n); // next entering (forward)
+    idxs.add((((offset - 1) % n) + n) % n);     // next entering (backward)
+
+    for (const i of idxs) {
+      const src = images[i];
+      if (!src || src.trim() === '' || this.preloaded.has(src)) continue;
+      this.preloaded.add(src);
+      const img = new Image();
+      img.src = src;
+    }
+  }
+
+  /**
+   * Development-only invariant check (silent in production builds):
+   * the visible window must always hold exactly min(5, n) slots and every
+   * slot must resolve to a non-empty image URL.
+   */
+  private validateVisibleSlots(): void {
+    if (!isDevMode()) return;
+    const n = this.galleryImages().length;
+    const cards = this.cards();
+    if (n > 0 && cards.length !== Math.min(5, n)) {
+      console.warn(
+        `[project-gallery] visible slot count mismatch: expected ${Math.min(5, n)}, got ${cards.length}`
+      );
+      return;
+    }
+    for (const c of cards) {
+      if (!c.src || c.src.trim() === '') {
+        console.warn(`[project-gallery] slot ${c.slot} has an empty image source`);
+      }
+    }
+  }
+
+  ngAfterViewInit(): void {
+    // First paint: warm the initial window so early autoplay transitions
+    // never introduce a not-yet-loaded image.
+    this.preloadAround(this.offset());
   }
 
   private scheduleAutoplay(ms: number): void {
