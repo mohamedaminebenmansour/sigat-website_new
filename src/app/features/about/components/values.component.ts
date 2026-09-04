@@ -189,6 +189,7 @@ const REVEAL_STAGGER_MS = 140;
                viewBox spans 220 units mapped onto 2.2 x --values-arrow-r, so
                radius 100 = --values-arrow-r exactly, with a 10-unit symmetric
                margin so no arrowhead can reach the SVG edge. -->
+          @if (showOrbitArrows) {
           <div
             class="values-arrow-layer"
             aria-hidden="true"
@@ -225,6 +226,7 @@ const REVEAL_STAGGER_MS = 140;
               }
               </svg>
           </div>
+          }
 
           <!-- Center: large dynamic display of the currently focused value.
                The circular container stays mounted; only its content swaps. -->
@@ -308,6 +310,15 @@ export class ValuesComponent implements AfterViewInit, OnDestroy {
 
   /** Generated arrow geometry (same orbit model as the cards). */
   readonly arrowPaths = ARROW_PATHS;
+
+  // ==========================================
+  // VALUES ORBIT — ARROW VISIBILITY
+  // true  = arrows visible (current approved design)
+  // false = arrows hidden completely; the orbit, six value
+  //         circles, center and rotation are untouched.
+  // Toggle this value to compare both designs.
+  // ==========================================
+  readonly showOrbitArrows = false;
 
   /** Visual orbit rotation step (advanced by the single timer). */
   readonly activeOffset = signal(0);
