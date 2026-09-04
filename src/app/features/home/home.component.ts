@@ -7,6 +7,7 @@ import { ProjectCardComponent } from '../../shared/components/project-card.compo
 import { CtaBannerComponent } from '../../shared/components/cta-banner.component';
 import { CompanyStoryComponent } from '../about/components/company-story.component';
 import { ValuesComponent } from '../about/components/values.component';
+import { Values3dComponent } from "../about/components/values-3d.component";
 
 @Component({
   selector: 'app-home',
@@ -19,8 +20,9 @@ import { ValuesComponent } from '../about/components/values.component';
     ProjectCardComponent,
     CtaBannerComponent,
     CompanyStoryComponent,
-    ValuesComponent
-  ],
+    ValuesComponent,
+    Values3dComponent
+],
   template: `
     <!-- ==================== MEDIA SHOWCASE / HERO (includes stats) ==================== -->
     <app-media-showcase />
@@ -30,6 +32,7 @@ import { ValuesComponent } from '../about/components/values.component';
 
     <!-- ==================== CORE VALUES ==================== -->
     <app-values />
+    <app-values-3d/>
 
     <!-- ==================== FEATURED PROJECTS ==================== -->
     <section class="py-16 md:py-20 bg-white">

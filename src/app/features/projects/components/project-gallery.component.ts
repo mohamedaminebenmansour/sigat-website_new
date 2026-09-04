@@ -203,87 +203,66 @@ interface GalleryCard {
       }
 
       /* ------------------------- MOBILE (default) ---------------------
-       * Corner geometry, z-order: BOTTOM pair (34) > CENTER (30) > TOP
-       * pair (26). Bottom corners cover the center slightly (~11% of its
-       * height); the center covers the top corners. All four secondary
-       * sizes differ. No horizontal escape. */
+       * Editorial stack (corners ABOVE primary so they intentionally cover
+       * its edges; primary stays centered and clearly visible).
+       * z order: primary 10 < topLeft 20 < topRight 30 < bottomLeft 40 <
+       * bottomRight 50. Tune via the MOBILE block in GALLERY VISUAL TUNING. */
       .pgx-r0 {
         /* CHANGE THIS to make the panel wider/narrower (percentage of stage width) */
-        --w: 82%;
+        --w: 78%;
         /* CHANGE THIS to move it left/right (negative = left, positive = right) */
         --x: 0%;
         /* CHANGE THIS to move it up/down (negative = up, positive = down).
-           Fixed --h:46% + --y:27% = exact vertical center ((100-46)/2) at
-           every phone width (an auto 4:3 height would drift with vw). */
-        --h: 46%;
-        --y: 27%;
+           Fixed --h:45% + --y:27.5% = exact vertical center ((100-45)/2). */
+        --h: 45%;
+        --y: 27.5%;
         /* CHANGE THIS to tilt the panel (positive = clockwise, negative = counter) */
         --rot: 0deg;
         /* CHANGE THIS to scale the whole card (1 = natural size) */
         --s: 1;
         /* CHANGE THIS to corner roundness */
-        --r: 18px;
-        z-index: 30;
+        --r: 16px;
+        z-index: 10;
       }
       .pgx-r1 {
-        /* CHANGE THIS to make the panel wider/narrower (percentage of stage width) */
-        --w: 62%;
-        /* CHANGE THIS to move it left/right (negative = left, positive = right) */
-        --x: 28%;
-        /* CHANGE THIS to move it up/down (negative = up, positive = down) */
-        --y: 21%;
-        /* CHANGE THIS to tilt the panel (positive = clockwise, negative = counter) */
-        --rot: 1.8deg;
-        /* CHANGE THIS to scale the whole card (1 = natural size) */
-        --s: 0.94;
-        /* CHANGE THIS to corner roundness */
-        --r: 14px;
-        z-index: 26;
+        /* TOP RIGHT — above primary's top-right. */
+        --w: 42%;
+        --x: 31%;
+        --y: 17%;
+        --rot: 3deg;
+        --s: 1;
+        --r: 12px;
+        z-index: 30;
       }
       .pgx-r2 {
-        /* CHANGE THIS to make the panel wider/narrower (percentage of stage width) */
+        /* BOTTOM RIGHT — covers primary's bottom-right edge. */
         --w: 48%;
-        /* CHANGE THIS to move it left/right (negative = left, positive = right) */
-        --x: 28%;
-        /* CHANGE THIS to move it up/down (negative = up, positive = down) */
-        --y: 72.5%;
-        /* CHANGE THIS to tilt the panel (positive = clockwise, negative = counter) */
-        --rot: -1.4deg;
-        /* CHANGE THIS to scale the whole card (1 = natural size) */
-        --s: 0.9;
-        /* CHANGE THIS to corner roundness */
-        --r: 14px;
-        z-index: 34;
+        --x: 29%;
+        --y: 66%;
+        --rot: 2deg;
+        --s: 1;
+        --r: 12px;
+        z-index: 50;
       }
       .pgx-r3 {
-        /* CHANGE THIS to make the panel wider/narrower (percentage of stage width) */
-        --w: 50%;
-        /* CHANGE THIS to move it left/right (negative = left, positive = right) */
+        /* BOTTOM LEFT — covers primary's bottom-left edge. */
+        --w: 46%;
         --x: -28%;
-        /* CHANGE THIS to move it up/down (negative = up, positive = down) */
-        --y: 72%;
-        /* CHANGE THIS to tilt the panel (positive = clockwise, negative = counter) */
-        --rot: -3deg;
-        /* CHANGE THIS to scale the whole card (1 = natural size) */
-        --s: 0.92;
-        /* CHANGE THIS to corner roundness */
-        --r: 14px;
-        z-index: 34;
+        --y: 68%;
+        --rot: -2deg;
+        --s: 1;
+        --r: 12px;
+        z-index: 40;
       }
       .pgx-r4 {
-        /* CHANGE THIS to make the panel wider/narrower (percentage of stage width) */
-        --w: 34%;
-        /* CHANGE THIS to move it left/right (negative = left, positive = right) */
-        --x: -29%;
-        /* CHANGE THIS to move it up/down (negative = up, positive = down) */
-        --y: 18%;
-        /* CHANGE THIS to tilt the panel (positive = clockwise, negative = counter) */
-        --rot: 3deg;
-        /* CHANGE THIS to scale the whole card (1 = natural size) */
-        --s: 0.94;
-        /* CHANGE THIS to corner roundness */
-        --r: 14px;
-        z-index: 26;
+        /* TOP LEFT — above primary's top-left. */
+        --w: 44%;
+        --x: -30%;
+        --y: 12%;
+        --rot: -3deg;
+        --s: 1;
+        --r: 12px;
+        z-index: 20;
       }
 
       /* ------------------------------ TABLET --------------------------
@@ -402,7 +381,7 @@ interface GalleryCard {
         /* CHANGE THIS to move it up/down (negative = up, positive = down) */
         --y: 10%;
         /* CHANGE THIS to tilt the panel (positive = clockwise, negative = counter) */
-        --rot: 1.8deg;
+        --rot: ;
         /* CHANGE THIS to scale the whole card (1 = natural size) */
         --s: 0.96;
         /* CHANGE THIS to corner roundness */
@@ -417,7 +396,7 @@ interface GalleryCard {
         /* CHANGE THIS to move it up/down (negative = up, positive = down) */
         --y: 66%;
         /* CHANGE THIS to tilt the panel (positive = clockwise, negative = counter) */
-        --rot: -1.4deg;
+        --rot: ;
         /* CHANGE THIS to scale the whole card (1 = natural size) */
         --s: 0.96;
         /* CHANGE THIS to corner roundness */
@@ -432,7 +411,7 @@ interface GalleryCard {
         /* CHANGE THIS to move it up/down (negative = up, positive = down) */
         --y: 66%;
         /* CHANGE THIS to tilt the panel (positive = clockwise, negative = counter) */
-        --rot: -3.5deg;
+        --rot: ;
         /* CHANGE THIS to scale the whole card (1 = natural size) */
         --s: 0.94;
         /* CHANGE THIS to corner roundness */
@@ -447,7 +426,7 @@ interface GalleryCard {
         /* CHANGE THIS to move it up/down (negative = up, positive = down) */
         --y: 8%;
         /* CHANGE THIS to tilt the panel (positive = clockwise, negative = counter) */
-        --rot: 3.5deg;
+        --rot: ;
         /* CHANGE THIS to scale the whole card (1 = natural size) */
         --s: 0.96;
         /* CHANGE THIS to corner roundness */
@@ -579,87 +558,62 @@ interface GalleryCard {
       }
 
       /* ==============================================================
-       * MY CUSTOM OVERRIDES - change here to see immediate changes
-       * --------------------------------------------------------------
-       * ASYMMETRIC EDITORIAL COLLAGE (tablet + desktop, >=768px):
-       *   r0  = MAIN / LARGE    (dominant upper-left anchor)
-       *   r1  = UPPER RIGHT     (small, dips over MAIN's top-right)
-       *   r4  = MIDDLE / BACK   (sits behind LOWER-RIGHT/FRONT)
-       *   r3  = LOWER LEFT      (counterweight, overlaps MIDDLE/BACK)
-       *   r2  = LOWER RIGHT/FRONT (strong foreground, overlaps MIDDLE)
-       * Z-index layers the collage:  BACK = r0(2) / r4(3),
-       *   MIDDLE = r4(3),  FRONT = r1(4) / r3(4) / r2(5).
-       * All size/position values are percentages of the live stage and
-       * are measured by the existing FLIP animation, so no animation or
-       * timing logic is touched.
+       * GALLERY VISUAL TUNING
+       * ------------------------------------------------------------
+       * Edit these values to re-compose the gallery WITHOUT touching
+       * TypeScript. Three independent configurations: MOBILE (base,
+       * <768px), TABLET (>=768px), DESKTOP (>=1024px). The TABLET and
+       * DESKTOP blocks below come LAST so they win on those sizes.
        *
-       * This block is the LAST declaration of these selectors and is
-       * gated to >=768px, so it wins over the tablet/desktop blocks on
-       * those sizes while the base mobile layout (<768px) is preserved
-       * unchanged.
+       * Variable legend (slot geometry, % of the live stage):
+       *   --w   width                              --h   height
+       *   --x   horizontal offset from stage center (negative = left)
+       *   --y   top edge
+       *   --rot clockwise tilt (negative = counter-clockwise)
+       *   z-index  layering (corners above primary = editorial stack)
        *
-       * --h gives a slot a FIXED height (%, of stage height) and
-       * disables the automatic 4:3 aspect-ratio for it; width stays
-       * controlled by --w.
+       * LAYERING (intentional photo-stack): primary 10, topLeft 20,
+       * topRight 30, bottomLeft 40, bottomRight 50 — so each surrounding
+       * card visibly covers a controlled edge of the primary while the
+       * primary's center stays clear. During a flip a moving card lifts
+       * to z-index 60 (hero focus), above all five.
+       *
+       *   Change these values to:
+       *     increase/decrease width    -> edit --w
+       *     increase/decrease height   -> edit --h
+       *     move left / right          -> edit --x  (− = left, + = right)
+       *     move up / down             -> edit --y  (− = up, + = down)
+       *     increase/decrease rotation -> edit --rot
+       *     increase/decrease overlap  -> push --x (corners) in/out
+       *     change stacking            -> edit z-index
        * ============================================================== */
+
+      /* ------------------------- TABLET (>=768px) ------------------- */
       @media (min-width: 768px) {
-      .pgx-r0 {
-        /* MAIN / LARGE - dominant, EXACTLY CENTERED anchor:
-           --x:0 centers it horizontally; with --h:42% the vertical
-           center is (100 - 42) / 2 = 29%. */
-        --w: 74%;
-        --h: 42%;
-        --x: 0%;
-        --y: 29%;
-        --rot: 0deg;
-        --s: 1;
-        --r: 22px;
-        z-index: 2;
+        /* PRIMARY / CENTER — centered, slightly tighter then desktop. */
+        .pgx-r0 { --w: 40%; --h: 48%; --x: 0%; --y: 26%; --rot: 0deg; --s: 1; --r: 18px; z-index: 10; }
+        /* TOP LEFT. */
+        .pgx-r4 { --w: 28%; --h: 26%; --x: -25%; --y: 4%; --rot: -2deg; --s: 1; --r: 12px; z-index: 20; }
+        /* TOP RIGHT. */
+        .pgx-r1 { --w: 27%; --h: 26%; --x: 26%;  --y: 8%; --rot: 2deg;  --s: 1; --r: 12px; z-index: 30; }
+        /* BOTTOM LEFT. */
+        .pgx-r3 { --w: 27%; --h: 26%; --x: -25%; --y: 62%; --rot: -2deg; --s: 1; --r: 12px; z-index: 40; }
+        /* BOTTOM RIGHT. */
+        .pgx-r2 { --w: 28%; --h: 26%; --x: 26%;  --y: 60%; --rot: 2deg;  --s: 1; --r: 12px; z-index: 50; }
       }
-      .pgx-r1 {
-        /* UPPER RIGHT - small, partially overlaps MAIN (top-right) */
-        --w: 31.5%;
-        --h: 28%;
-        --x: 33.75%;
-        --y: 17%;
-        --rot: 1.6deg;
-        --s: 1;
-        --r: 16px;
-        z-index: 4;
-      }
-      .pgx-r2 {
-        /* LOWER RIGHT / FRONT - strong foreground layer */
-        --w: 45%;
-        --h: 38%;
-        --x: 17.5%;
-        --y: 60%;
-        --rot: -1.2deg;
-        --s: 1;
-        --r: 18px;
-        z-index: 5;
-      }
-      .pgx-r3 {
-        /* LOWER LEFT - counterweight, overlaps MIDDLE/BACK */
-        --w: 37%;
-        --h: 29.5%;
-        --x: -26.25%;
-        --y: 51%;
-        --rot: -2.2deg;
-        --s: 1;
-        --r: 16px;
-        z-index: 4;
-      }
-      .pgx-r4 {
-        /* MIDDLE / BACK - sits behind LOWER-RIGHT/FRONT */
-        --w: 48.5%;
-        --h: 33.5%;
-        --x: 6.25%;
-        --y: 39%;
-        --rot: 0.6deg;
-        --s: 1;
-        --r: 18px;
-        z-index: 3;
-      }
+
+      /* ------------------------- DESKTOP (>=1024px) ----------------- */
+      @media (min-width: 1024px) {
+        /* PRIMARY / CENTER — geometrically centered, medium-large. */
+        .pgx-r0 { --w: 50%; --h: 46%; --x: 0%; --y: 27%; --rot: 0deg; --s: 1; --r: 20px; z-index: 30; }
+        /* TOP LEFT — overlaps primary's top-left edge. */
+        .pgx-r4 { --w: 45%; --h: 26%; --x: -26%; --y: 13%;  --rot: 0deg;--s:1;--r: 14px; z-index: 20; }
+        /* TOP RIGHT — overlaps primary's top-right edge. */
+        .pgx-r1 { --w: 47%; --h: 28%; --x: 27%;  --y: 13%;  --rot: 0deg;  --s: 1; --r: 14px; z-index: 10; }
+        /* BOTTOM LEFT — covers primary's bottom-left edge. */
+        .pgx-r3 { --w: 42%; --h: 26%; --x: -26%; --y: 54%; --rot: 0deg; --s: 1; --r: 14px; z-index: 40; }
+        /* BOTTOM RIGHT — covers primary's bottom-right edge. */
+        .pgx-r2 { --w: 32%; --h: 26%; --x: 27%;  --y: 60%; --rot: 0deg;  --s: 1; --r: 14px; z-index: 50; }
       }
     `,
   ],
@@ -1068,20 +1022,39 @@ export class ProjectGalleryComponent implements AfterViewInit {
   }
 
   /**
-   * Development-only invariant check (silent in production builds):
-   * the visible window must always hold exactly min(5, n) slots and every
-   * slot must resolve to a non-empty image URL.
+   * Development-only invariant check (silent in production builds).
+   * Guarantees the five-image window is always valid: exactly min(5, n)
+   * slots, each a unique, non-empty image URL, and slot 0 (center) is the
+   * primary. Covers Req #1 / #2 / #5 / #20 of the reliability spec.
    */
   private validateVisibleSlots(): void {
     if (!isDevMode()) return;
-    const n = this.galleryImages().length;
+    const images = this.galleryImages();
+    const n = images.length;
     const cards = this.cards();
+
+    // Req #1 — always exactly 5 visible (when the project has >= 5).
     if (n > 0 && cards.length !== Math.min(5, n)) {
       console.warn(
         `[project-gallery] visible slot count mismatch: expected ${Math.min(5, n)}, got ${cards.length}`
       );
       return;
     }
+
+    // Req #5 — the five visible images must be unique (no duplicates).
+    const keys = cards.map((c) => c.key);
+    if (n >= 5 && new Set(keys).size !== cards.length) {
+      console.warn(
+        `[project-gallery] duplicate visible image detected: ${JSON.stringify(keys)}`
+      );
+    }
+
+    // Req #2 — the center slot (0) must always hold the primary image.
+    if (cards.length > 0 && !cards[0].isCenter) {
+      console.warn('[project-gallery] center slot is not the primary image');
+    }
+
+    // Req #5/#20 — every visible slot must resolve to a valid image URL.
     for (const c of cards) {
       if (!c.src || c.src.trim() === '') {
         console.warn(`[project-gallery] slot ${c.slot} has an empty image source`);
