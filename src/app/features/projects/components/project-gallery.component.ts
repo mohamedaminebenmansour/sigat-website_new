@@ -20,6 +20,8 @@ const INTERACTION_RESUME_MS = 3000;
 const SWIPE_THRESHOLD_PX = 42;
 const SWIPE_MAX_DY_PX = 80;
 const TRAVEL_MS = 950;
+/** Short "arrival" focus beat played after the promoted card reaches center. */
+const HERO_ARRIVE_MS = 480;
 
 const SLOT_DEFS = [
   { id: 'center', cssClass: 'pgx-r0' },
@@ -107,7 +109,8 @@ interface GalleryCard {
         border-radius: var(--r, 16px);
         background: #0f172a;
         cursor: pointer;
-        border: 1px solid rgba(15, 23, 42, 0.14);
+        /* No border: the card reads as pure image + shadow (the old 1px
+           rgba(15,23,42,.14) frame read as a black boundary around pictures). */
         box-shadow: 0 18px 40px -20px rgba(15, 23, 42, 0.5);
         transform: translateX(-50%) translateY(var(--lift, 0px))
                    rotate(var(--rot, 0deg)) scale(var(--s, 1))
@@ -136,13 +139,32 @@ interface GalleryCard {
         initial-value: 1;
       }
 
+      /* PHASE 1 - IDENTIFY (during travel): subtle "chosen" cue on the card
+         being promoted, riding the FLIP via the --s multiplier (multiplicative
+         with --flip: no clone, no new element). z-index:60 lifts it ABOVE the
+         secondary cards while it travels toward center. */
       @keyframes pgx-hero-focus {
-        0%   { --s: 1;   box-shadow: 0 18px 40px -20px rgba(15, 23, 42, 0.5);   filter: none; }
-        35%  { --s: 1.08; box-shadow: 0 34px 66px -22px rgba(15, 23, 42, 0.62); filter: brightness(1.04) saturate(1.03); }
-        100% { --s: 1;   box-shadow: 0 18px 40px -20px rgba(15, 23, 42, 0.5);   filter: none; }
+        0%   { --s: 1;    box-shadow: 0 18px 40px -20px rgba(15, 23, 42, 0.5);   filter: none; }
+        40%  { --s: 1.04; box-shadow: 0 30px 60px -22px rgba(15, 23, 42, 0.60); filter: brightness(1.04) saturate(1.03); }
+        100% { --s: 1;    box-shadow: 0 18px 40px -20px rgba(15, 23, 42, 0.5);   filter: none; }
       }
       .pgx-layer.pgx-hero-focus {
+        z-index: 60;
         animation: pgx-hero-focus 340ms cubic-bezier(0.22, 1, 0.36, 1) both;
+      }
+
+      /* PHASE 2 - PRIMARY FOCUS (after arrival): the promoted card is now at
+         center; a short, elegant beat makes it noticeably larger (~1.10) with
+         lifted shadow + clarity, then PHASE 3 settles it back to --s:1. Same
+         real element throughout: no clone, no ghost, no duplicate. */
+      @keyframes pgx-hero-arrive {
+        0%   { --s: 1;    box-shadow: 0 18px 40px -20px rgba(15, 23, 42, 0.5);   filter: none; }
+        45%  { --s: 1.10; box-shadow: 0 36px 70px -22px rgba(15, 23, 42, 0.62);  filter: brightness(1.05) saturate(1.04); }
+        100% { --s: 1;    box-shadow: 0 18px 40px -20px rgba(15, 23, 42, 0.5);   filter: none; }
+      }
+      .pgx-layer.pgx-hero-arrive {
+        z-index: 60;
+        animation: pgx-hero-arrive 480ms cubic-bezier(0.22, 1, 0.36, 1) both;
       }
 
       .pgx-layer:focus-visible {
@@ -190,8 +212,11 @@ interface GalleryCard {
         --w: 82%;
         /* CHANGE THIS to move it left/right (negative = left, positive = right) */
         --x: 0%;
-        /* CHANGE THIS to move it up/down (negative = up, positive = down) */
-        --y: 25%;
+        /* CHANGE THIS to move it up/down (negative = up, positive = down).
+           Fixed --h:46% + --y:27% = exact vertical center ((100-46)/2) at
+           every phone width (an auto 4:3 height would drift with vw). */
+        --h: 46%;
+        --y: 27%;
         /* CHANGE THIS to tilt the panel (positive = clockwise, negative = counter) */
         --rot: 0deg;
         /* CHANGE THIS to scale the whole card (1 = natural size) */
@@ -579,11 +604,13 @@ interface GalleryCard {
        * ============================================================== */
       @media (min-width: 768px) {
       .pgx-r0 {
-        /* MAIN / LARGE - dominant upper-left anchor */
+        /* MAIN / LARGE - dominant, EXACTLY CENTERED anchor:
+           --x:0 centers it horizontally; with --h:42% the vertical
+           center is (100 - 42) / 2 = 29%. */
         --w: 74%;
         --h: 42%;
-        --x: -11%;
-        --y: 2%;
+        --x: 0%;
+        --y: 29%;
         --rot: 0deg;
         --s: 1;
         --r: 22px;
@@ -902,9 +929,23 @@ export class ProjectGalleryComponent implements AfterViewInit {
 
     if (this.travelTimer !== null) clearTimeout(this.travelTimer);
     this.travelTimer = setTimeout(() => {
-      this.isTransitioning = false;
-      this.travelTimer = null;
+      // PHASE 2/3: travel finished; the promoted card is at center. Play the
+      // short "arrival" focus beat on the SAME element, hold the transition
+      // lock until it settles (so a new transition can never fight it), then
+      // release. Autoplay timing is untouched (independent timer).
       this.clearFlipStyles();
+      let heroEl: HTMLElement | undefined;
+      if (!this.reduceMotion) {
+        const heroIdx = this.cards().findIndex(c => c.isCenter);
+        heroEl = heroIdx >= 0 ? this.slotEls?.get(heroIdx)?.nativeElement : undefined;
+        heroEl?.classList.add('pgx-hero-arrive');
+      }
+      const settleMs = this.reduceMotion ? 0 : HERO_ARRIVE_MS;
+      this.travelTimer = setTimeout(() => {
+        heroEl?.classList.remove('pgx-hero-arrive');
+        this.isTransitioning = false;
+        this.travelTimer = null;
+      }, settleMs);
     }, TRAVEL_MS + 80);
   }
 
@@ -993,7 +1034,7 @@ export class ProjectGalleryComponent implements AfterViewInit {
     if (!this.slotEls) return;
     this.slotEls.forEach(el => {
       el.nativeElement.style.removeProperty('--flip');
-      el.nativeElement.classList.remove('pgx-flipping', 'pgx-hero-focus');
+      el.nativeElement.classList.remove('pgx-flipping', 'pgx-hero-focus', 'pgx-hero-arrive');
     });
   }
 
