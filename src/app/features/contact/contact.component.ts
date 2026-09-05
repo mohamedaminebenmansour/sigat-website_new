@@ -58,7 +58,7 @@ import { ProjectMapComponent } from '../../shared/components/project-map/project
 
     <app-contact-trust />
 
-    <app-contact-featured-project />
+
 
     <app-cta-banner
       [title]="'contact_cta_title' | translate"

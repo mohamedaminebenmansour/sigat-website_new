@@ -5,8 +5,8 @@ export const NAV_LINKS: NavigationLink[] = [
   { path: '/home', label: 'nav_home' },
   { path: '/expertise', label: 'nav_expertise' },
   { path: '/projects', label: 'nav_projects' },
-  { path: '/capabilities', label: 'nav_capabilities' },
-  { path: '/hse', label: 'nav_hse' },
+  /*{ path: '/capabilities', label: 'nav_capabilities' },*/
+  /*{ path: '/hse', label: 'nav_hse' },*/
   { path: '/partnerships', label: 'nav_partnerships', isCta: true },
   { path: '/contact', label: 'nav_contact' }
 ];
