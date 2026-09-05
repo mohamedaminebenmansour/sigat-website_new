@@ -13,13 +13,27 @@ import { TranslatePipe } from '@ngx-translate/core';
 import { SectionHeaderComponent } from '../../../shared/components/section-header.component';
 import { COMPANY_VALUES } from './values.data';
 
+/* ============================================================
+   3D VALUES — MANUAL VISUAL TUNING (TypeScript side)
+   Change these values to tune the composition.
+   NOTE: V3D_RX1_FRAC / V3D_STEP_FRAC below MUST stay identical
+   to the CSS custom properties --v3d-orbit-rx-base / --v3d-orbit-step
+   in the styles of this component (single source of truth pair).
+   ============================================================ */
+
 /** Dwell time between automatic active-value steps (autoplay). */
 const V3D_AUTOPLAY_MS = 4000;
 /** Planets (= COMPANY_VALUES length). */
 const V3D_SLOTS = 6;
 /** Autoplay proceeds 0..n-1 then wraps. */
 const V3D_STEP = 1;
-/** Ellipse aspect ratio (radiusY / radiusX) - the fixed "camera tilt". */
+/**
+ * Orbit plane tilt, expressed as the projection ratio of the tilted XZ
+ * circle: radiusY = radiusX * cos(tilt). 0.6 == a circle on the XZ plane
+ * viewed from ~53° above the horizon. The ring (CSS) and the planet
+ * trajectory (JS) BOTH multiply the same radius by this ratio, so the
+ * planet can never leave its ring.
+ */
 const V3D_ELLIPSE_RATIO = 0.6;
 const V3D_DEG = Math.PI / 180;
 /** Near/far visual scale range - smooth and deliberately modest. */
@@ -28,15 +42,24 @@ const V3D_MAX_SCALE = 1.06;
 /** Near/far opacity range (far planets stay clearly readable). */
 const V3D_MIN_OPACITY = 0.75;
 const V3D_MAX_OPACITY = 1;
+/** Depth -> z-index band. 200..300 renders BEHIND the sun (z:300),
+    300..400 renders IN FRONT of it - planets visibly orbit around it. */
+const V3D_Z_BASE = 200;
+const V3D_Z_SPAN = 200;
 /** Per-planet orbital speed (radians per second) - inner fast, outer calm. */
 const V3D_SPEEDS = [0.32, 0.27, 0.23, 0.2, 0.17, 0.14];
 /** Initial offsets (radians) so the six planets start spread around the sun. */
 const V3D_START_ANGLES = [0.4, 1.6, 3.0, 4.4, 5.6, 2.4];
 /** Fixed planet accent colors (SIGAT identity: warm gold + cool blues). */
 const V3D_COLORS = ['#f59e0b', '#2563eb', '#0ea5e9', '#6366f1', '#1d4ed8', '#0f766e'];
-/** radiusX = this fraction x scene width; successive orbits step by fraction. */
-const V3D_RX1_FRAC = 0.25;
-const V3D_STEP_FRAC = 0.04;
+/**
+ * radiusX = this fraction x scene width; successive orbits step by fraction.
+ * MUST MATCH --v3d-orbit-rx-base (0.23) and --v3d-orbit-step (0.039) in CSS.
+ */
+const V3D_RX1_FRAC = 0.23;
+const V3D_STEP_FRAC = 0.039;
+/** Subtle per-planet size variation (planet i is scaled by 1 - i*step). */
+const V3D_PLANET_SIZE_STEP = 0.03;
 
 /** Per-planet visual geometry, recomputed every frame from the orbit angle. */
 interface PlanetGeometry {
@@ -49,15 +72,29 @@ interface PlanetGeometry {
 }
 
 /**
- * EXPERIMENTAL Version B - "SIGAT Values Solar System".
- * Each company value is a planet orbiting a glowing sun. Technically this is a
- * PURE 2D "faux-3D" visualization - no rotateX, rotateY, perspective or
- * preserve-3d. Planet positions come from ellipse math about the 50/50 center,
- * and depth is derived continuously from the vertical orbit position, so it
- * reads as a tilted solar system purely through scale + opacity + z-index.
- * The orbital loop (A) and the active-value autoplay (B) are independent and
- * hover NEVER pauses the motion. One rAF loop runs inside Zone.runOutsideAngular
- * and writes per-frame transforms straight to the DOM (no change detection).
+ * "SIGAT Values Solar System" - company values as a premium orbital system.
+ *
+ * Geometry model (single mathematical source of truth per orbit):
+ *   Every orbit is a circle of radius orbitRadius(i) on the XZ plane. The
+ *   whole system is tilted toward the camera, so the circle projects onto
+ *   the screen as an ellipse with radiusY = radiusX * V3D_ELLIPSE_RATIO.
+ *   The CSS rings and the JS planet trajectory use the SAME radius fractions
+ *   about the SAME 50%/50% center, therefore a planet is always exactly on
+ *   its ring - the ellipse look is the projection, never a faked path.
+ *
+ * Transform layers (one job per element):
+ *   button.v3d-planet        -> orbital position + depth scale (owned by rAF,
+ *                               NO CSS transition may touch this transform)
+ *   span.v3d-planet-surface  -> sphere visuals + active/hover emphasis scale
+ *                               (safe to transition: rAF never writes here)
+ *   span.v3d-planet-content  -> icon / title / description, clipped to the
+ *                               circle so nothing escapes the planet
+ *
+ * The orbital loop (A) and the active-value autoplay (B) are independent;
+ * hover NEVER pauses the motion. One rAF loop runs inside
+ * Zone.runOutsideAngular and writes per-frame transforms straight to the DOM
+ * (no change detection). A ResizeObserver keeps sceneWidth (and therefore
+ * every orbit radius) in sync with the responsive CSS rings.
  */
 @Component({
   selector: 'app-values-3d',
@@ -67,46 +104,88 @@ interface PlanetGeometry {
   styles: [`
       :host { display: block; }
 
-      /* Section + header: fills the viewport below the fixed navbar; the
-         margin-bottom reserves a safe crawl for mobile browser chrome. */
+      /* ============================================================
+         3D VALUES — MANUAL VISUAL TUNING (CSS side)
+         Change these values to tune the composition.
+         ============================================================ */
       .v3d-section {
+        /* Fixed navbar height: h-20 (5rem) mobile, md:h-24 (6rem) desktop. */
+        --v3d-header-offset: 6rem;
+        /* Vertical space used by the section header block above the scene. */
+        --v3d-header-block: 7.5rem;
+        /* Breathing room kept below the section (was 8rem -> giant blank). */
+        --v3d-bottom-gap: 4rem;
+        /* Scene aspect ratio as width/height multiplier (100 / 62). */
+        --v3d-scene-ar: 1.6129;
+        /* Widest the scene may ever get on desktop. */
+        --v3d-scene-max-w: 940px;
+        /* Orbit radii: base + step * i (MUST match V3D_RX1_FRAC / V3D_STEP_FRAC). */
+        --v3d-orbit-rx-base: 23cqw;
+        --v3d-orbit-step: 3.9cqw;
+        /* Orbit plane tilt (radiusY = radiusX * ratio). */
+        --v3d-orbit-ratio: 0.6;
+        /* Sun vs planet sizes - the sun stays ~2.2x the largest planet. */
+        --v3d-sun: clamp(7.5rem, 19cqw, 12rem);
+        --v3d-planet: clamp(2.9rem, 9.6cqw, 5.5rem);
+        /* ============================================================ */
+
         position: relative;
         background: linear-gradient(180deg, #ffffff 0%, #f4f7fc 100%);
         overflow: hidden;
         width: 100%;
-        min-height: calc(100vh - 5.5rem);
+        /* Header + component fill exactly one viewport (dvh with vh fallback). */
+        min-height: calc(100vh - var(--v3d-header-offset));
+        min-height: calc(100dvh - var(--v3d-header-offset));
         display: flex;
         flex-direction: column;
         align-items: center;
         justify-content: center;
-        padding-block: 1.5rem 0.5rem;
-        margin-bottom: 8rem;
+        padding-inline: 1.25rem;
+        padding-block: 1rem 1.5rem;
+        margin-bottom: var(--v3d-bottom-gap);
+      }
+      @media (max-width: 767px) {
+        .v3d-section { --v3d-header-offset: 5rem; }
       }
       .v3d-header { width: 100%; }
 
       /* Scene - geometry root. container-type lets every size resolve from
-         the container width (cqw) so the system scales responsively. */
+         the container width (cqw) so rings scale responsively. The later
+         width candidates derive the scene width from the AVAILABLE HEIGHT,
+         so the whole system fits one viewport without empty bands. */
       .v3d-scene {
-        --v3d-rx1: 25cqw;
-        --v3d-step: 4cqw;
-        --v3d-rx2: calc(var(--v3d-rx1) + var(--v3d-step));
-        --v3d-rx3: calc(var(--v3d-rx1) + var(--v3d-step) * 2);
-        --v3d-rx4: calc(var(--v3d-rx1) + var(--v3d-step) * 3);
-        --v3d-rx5: calc(var(--v3d-rx1) + var(--v3d-step) * 4);
-        --v3d-rx6: calc(var(--v3d-rx1) + var(--v3d-step) * 5);
-        --v3d-ratio: 0.6;
-        --v3d-planet: clamp(2.6rem, 8.75cqw, 4.4rem);
-        --v3d-sun: clamp(7rem, 17cqw, 10.5rem);
+        --v3d-rx1: var(--v3d-orbit-rx-base);
+        --v3d-rx2: calc(var(--v3d-orbit-rx-base) + var(--v3d-orbit-step));
+        --v3d-rx3: calc(var(--v3d-orbit-rx-base) + var(--v3d-orbit-step) * 2);
+        --v3d-rx4: calc(var(--v3d-orbit-rx-base) + var(--v3d-orbit-step) * 3);
+        --v3d-rx5: calc(var(--v3d-orbit-rx-base) + var(--v3d-orbit-step) * 4);
+        --v3d-rx6: calc(var(--v3d-orbit-rx-base) + var(--v3d-orbit-step) * 5);
         --v3d-ease: cubic-bezier(0.22, 1, 0.36, 1);
         container-type: inline-size;
         position: relative;
         margin-inline: auto;
-        width: min(100%, 820px);
-        aspect-ratio: 100 / 64;
+        width: min(100%, var(--v3d-scene-max-w));
+        width: min(
+          100%,
+          var(--v3d-scene-max-w),
+          calc(
+            (100vh - var(--v3d-header-offset) - var(--v3d-header-block) - var(--v3d-bottom-gap))
+            * var(--v3d-scene-ar)
+          )
+        );
+        width: min(
+          100%,
+          var(--v3d-scene-max-w),
+          calc(
+            (100dvh - var(--v3d-header-offset) - var(--v3d-header-block) - var(--v3d-bottom-gap))
+            * var(--v3d-scene-ar)
+          )
+        );
+        aspect-ratio: 100 / 62;
       }
 
-      /* Orbit rings - genuine 2D ellipses (width != height), normal border.
-         No rotateX, no preserve-3d. */
+      /* Orbit rings - the projected ellipse of each tilted XZ circle.
+         width = 2 * radiusX, height = 2 * radiusX * tilt ratio. */
       .v3d-orbits { position: absolute; inset: 0; }
       .v3d-orbit {
         position: absolute;
@@ -118,70 +197,60 @@ interface PlanetGeometry {
         pointer-events: none;
       }
       .v3d-orbit:nth-of-type(2n) { border-style: dashed; }
-      .v3d-orbit.o1 { width: calc(var(--v3d-rx1) * 2);      height: calc(var(--v3d-rx1) * 2 * var(--v3d-ratio)); }
-      .v3d-orbit.o2 { width: calc(var(--v3d-rx2) * 2);      height: calc(var(--v3d-rx2) * 2 * var(--v3d-ratio)); }
-      .v3d-orbit.o3 { width: calc(var(--v3d-rx3) * 2);      height: calc(var(--v3d-rx3) * 2 * var(--v3d-ratio)); }
-      .v3d-orbit.o4 { width: calc(var(--v3d-rx4) * 2);      height: calc(var(--v3d-rx4) * 2 * var(--v3d-ratio)); }
-      .v3d-orbit.o5 { width: calc(var(--v3d-rx5) * 2);      height: calc(var(--v3d-rx5) * 2 * var(--v3d-ratio)); }
-      .v3d-orbit.o6 { width: calc(var(--v3d-rx6) * 2);      height: calc(var(--v3d-rx6) * 2 * var(--v3d-ratio)); }
+      .v3d-orbit.o1 { width: calc(var(--v3d-rx1) * 2); height: calc(var(--v3d-rx1) * 2 * var(--v3d-orbit-ratio)); }
+      .v3d-orbit.o2 { width: calc(var(--v3d-rx2) * 2); height: calc(var(--v3d-rx2) * 2 * var(--v3d-orbit-ratio)); }
+      .v3d-orbit.o3 { width: calc(var(--v3d-rx3) * 2); height: calc(var(--v3d-rx3) * 2 * var(--v3d-orbit-ratio)); }
+      .v3d-orbit.o4 { width: calc(var(--v3d-rx4) * 2); height: calc(var(--v3d-rx4) * 2 * var(--v3d-orbit-ratio)); }
+      .v3d-orbit.o5 { width: calc(var(--v3d-rx5) * 2); height: calc(var(--v3d-rx5) * 2 * var(--v3d-orbit-ratio)); }
+      .v3d-orbit.o6 { width: calc(var(--v3d-rx6) * 2); height: calc(var(--v3d-rx6) * 2 * var(--v3d-orbit-ratio)); }
 
-      /* Planets - centered at 50/50; fixed size/color come from instance
-         styles so selecting a value never reconfigures the loop. The per-frame
-         transform is written directly to style.transform by the rAF loop and
-         has NO CSS transition (that would ghost/lag the motion). */
+      /* Planets - LAYER 1 (orbit wrapper). Centered at 50/50 like the rings;
+         the rAF loop writes ONLY this element's transform + zIndex + opacity.
+         No CSS transition touches transform here (no ghosting / lag / drift).
+         Size + color come from instance styles so selecting a value never
+         reconfigures the loop. */
       .v3d-planet {
         --v3d-pc: #0ea5e9;
         position: absolute;
         left: 50%;
         top: 50%;
         border-radius: 50%;
-        border: 2px solid rgba(255, 255, 255, 0.45);
         padding: 0;
         margin: 0;
         font: inherit;
+        background: none;
+        border: none;
         cursor: pointer;
+        transform: translate(-50%, -50%);
+        will-change: transform;
+        -webkit-tap-highlight-color: transparent;
+      }
+      .v3d-planet:focus-visible {
+        outline: 3px solid #1e3a8a;
+        outline-offset: 3px;
+        border-radius: 50%;
+      }
+
+      /* LAYER 2 (surface): sphere visuals + emphasis scale. Safe to
+         transition because the rAF loop never writes to this element. */
+      .v3d-planet-surface {
+        position: absolute;
+        inset: 0;
+        border-radius: 50%;
+        border: 2px solid rgba(255, 255, 255, 0.45);
         display: flex;
         align-items: center;
         justify-content: center;
         background: radial-gradient(circle at 32% 28%, rgba(255, 255, 255, 0.92) 0%, var(--v3d-pc) 82%, rgba(0, 0, 0, 0.18) 100%);
         box-shadow: 0 8px 20px rgba(15, 23, 42, 0.25);
-        transform: translate(-50%, -50%);
-        will-change: transform;
-        transition: box-shadow 250ms ease, border-color 250ms ease, filter 250ms ease;
-        -webkit-tap-highlight-color: transparent;
+        transition: transform 250ms ease, box-shadow 250ms ease, border-color 250ms ease, filter 250ms ease;
       }
-      .v3d-planet.active { border-color: #ffffff; }
-      .v3d-planet-inner {
-        display: flex;
-        flex-direction: column;
-        align-items: center;
-        justify-content: center;
-        gap: 0.2rem;
-        width: 100%;
-        height: 100%;
-        padding: 0.35rem 0.3rem;
-        text-align: center;
-        border-radius: inherit;
-        overflow: hidden;
-        color: #ffffff;
-        text-shadow: 0 1px 3px rgba(15, 23, 42, 0.55);
-        user-select: none;
+      .v3d-planet.active .v3d-planet-surface {
+        border-color: #ffffff;
+        transform: scale(1.09);
       }
-      .v3d-planet-inner i { font-size: clamp(0.95rem, 2.8cqw, 1.35rem); line-height: 1; }
-      .v3d-planet-inner span {
-        font-size: clamp(0.5rem, 1.4cqw, 0.72rem);
-        font-weight: 700;
-        line-height: 1.08;
-        letter-spacing: 0.01em;
-        max-width: 100%;
-        display: block;
-        white-space: nowrap;
-        overflow: hidden;
-        text-overflow: ellipsis;
-      }
-
       /* Hover: beaming emphasis ONLY - it NEVER pauses orbital motion. */
-      .v3d-planet:hover {
+      .v3d-planet:hover .v3d-planet-surface {
         border-color: rgba(255, 255, 255, 0.95);
         filter: brightness(1.15);
         box-shadow:
@@ -197,11 +266,49 @@ interface PlanetGeometry {
         box-shadow: 0 0 16px 3px color-mix(in srgb, var(--v3d-pc) 70%, transparent);
         pointer-events: none;
       }
-      .v3d-planet:focus-visible {
-        outline: 3px solid #1e3a8a;
-        outline-offset: 3px;
-        border-radius: 50%;
+
+      /* LAYER 3 (content): icon / title / description, clipped to the circle
+         so nothing escapes the planet surface. */
+      .v3d-planet-content {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        gap: 0.18rem;
+        width: 100%;
+        height: 100%;
+        padding: 0.4rem 0.3rem;
+        text-align: center;
+        border-radius: inherit;
+        overflow: hidden;
+        color: #ffffff;
+        text-shadow: 0 1px 3px rgba(15, 23, 42, 0.55);
+        user-select: none;
       }
+      .v3d-planet-content i { font-size: clamp(0.95rem, 2.6cqw, 1.5rem); line-height: 1; }
+      .v3d-planet-title {
+        font-size: clamp(0.5rem, 1.45cqw, 0.75rem);
+        font-weight: 700;
+        line-height: 1.08;
+        letter-spacing: 0.01em;
+        max-width: 100%;
+        display: block;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+      }
+      .v3d-planet-desc {
+        font-size: clamp(0.44rem, 1.1cqw, 0.58rem);
+        line-height: 1.25;
+        opacity: 0.92;
+        max-width: 100%;
+        display: -webkit-box;
+        -webkit-line-clamp: 2;
+        line-clamp: 2;
+        -webkit-box-orient: vertical;
+        overflow: hidden;
+      }
+
       /* ================= Central sun ================= */
       .v3d-sun {
         position: absolute;
@@ -209,7 +316,9 @@ interface PlanetGeometry {
         top: 50%;
         width: var(--v3d-sun);
         height: var(--v3d-sun);
-        z-index: 400;
+        /* Between the far (200) and near (400) planet z-band so planets
+           genuinely pass behind AND in front of the sun. */
+        z-index: 300;
         transform: translate(-50%, -50%);
         border-radius: 50%;
         border: 2px solid rgba(255, 255, 255, 0.65);
@@ -238,6 +347,9 @@ interface PlanetGeometry {
         filter: blur(2px);
         pointer-events: none;
       }
+      /* Sun content: subtle convex/embossed treatment. A slight perspective
+         tilt + layered highlight/shadow text makes the text feel embedded in
+         the glowing sphere while staying perfectly readable. */
       .v3d-sun-content {
         position: relative;
         z-index: 2;
@@ -250,13 +362,22 @@ interface PlanetGeometry {
         padding: 0 14%;
         text-align: center;
         color: #78350f;
+        perspective: 480px;
         animation: v3d-swap 300ms var(--v3d-ease) both;
       }
-      .v3d-sun-content i { font-size: clamp(1.25rem, 3.9cqw, 1.9rem); line-height: 1; }
-      .v3d-sun-content h3 { margin: 0; font-size: clamp(0.82rem, 2.6cqw, 1.08rem); font-weight: 800; line-height: 1.18; }
+      .v3d-sun-content i,
+      .v3d-sun-content h3,
+      .v3d-sun-content p {
+        transform: rotateX(4deg);
+        text-shadow:
+          0 1px 0 rgba(255, 251, 235, 0.55),
+          0 -1px 2px rgba(124, 45, 18, 0.28);
+      }
+      .v3d-sun-content i { font-size: clamp(1.3rem, 4cqw, 2rem); line-height: 1; }
+      .v3d-sun-content h3 { margin: 0; font-size: clamp(0.85rem, 2.7cqw, 1.15rem); font-weight: 800; line-height: 1.18; }
       .v3d-sun-content p {
         margin: 0;
-        font-size: clamp(0.55rem, 1.75cqw, 0.76rem);
+        font-size: clamp(0.55rem, 1.75cqw, 0.78rem);
         line-height: 1.4;
         color: #92400e;
         display: -webkit-box;
@@ -294,36 +415,43 @@ interface PlanetGeometry {
       .v3d-dot.active { background: #f59e0b; transform: scale(1.3); }
       .v3d-dot:focus-visible { outline: 2px solid #1e3a8a; outline-offset: 2px; }
 
-      /* ================= Responsive geometry ================= */
+      /* ================= Responsive geometry =================
+         Same math everywhere: only the tuning variables shrink. */
       @media (max-width: 900px) {
-        .v3d-scene {
-          --v3d-planet: clamp(2.5rem, 8.75cqw, 3.5rem);
+        .v3d-section {
+          --v3d-header-block: 7rem;
+          --v3d-scene-max-w: 34rem;
           --v3d-sun: clamp(6.3rem, 18cqw, 8.5rem);
-          width: min(100%, 30rem);
-          aspect-ratio: 100 / 74;
+          --v3d-planet: clamp(2.7rem, 9.4cqw, 4.4rem);
         }
       }
       @media (max-width: 560px) {
-        .v3d-scene {
-          --v3d-planet: clamp(2.35rem, 8.25cqw, 3rem);
-          --v3d-sun: clamp(5.2rem, 15.5cqw, 6.4rem);
-          width: min(100%, 22rem);
-          aspect-ratio: 100 / 82;
+        .v3d-section {
+          --v3d-header-block: 6.5rem;
+          --v3d-bottom-gap: 3rem;
+          --v3d-scene-max-w: 23rem;
+          --v3d-sun: clamp(5.5rem, 19cqw, 7rem);
+          --v3d-planet: clamp(2.6rem, 10cqw, 3.6rem);
         }
+        /* A ~42px circle cannot hold three text rows: the description is
+           hidden visually only (data + translations untouched; the full
+           text remains in the sun and in each planet's aria-label). */
+        .v3d-planet-desc { display: none; }
       }
 
       /* ================= Reduced motion ================= */
       @media (prefers-reduced-motion: reduce) {
         .v3d-sun-content { animation: none; }
         .v3d-sun { animation: none; }
-        .v3d-planet, .v3d-dot { transition: none; }
+        .v3d-planet-surface, .v3d-dot { transition: none; }
+        .v3d-planet.active .v3d-planet-surface { transform: none; }
         .v3d-planet.active::after { box-shadow: none; }
       }
     `,
   ],
   template: `
     <section class="v3d-section">
-      <div class="v3d-header py-4 sm:py-6 px-4">
+      <div class="v3d-header py-4 sm:py-6">
         <app-section-header
           [title]="'values_title' | translate"
           [subtitle]="'values_subtitle' | translate"
@@ -331,7 +459,7 @@ interface PlanetGeometry {
       </div>
 
       <div class="v3d-scene">
-        <!-- Orbital guide rings (2D ellipses) - behind everything. -->
+        <!-- Orbital guide rings (projected tilted XZ circles) - behind everything. -->
         <div class="v3d-orbits" aria-hidden="true">
           <div class="v3d-orbit o1"></div>
           <div class="v3d-orbit o2"></div>
@@ -344,13 +472,17 @@ interface PlanetGeometry {
         <!-- Soft halo shield keeps the sun visually dominant. -->
         <div class="v3d-sun-halo" aria-hidden="true"></div>
 
-        <!-- Central sun - always shows the active value. -->
+        <!-- Central sun - always shows the active value. The @for over a
+             single item keyed by activeIndex() re-creates the content node
+             on every change so the swap animation restarts cleanly. -->
         <div class="v3d-sun">
-          <div class="v3d-sun-content">
-            <i [class]="activeValue().icon" aria-hidden="true"></i>
-            <h3>{{ activeValue().titleKey | translate }}</h3>
-            <p>{{ activeValue().descriptionKey | translate }}</p>
-          </div>
+          @for (value of [activeValue()]; track activeIndex()) {
+            <div class="v3d-sun-content">
+              <i [class]="value.icon" aria-hidden="true"></i>
+              <h3>{{ value.titleKey | translate }}</h3>
+              <p>{{ value.descriptionKey | translate }}</p>
+            </div>
+          }
 
           <div class="v3d-dots" role="group" aria-label="Company values">
             @for (value of values; track value.id; let i = $index) {
@@ -366,7 +498,9 @@ interface PlanetGeometry {
           </div>
         </div>
 
-        <!-- Orbiting planets - exactly six, positioned by the rAF loop. -->
+        <!-- Orbiting planets - exactly six, positioned by the rAF loop.
+             LAYER 1 = button (orbit position) / LAYER 2 = surface (sphere
+             visuals + active scale) / LAYER 3 = content (readable text). -->
         <div class="v3d-planets">
           @for (value of values; track value.id; let i = $index) {
             <button
@@ -374,15 +508,18 @@ interface PlanetGeometry {
               class="v3d-planet"
               [class.active]="i === activeIndex()"
               [style.--v3d-pc]="planetColor(i)"
-              [style.width]="planetSize()"
-              [style.height]="planetSize()"
+              [style.width]="planetSize(i)"
+              [style.height]="planetSize(i)"
               (click)="selectPlanet(i)"
               [attr.aria-label]="value.titleKey | translate"
               [attr.aria-current]="i === activeIndex() ? 'true' : null"
             >
-              <span class="v3d-planet-inner">
-                <i [class]="value.icon" aria-hidden="true"></i>
-                <span>{{ value.titleKey | translate }}</span>
+              <span class="v3d-planet-surface">
+                <span class="v3d-planet-content">
+                  <i [class]="value.icon" aria-hidden="true"></i>
+                  <span class="v3d-planet-title">{{ value.titleKey | translate }}</span>
+                  <span class="v3d-planet-desc">{{ value.descriptionKey | translate }}</span>
+                </span>
               </span>
             </button>
           }
@@ -391,7 +528,6 @@ interface PlanetGeometry {
     </section>
   `,
 })
-
 
 export class Values3dComponent {
   /** Shared data - the ONLY source of truth (never copied, never reordered). */
@@ -411,10 +547,12 @@ export class Values3dComponent {
 
   private sceneWidth = 0;
 
+  private scene: HTMLElement | null = null;
   private planets: HTMLElement[] = [];
   private animationFrame: number | null = null;
   private lastTimestamp = 0;
   private timer: ReturnType<typeof setTimeout> | null = null;
+  private resizeObserver: ResizeObserver | null = null;
 
   constructor() {
     // Randomize start positions ONCE so every reload looks fresh.
@@ -425,6 +563,7 @@ export class Values3dComponent {
 
     afterNextRender(() => {
       this.applyStaticGeometry();
+      this.observeSceneResizes();
       if (this.reduceMotion) return; // planets placed once and stay
       this.startAnimation();
       this.scheduleAutoplay(V3D_AUTOPLAY_MS);
@@ -435,9 +574,14 @@ export class Values3dComponent {
   planetColor(i: number): string {
     return V3D_COLORS[i % V3D_COLORS.length];
   }
-  /** Responsive planet size from the scene custom property. */
-  planetSize(): string {
-    return 'var(--v3d-planet)';
+
+  /**
+   * Responsive planet size from the scene custom property, with a subtle
+   * per-planet variation (planet i is scaled by 1 - i * V3D_PLANET_SIZE_STEP).
+   */
+  planetSize(i: number): string {
+    const f = 1 - (i % V3D_SLOTS) * V3D_PLANET_SIZE_STEP;
+    return `calc(var(--v3d-planet) * ${f.toFixed(3)})`;
   }
 
   selectPlanet(index: number): void {
@@ -447,32 +591,68 @@ export class Values3dComponent {
     this.scheduleAutoplay(V3D_AUTOPLAY_MS);
   }
 
-  /** Pure 2D ellipse geometry about the 50/50 center. No rotateY/X or 3D. */
+  /**
+   * THE single orbit-radius source of truth in JavaScript.
+   * Returns radiusX in px for orbit i; the visual ring is the SAME fraction
+   * of the SAME container width via --v3d-orbit-rx-base/--v3d-orbit-step,
+   * and both share the vertical ratio V3D_ELLIPSE_RATIO, so:
+   *   planet distance from center === ring radius  (for every i)
+   */
+  private orbitRadius(index: number): number {
+    return this.sceneWidth * (V3D_RX1_FRAC + index * V3D_STEP_FRAC);
+  }
+
+  /**
+   * XZ-circle orbit projected by the fixed system tilt:
+   *   x = cos(theta) * radius          (screen X)
+   *   y = sin(theta) * radius * ratio  (screen Y = projected Z of the tilt)
+   * The ellipse is purely the projection of the circular orbit - never a
+   * separately faked path - so the planet can never drift off its ring.
+   */
   private calculatePlanetGeometry(index: number, angle: number): PlanetGeometry {
-    const rx = this.sceneWidth * (V3D_RX1_FRAC + index * V3D_STEP_FRAC);
-    const ry = rx * V3D_ELLIPSE_RATIO;
-    const x = Math.cos(angle) * rx;
-    const y = Math.sin(angle) * ry;
+    const radius = this.orbitRadius(index);
+    const x = Math.cos(angle) * radius;
+    const y = Math.sin(angle) * radius * V3D_ELLIPSE_RATIO;
     const depth = (Math.sin(angle) + 1) / 2; // 0 far (back) -> 1 near (front)
     const scale = V3D_MIN_SCALE + depth * (V3D_MAX_SCALE - V3D_MIN_SCALE);
     const opacity = V3D_MIN_OPACITY + depth * (V3D_MAX_OPACITY - V3D_MIN_OPACITY);
-    const zIndex = Math.round(depth * 100);
+    // Far half renders behind the sun (z 200..300), near half in front (300..400).
+    const zIndex = Math.round(V3D_Z_BASE + depth * V3D_Z_SPAN);
     return { x, y, depth, scale, opacity, zIndex };
   }
 
   private composePlanetTransform(g: PlanetGeometry): string {
-    return `translate3d(${g.x}px, ${g.y}px, 0) translate(-50%, -50%) scale(${g.scale.toFixed(4)})`;
+    return `translate3d(${g.x.toFixed(2)}px, ${g.y.toFixed(2)}px, 0) translate(-50%, -50%) scale(${g.scale.toFixed(4)})`;
   }
 
-  /** Reads the scene size and derives the ellipse radii used by CSS + JS. */
+  /** Reads the scene size once and caches the planet nodes for the rAF loop. */
   private applyStaticGeometry(): void {
     const host = this.elementRef.nativeElement;
-    const scene = host.querySelector<HTMLElement>('.v3d-scene');
-    const width = scene ? scene.clientWidth : 0;
-    this.sceneWidth = Math.max(0, width);
+    this.scene = host.querySelector<HTMLElement>('.v3d-scene');
+    this.sceneWidth = this.scene ? this.scene.clientWidth : 0;
 
     this.planets = Array.from(host.querySelectorAll<HTMLElement>('.v3d-planet'));
     this.applyAnimation();
+  }
+
+  /**
+   * THE responsive fix: the old code measured sceneWidth ONCE, so after any
+   * resize the planets kept stale px radii while the CSS rings (cqw) resized
+   * - planets visibly drifted off their orbits. The observer keeps the JS
+   * radius in sync with the CSS rings at ALL times, without Angular CD.
+   */
+  private observeSceneResizes(): void {
+    if (typeof ResizeObserver === 'undefined' || !this.scene) return;
+    const scene = this.scene;
+    this.zone.runOutsideAngular(() => {
+      this.resizeObserver = new ResizeObserver(() => {
+        const width = scene.clientWidth;
+        if (width === this.sceneWidth) return;
+        this.sceneWidth = width;
+        this.applyAnimation();
+      });
+      this.resizeObserver.observe(scene);
+    });
   }
 
   /** ONE rAF loop: advances every planet continuously until destroyed, runs
@@ -526,6 +706,10 @@ export class Values3dComponent {
     if (this.animationFrame !== null) {
       cancelAnimationFrame(this.animationFrame);
       this.animationFrame = null;
+    }
+    if (this.resizeObserver) {
+      this.resizeObserver.disconnect();
+      this.resizeObserver = null;
     }
   }
 }
