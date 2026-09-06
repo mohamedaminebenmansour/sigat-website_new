@@ -62,10 +62,19 @@ const V3D_STEP_FRAC = 0.039;
 const V3D_PLANET_SIZE_STEP = 0.03;
 /** Per-planet AXIAL (self) rotation speed (radians/s) - VERY slow celestial
     rotation, NOT a spinning UI card. Inner planets rotate slightly faster.
-    At 0.03-0.045 rad/s one full revolution takes ~2.3-3.5 minutes, so the
-    front hemisphere stays readable for over a minute. Fully independent of
-    the orbital speeds (two separate angle systems, one shared rAF clock). */
-const V3D_SELF_SPEEDS = [0.045, 0.042, 0.039, 0.036, 0.033, 0.03];
+    In degrees/frame at 60fps this is ~0.018-0.031 (inside the 0.015-0.04
+    readability window). Fully independent of the orbital speeds (two
+    separate angle systems, one shared rAF clock). */
+const V3D_SELF_SPEEDS = [0.032, 0.03, 0.028, 0.026, 0.024, 0.022];
+/**
+ * Content visibility model - keeps the TRUE 360deg rotation perceptible.
+ * A hard backface cull makes the content vanish for a whole hemisphere,
+ * which reads like a fake 0->180->0 oscillation. Instead the content fades
+ * smoothly with the self-rotation angle and keeps a faint presence
+ * (V3D_BACK_OPACITY) on the far side, so the cycle reads as one continuous
+ * spin. opacity = BACK + (1 - BACK) * smoothstep(max(0, cos(selfAngle))).
+ */
+const V3D_BACK_OPACITY = 0.15;
 
 /** Per-planet visual geometry, recomputed every frame from the orbit angle. */
 interface PlanetGeometry {
@@ -135,10 +144,10 @@ interface PlanetGeometry {
         --v3d-orbit-step: 3.9cqw;
         /* Orbit plane tilt (radiusY = radiusX * ratio). */
         --v3d-orbit-ratio: 0.6;
-        /* Sun vs planet sizes - the sun stays ~2x the largest planet even
+        /* Sun vs planet sizes - the sun stays ~1.9x the largest planet even
            though planets grew to carry icon + title + description. */
         --v3d-sun: clamp(7.5rem, 19cqw, 12rem);
-        --v3d-planet: clamp(3.1rem, 10.4cqw, 6rem);
+        --v3d-planet: clamp(3.2rem, 10.8cqw, 6.4rem);
         /* Surface-mounted content depth: translateZ = planet diameter x this
            fraction. Small value = text sits just above the curved surface
            (bowed toward the viewer by the 700px perspective), never floating. */
@@ -280,20 +289,22 @@ interface PlanetGeometry {
       /* LAYER 3 (surface cap): the front-facing REGION of the sphere, not a
          full-bleed card. inset: 8% shrinks it to the visible front cap so
          the content occupies the sphere surface, exactly like print on a
-         globe. It rotates WITH the sphere (child of LAYER 2) and is culled
-         by backface-visibility when the planet turns away - the sphere body
-         (on the static button) is never affected and stays visible. No
-         overflow:hidden here - it would flatten preserve-3d and kill the
-         depth/backface effect; containment is guaranteed geometrically
-         (a centered plane under Y-rotation never projects past the disc)
-         plus the internal clipping on the content layer below. */
+         globe. It rotates WITH the sphere (child of LAYER 2). Deliberately
+         NO backface-visibility: hidden here - a hard cull hides the content
+         for an entire hemisphere and makes the spin read like a fake
+         0->180->0 oscillation; visibility is instead a smooth function of
+         the self-rotation angle (see V3D_BACK_OPACITY / applyAnimation), so
+         the cycle is a genuine continuous 360deg. The sphere body on the
+         static button is never affected and stays fully visible. No
+         overflow:hidden either - it would flatten preserve-3d and kill the
+         depth effect; containment is guaranteed geometrically (a centered
+         plane under Y-rotation never projects past the disc) plus the
+         internal clipping on the content layer below. */
       .v3d-planet-surface {
         position: absolute;
         inset: 8%;
         border-radius: 50%;
         transform-style: preserve-3d;
-        backface-visibility: hidden;
-        -webkit-backface-visibility: hidden;
       }
 
       /* LAYER 4 (content): icon / title / description physically mounted on
@@ -310,7 +321,10 @@ interface PlanetGeometry {
         align-items: center;
         justify-content: center;
         gap: 0.18rem;
-        padding: 0.3rem 0.24rem;
+        /* Safe internal padding as a PERCENTAGE of the content box, so the
+           readable area scales with the planet (10-15% band, no fixed rem
+           that breaks on mobile). */
+        padding: 12% 10%;
         overflow: hidden;
         text-align: center;
         color: #ffffff;
@@ -488,7 +502,7 @@ interface PlanetGeometry {
           --v3d-header-block: 7rem;
           --v3d-scene-max-w: 34rem;
           --v3d-sun: clamp(6.3rem, 18cqw, 8.5rem);
-          --v3d-planet: clamp(2.9rem, 10.2cqw, 4.8rem);
+          --v3d-planet: clamp(2.95rem, 10.6cqw, 5rem);
         }
       }
       @media (max-width: 560px) {
@@ -497,7 +511,7 @@ interface PlanetGeometry {
           --v3d-bottom-gap: 3rem;
           --v3d-scene-max-w: 23rem;
           --v3d-sun: clamp(5.5rem, 19cqw, 7rem);
-          --v3d-planet: clamp(2.7rem, 10.5cqw, 3.8rem);
+          --v3d-planet: clamp(2.75rem, 11cqw, 4rem);
         }
         /* A ~42px circle cannot hold three text rows: the description is
            hidden visually only (data + translations untouched; the full
@@ -513,7 +527,9 @@ interface PlanetGeometry {
         .v3d-sun { animation: none; }
         .v3d-planet, .v3d-planet-surface, .v3d-dot { transition: none; }
         .v3d-planet-sphere { transform: none; }
-        .v3d-planet-surface { backface-visibility: visible; }
+        /* !important overrides any inline opacity already written by the
+           rAF loop before the preference changed - content stays readable. */
+        .v3d-planet-content { opacity: 1 !important; }
         .v3d-planet.active { filter: none; }
         .v3d-planet.active::after { box-shadow: none; }
       }
@@ -630,6 +646,8 @@ export class Values3dComponent {
   private planets: HTMLElement[] = [];
   /** Cached self-rotation layers (one per planet) - written by the rAF loop. */
   private spheres: HTMLElement[] = [];
+  /** Cached content layers (one per planet) - smooth visibility per frame. */
+  private contents: HTMLElement[] = [];
   private animationFrame: number | null = null;
   private lastTimestamp = 0;
   private timer: ReturnType<typeof setTimeout> | null = null;
@@ -726,6 +744,7 @@ export class Values3dComponent {
 
     this.planets = Array.from(host.querySelectorAll<HTMLElement>('.v3d-planet'));
     this.spheres = Array.from(host.querySelectorAll<HTMLElement>('.v3d-planet-sphere'));
+    this.contents = Array.from(host.querySelectorAll<HTMLElement>('.v3d-planet-content'));
     this.applyAnimation();
   }
 
@@ -781,11 +800,22 @@ export class Values3dComponent {
 
       // Self-rotation: the SPHERE rotates; the icon/title/description are its
       // physical children and inherit the exact same angle, speed and clock.
-      // Visibility is purely 3D (perspective foreshortening + backface
-      // culling on the surface) - no opacity fade, no timers, no teleport.
+      // The sphere's rotateY angle is CONTINUOUS (0 -> 360 -> 720 ...). A hard
+      // backface cull would hide the content for a whole hemisphere and read
+      // like a fake 0->180->0 oscillation, so visibility is instead a smooth
+      // front-facing factor: front = 1, ~45deg ~= 0.8, 90deg = back floor,
+      // back = V3D_BACK_OPACITY - continuous, no flip, no teleport, no jump.
       const sphere = this.spheres[i];
       if (sphere) {
         sphere.style.transform = this.composeSelfRotationTransform(this.selfAngles[i]);
+      }
+      const content = this.contents[i];
+      if (content) {
+        const front = Math.max(0, Math.cos(this.selfAngles[i]));
+        const smooth = front * front * (3 - 2 * front); // smoothstep
+        content.style.opacity = (
+          V3D_BACK_OPACITY + (1 - V3D_BACK_OPACITY) * smooth
+        ).toFixed(3);
       }
     }
   }
