@@ -60,6 +60,12 @@ const V3D_RX1_FRAC = 0.23;
 const V3D_STEP_FRAC = 0.039;
 /** Subtle per-planet size variation (planet i is scaled by 1 - i*step). */
 const V3D_PLANET_SIZE_STEP = 0.03;
+/** Per-planet AXIAL (self) rotation speed (radians/s) - VERY slow celestial
+    rotation, NOT a spinning UI card. Inner planets rotate slightly faster.
+    At 0.03-0.045 rad/s one full revolution takes ~2.3-3.5 minutes, so the
+    front hemisphere stays readable for over a minute. Fully independent of
+    the orbital speeds (two separate angle systems, one shared rAF clock). */
+const V3D_SELF_SPEEDS = [0.045, 0.042, 0.039, 0.036, 0.033, 0.03];
 
 /** Per-planet visual geometry, recomputed every frame from the orbit angle. */
 interface PlanetGeometry {
@@ -84,11 +90,16 @@ interface PlanetGeometry {
  *
  * Transform layers (one job per element):
  *   button.v3d-planet        -> orbital position + depth scale (owned by rAF,
- *                               NO CSS transition may touch this transform)
- *   span.v3d-planet-surface  -> sphere visuals + active/hover emphasis scale
- *                               (safe to transition: rAF never writes here)
- *   span.v3d-planet-content  -> icon / title / description, clipped to the
- *                               circle so nothing escapes the planet
+ *                               NO CSS transition may touch this transform);
+ *                               also the static sphere BODY visuals + perspective
+ *   span.v3d-planet-sphere   -> AXIAL rotation: rotateY(selfAngle) written by
+ *                               the same rAF loop; preserve-3d
+ *   span.v3d-planet-surface  -> front cap of the sphere (inset 8%); rotates
+ *                               with the sphere; culled past 90deg via
+ *                               backface-visibility (sphere body stays visible)
+ *   span.v3d-planet-content  -> icon / title / description, mounted on the cap
+ *                               with a diameter-proportional translateZ, so the
+ *                               text reads as printed on the curved surface
  *
  * The orbital loop (A) and the active-value autoplay (B) are independent;
  * hover NEVER pauses the motion. One rAF loop runs inside
@@ -124,9 +135,17 @@ interface PlanetGeometry {
         --v3d-orbit-step: 3.9cqw;
         /* Orbit plane tilt (radiusY = radiusX * ratio). */
         --v3d-orbit-ratio: 0.6;
-        /* Sun vs planet sizes - the sun stays ~2.2x the largest planet. */
+        /* Sun vs planet sizes - the sun stays ~2x the largest planet even
+           though planets grew to carry icon + title + description. */
         --v3d-sun: clamp(7.5rem, 19cqw, 12rem);
-        --v3d-planet: clamp(2.9rem, 9.6cqw, 5.5rem);
+        --v3d-planet: clamp(3.1rem, 10.4cqw, 6rem);
+        /* Surface-mounted content depth: translateZ = planet diameter x this
+           fraction. Small value = text sits just above the curved surface
+           (bowed toward the viewer by the 700px perspective), never floating. */
+        --v3d-content-z: 0.35;
+        /* Content scale relative to the surface cap (keeps it inside the
+           sphere silhouette). */
+        --v3d-content-scale: 0.92;
         /* ============================================================ */
 
         position: relative;
@@ -204,11 +223,12 @@ interface PlanetGeometry {
       .v3d-orbit.o5 { width: calc(var(--v3d-rx5) * 2); height: calc(var(--v3d-rx5) * 2 * var(--v3d-orbit-ratio)); }
       .v3d-orbit.o6 { width: calc(var(--v3d-rx6) * 2); height: calc(var(--v3d-rx6) * 2 * var(--v3d-orbit-ratio)); }
 
-      /* Planets - LAYER 1 (orbit wrapper). Centered at 50/50 like the rings;
-         the rAF loop writes ONLY this element's transform + zIndex + opacity.
-         No CSS transition touches transform here (no ghosting / lag / drift).
-         Size + color come from instance styles so selecting a value never
-         reconfigures the loop. */
+      /* Planets - LAYER 1 (orbit wrapper + sphere BODY). Centered at 50/50
+         like the rings; the rAF loop writes ONLY this element's transform +
+         zIndex + opacity. No CSS transition touches transform here. The
+         sphere BODY visuals live on this static element: a real sphere's
+         silhouette never changes while it spins, and its shading comes from
+         a fixed light (the camera), so the gradient must NOT rotate. */
       .v3d-planet {
         --v3d-pc: #0ea5e9;
         position: absolute;
@@ -218,9 +238,23 @@ interface PlanetGeometry {
         padding: 0;
         margin: 0;
         font: inherit;
-        background: none;
-        border: none;
         cursor: pointer;
+        /* Perspective for the rotating sphere layer (parent of the rotated
+           element must carry it). */
+        perspective: 700px;
+        /* Layered spherical shading: top-left light, bottom-right shadow. */
+        background:
+          radial-gradient(circle at 30% 25%, rgba(255, 255, 255, 0.92) 0%, rgba(255, 255, 255, 0) 22%),
+          radial-gradient(circle at 65% 70%, rgba(0, 0, 0, 0.34) 0%, rgba(0, 0, 0, 0) 58%),
+          var(--v3d-pc);
+        border: 2px solid rgba(255, 255, 255, 0.45);
+        box-shadow:
+          0 8px 20px rgba(15, 23, 42, 0.25),
+          inset 0 -10px 18px rgba(0, 0, 0, 0.26),
+          inset 4px 6px 10px rgba(255, 255, 255, 0.24);
+        /* NO transform here beyond the rAF-owned one; only paint props may
+           transition (never the orbital transform). */
+        transition: box-shadow 250ms ease, border-color 250ms ease, filter 250ms ease;
         transform: translate(-50%, -50%);
         will-change: transform;
         -webkit-tap-highlight-color: transparent;
@@ -231,28 +265,73 @@ interface PlanetGeometry {
         border-radius: 50%;
       }
 
-      /* LAYER 2 (surface): sphere visuals + emphasis scale. Safe to
-         transition because the rAF loop never writes to this element. */
-      .v3d-planet-surface {
+      /* LAYER 2 (sphere): SELF-ROTATION. The rAF loop writes rotateY(angle)
+         to THIS element; icon/title/description are its physical children,
+         so they inherit the exact same angle, speed and animation clock.
+         No CSS animation, no second loop, no separate text animation. */
+      .v3d-planet-sphere {
         position: absolute;
         inset: 0;
         border-radius: 50%;
-        border: 2px solid rgba(255, 255, 255, 0.45);
+        transform-style: preserve-3d;
+        will-change: transform;
+      }
+
+      /* LAYER 3 (surface cap): the front-facing REGION of the sphere, not a
+         full-bleed card. inset: 8% shrinks it to the visible front cap so
+         the content occupies the sphere surface, exactly like print on a
+         globe. It rotates WITH the sphere (child of LAYER 2) and is culled
+         by backface-visibility when the planet turns away - the sphere body
+         (on the static button) is never affected and stays visible. No
+         overflow:hidden here - it would flatten preserve-3d and kill the
+         depth/backface effect; containment is guaranteed geometrically
+         (a centered plane under Y-rotation never projects past the disc)
+         plus the internal clipping on the content layer below. */
+      .v3d-planet-surface {
+        position: absolute;
+        inset: 8%;
+        border-radius: 50%;
+        transform-style: preserve-3d;
+        backface-visibility: hidden;
+        -webkit-backface-visibility: hidden;
+      }
+
+      /* LAYER 4 (content): icon / title / description physically mounted on
+         the rotating surface cap. translateZ is proportional to the planet
+         diameter so the text bows toward the viewer with the sphere
+         curvature; the subtle scale keeps it inside the silhouette. The
+         content owns NO rotation transform - it simply inherits the sphere's
+         axial rotation, angle, speed and clock. */
+      .v3d-planet-content {
+        position: absolute;
+        inset: 0;
         display: flex;
+        flex-direction: column;
         align-items: center;
         justify-content: center;
-        background: radial-gradient(circle at 32% 28%, rgba(255, 255, 255, 0.92) 0%, var(--v3d-pc) 82%, rgba(0, 0, 0, 0.18) 100%);
-        box-shadow: 0 8px 20px rgba(15, 23, 42, 0.25);
-        transition: transform 250ms ease, box-shadow 250ms ease, border-color 250ms ease, filter 250ms ease;
+        gap: 0.18rem;
+        padding: 0.3rem 0.24rem;
+        overflow: hidden;
+        text-align: center;
+        color: #ffffff;
+        text-shadow: 0 1px 3px rgba(15, 23, 42, 0.55), 0 1px 0 rgba(255, 255, 255, 0.14);
+        user-select: none;
+        transform:
+          translateZ(calc(var(--v3d-planet) * var(--v3d-content-z)))
+          scale(var(--v3d-content-scale));
       }
-      .v3d-planet.active .v3d-planet-surface {
+      /* Active planet: glow + brightness emphasis ONLY - never a transform
+         (the orbital + self-rotation transforms are owned by the rAF loop),
+         so the emphasis can never move the planet off its orbit or stop
+         its rotation. */
+      .v3d-planet.active {
         border-color: #ffffff;
-        transform: scale(1.09);
+        filter: brightness(1.08);
       }
       /* Hover: beaming emphasis ONLY - it NEVER pauses orbital motion. */
-      .v3d-planet:hover .v3d-planet-surface {
+      .v3d-planet:hover {
         border-color: rgba(255, 255, 255, 0.95);
-        filter: brightness(1.15);
+        filter: brightness(1.12);
         box-shadow:
           0 14px 36px rgba(15, 23, 42, 0.34),
           0 0 0 3px color-mix(in srgb, var(--v3d-pc) 55%, transparent),
@@ -268,24 +347,11 @@ interface PlanetGeometry {
       }
 
       /* LAYER 3 (content): icon / title / description, clipped to the circle
-         so nothing escapes the planet surface. */
-      .v3d-planet-content {
-        display: flex;
-        flex-direction: column;
-        align-items: center;
-        justify-content: center;
-        gap: 0.18rem;
-        width: 100%;
-        height: 100%;
-        padding: 0.4rem 0.3rem;
-        text-align: center;
-        border-radius: inherit;
-        overflow: hidden;
-        color: #ffffff;
-        text-shadow: 0 1px 3px rgba(15, 23, 42, 0.55);
-        user-select: none;
-      }
-      .v3d-planet-content i { font-size: clamp(0.95rem, 2.6cqw, 1.5rem); line-height: 1; }
+         so nothing escapes the planet surface. This is the SELF-ROTATION
+         layer: the rAF loop writes rotateY(selfAngle) + cos-based opacity
+         here. backface-visibility hides mirrored text past 90deg; the
+         planet disc itself is NOT affected and never disappears. */
+      .v3d-planet i { font-size: clamp(0.95rem, 2.6cqw, 1.5rem); line-height: 1; }
       .v3d-planet-title {
         font-size: clamp(0.5rem, 1.45cqw, 0.75rem);
         font-weight: 700;
@@ -422,7 +488,7 @@ interface PlanetGeometry {
           --v3d-header-block: 7rem;
           --v3d-scene-max-w: 34rem;
           --v3d-sun: clamp(6.3rem, 18cqw, 8.5rem);
-          --v3d-planet: clamp(2.7rem, 9.4cqw, 4.4rem);
+          --v3d-planet: clamp(2.9rem, 10.2cqw, 4.8rem);
         }
       }
       @media (max-width: 560px) {
@@ -431,7 +497,7 @@ interface PlanetGeometry {
           --v3d-bottom-gap: 3rem;
           --v3d-scene-max-w: 23rem;
           --v3d-sun: clamp(5.5rem, 19cqw, 7rem);
-          --v3d-planet: clamp(2.6rem, 10cqw, 3.6rem);
+          --v3d-planet: clamp(2.7rem, 10.5cqw, 3.8rem);
         }
         /* A ~42px circle cannot hold three text rows: the description is
            hidden visually only (data + translations untouched; the full
@@ -439,12 +505,16 @@ interface PlanetGeometry {
         .v3d-planet-desc { display: none; }
       }
 
-      /* ================= Reduced motion ================= */
+      /* ================= Reduced motion =================
+         The rAF loop never starts, so no orbital OR self-rotation happens;
+         content stays fully visible and readable. */
       @media (prefers-reduced-motion: reduce) {
         .v3d-sun-content { animation: none; }
         .v3d-sun { animation: none; }
-        .v3d-planet-surface, .v3d-dot { transition: none; }
-        .v3d-planet.active .v3d-planet-surface { transform: none; }
+        .v3d-planet, .v3d-planet-surface, .v3d-dot { transition: none; }
+        .v3d-planet-sphere { transform: none; }
+        .v3d-planet-surface { backface-visibility: visible; }
+        .v3d-planet.active { filter: none; }
         .v3d-planet.active::after { box-shadow: none; }
       }
     `,
@@ -514,11 +584,13 @@ interface PlanetGeometry {
               [attr.aria-label]="value.titleKey | translate"
               [attr.aria-current]="i === activeIndex() ? 'true' : null"
             >
-              <span class="v3d-planet-surface">
-                <span class="v3d-planet-content">
-                  <i [class]="value.icon" aria-hidden="true"></i>
-                  <span class="v3d-planet-title">{{ value.titleKey | translate }}</span>
-                  <span class="v3d-planet-desc">{{ value.descriptionKey | translate }}</span>
+              <span class="v3d-planet-sphere">
+                <span class="v3d-planet-surface">
+                  <span class="v3d-planet-content">
+                    <i [class]="value.icon" aria-hidden="true"></i>
+                    <span class="v3d-planet-title">{{ value.titleKey | translate }}</span>
+                    <span class="v3d-planet-desc">{{ value.descriptionKey | translate }}</span>
+                  </span>
                 </span>
               </span>
             </button>
@@ -538,6 +610,13 @@ export class Values3dComponent {
 
   /** Per-planet current orbital angle (radians) - advanced by the rAF loop. */
   private readonly angles = new Float64Array(V3D_SLOTS);
+  /**
+   * Per-planet SELF-rotation angle (radians) - a SECOND, independent angle
+   * system. It never influences orbitRadius()/calculatePlanetGeometry(); it
+   * only drives the local rotateY of the planet's content layer and the
+   * cos-based content visibility.
+   */
+  private readonly selfAngles = new Float64Array(V3D_SLOTS);
 
   private readonly zone = inject(NgZone);
   private readonly elementRef = inject<ElementRef<HTMLElement>>(ElementRef);
@@ -549,6 +628,8 @@ export class Values3dComponent {
 
   private scene: HTMLElement | null = null;
   private planets: HTMLElement[] = [];
+  /** Cached self-rotation layers (one per planet) - written by the rAF loop. */
+  private spheres: HTMLElement[] = [];
   private animationFrame: number | null = null;
   private lastTimestamp = 0;
   private timer: ReturnType<typeof setTimeout> | null = null;
@@ -556,8 +637,10 @@ export class Values3dComponent {
 
   constructor() {
     // Randomize start positions ONCE so every reload looks fresh.
+    // Orbit angles and self-rotation angles are seeded independently.
     for (let i = 0; i < V3D_SLOTS; i++) {
       this.angles[i] = V3D_START_ANGLES[i] + Math.random() * Math.PI * 2;
+      this.selfAngles[i] = Math.random() * Math.PI * 2;
     }
     inject(DestroyRef).onDestroy(() => this.onDestroy());
 
@@ -621,17 +704,28 @@ export class Values3dComponent {
     return { x, y, depth, scale, opacity, zIndex };
   }
 
-  private composePlanetTransform(g: PlanetGeometry): string {
+  /** A. ORBITAL POSITION transform (unchanged math - never mixes with the
+      self-rotation angle). Position + depth scale only. */
+  private composeOrbitTransform(g: PlanetGeometry): string {
     return `translate3d(${g.x.toFixed(2)}px, ${g.y.toFixed(2)}px, 0) translate(-50%, -50%) scale(${g.scale.toFixed(4)})`;
   }
 
-  /** Reads the scene size once and caches the planet nodes for the rAF loop. */
+  /** B. SELF-ROTATION transform - the planet spinning around its own local
+      vertical axis. Applied ONLY to .v3d-planet-sphere, which physically
+      contains the icon/title/description. */
+  private composeSelfRotationTransform(angle: number): string {
+    return `rotateY(${(angle / V3D_DEG).toFixed(2)}deg)`;
+  }
+
+  /** Reads the scene size once and caches the planet/content nodes for the
+      rAF loop (no DOM queries inside the animation frames). */
   private applyStaticGeometry(): void {
     const host = this.elementRef.nativeElement;
     this.scene = host.querySelector<HTMLElement>('.v3d-scene');
     this.sceneWidth = this.scene ? this.scene.clientWidth : 0;
 
     this.planets = Array.from(host.querySelectorAll<HTMLElement>('.v3d-planet'));
+    this.spheres = Array.from(host.querySelectorAll<HTMLElement>('.v3d-planet-sphere'));
     this.applyAnimation();
   }
 
@@ -656,7 +750,9 @@ export class Values3dComponent {
   }
 
   /** ONE rAF loop: advances every planet continuously until destroyed, runs
-      outside the Angular zone and writes only to style props (no CD per frame). */
+      outside the Angular zone and writes only to style props (no CD per frame).
+      Each frame: (1) delta time, (2) orbital angles, (3) SELF-rotation angles,
+      (4) direct DOM writes. The two angle systems are fully independent. */
   private startAnimation(): void {
     this.zone.runOutsideAngular(() => {
       const step = (timestamp: number) => {
@@ -664,6 +760,7 @@ export class Values3dComponent {
         this.lastTimestamp = timestamp;
         for (let i = 0; i < this.angles.length; i++) {
           this.angles[i] += V3D_SPEEDS[i] * V3D_DEG * delta;
+          this.selfAngles[i] += V3D_SELF_SPEEDS[i] * delta;
         }
         this.applyAnimation();
         this.animationFrame = requestAnimationFrame(step);
@@ -678,9 +775,18 @@ export class Values3dComponent {
       const el = nodes[i];
       if (!el) continue;
       const g = this.calculatePlanetGeometry(i, this.angles[i]);
-      el.style.transform = this.composePlanetTransform(g);
+      el.style.transform = this.composeOrbitTransform(g);
       el.style.zIndex = String(g.zIndex);
       el.style.opacity = String(g.opacity);
+
+      // Self-rotation: the SPHERE rotates; the icon/title/description are its
+      // physical children and inherit the exact same angle, speed and clock.
+      // Visibility is purely 3D (perspective foreshortening + backface
+      // culling on the surface) - no opacity fade, no timers, no teleport.
+      const sphere = this.spheres[i];
+      if (sphere) {
+        sphere.style.transform = this.composeSelfRotationTransform(this.selfAngles[i]);
+      }
     }
   }
 
