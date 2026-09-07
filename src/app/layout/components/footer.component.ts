@@ -151,16 +151,22 @@ import { SOCIAL_LINKS } from '../../core/social/social-links';
         --footer-line: rgba(255, 255, 255, 0.55);  /* resting line color */
         --footer-border: rgba(255, 255, 255, 0.12);
 
-        /* CTA */
-        --cta-title-size: clamp(1.8rem, 3vw, 2.8rem);   /* SIGAT wordmark size */
-        --cta-line-thickness: 1px;                      /* 1-2px max */
-        --cta-line-offset: clamp(2.4rem, 4vw, 3rem);    /* vertical gap title<->lines */
-        --cta-line-inset: 8%;                           /* horizontal inset from edges */
-        --cta-line-opacity: 0.6;                        /* resting line visibility */
-        --cta-line-w-min: clamp(2.5rem, 12vw, 5rem);    /* resting length (~40-80px) */
-        --cta-line-w-max: clamp(5rem, 26vw, 10rem);     /* hover (resting) length (~80-160px) */
-        --cta-anim-duration: 700ms;                     /* width growth duration */
-        --cta-anim-ease: cubic-bezier(0.22, 1, 0.36, 1);
+        /* ================================
+           PARTNER CTA VISUAL TUNING
+           ================================ */
+        --partner-title-size: clamp(1.8rem, 3vw, 2.8rem);  /* CTA title size */
+        --partner-line-height: 2px;                       /* architectural line */
+        --partner-line-opacity: 0.6;
+        /* Outer edge anchored at this inset from the CTA wrapper side. */
+        --partner-x-out: clamp(2.5rem, 11vw, 7rem);
+        /* Resting length as a fraction of the final (fully-connected) length. */
+        --partner-rest-scale: 0.34;
+        /* Overlap each inner end past the center by this much to kill the 1px seam. */
+        --partner-line-overlap: 1.5px;
+        /* Vertical gap between the CTA title and the top/bottom line. */
+        --partner-y-gap: clamp(1.5rem, 3vw, 2.5rem);
+        --partner-anim-duration: 750ms;
+        --partner-anim-ease: cubic-bezier(0.22, 1, 0.36, 1);
 
         /* Layout */
         --footer-max-w: 75rem;             /* content max width */
@@ -196,32 +202,43 @@ import { SOCIAL_LINKS } from '../../core/social/social-links';
       }
       .footer-line {
         position: absolute;
-        height: var(--cta-line-thickness);
+        /* Full final length (reaching center plus a small overlap to kill the
+           1px seam); resting state is shown via scaleX below so the outer
+           edge stays PUT while only the inner end travels. */
+        width: calc(50% - var(--partner-x-out) + var(--partner-line-overlap));
+        height: var(--partner-line-height);
         background: var(--footer-line);
-        opacity: var(--cta-line-opacity);
-        width: var(--cta-line-w-min);
+        opacity: var(--partner-line-opacity);
+        transform-origin: center;
+        transform: scaleX(var(--partner-rest-scale));
         transition:
-          width var(--cta-anim-duration) var(--cta-anim-ease),
+          transform var(--partner-anim-duration) var(--partner-anim-ease),
           background-color 350ms ease,
           opacity 350ms ease,
           box-shadow 350ms ease;
         pointer-events: none;
+        will-change: transform;
       }
-      /* Outer ends anchored: left lines anchored LEFT and grow rightward
-         (toward center); right lines anchored RIGHT and grow leftward.
-         Symmetric physical placement -> identical in LTR and RTL. */
+      /* Outer edges are FIXED. Each segment's transform-origin sits at its
+         OUTER end, so scaleX grows the inner end toward the center only. */
       .footer-line-top-left,
-      .footer-line-bottom-left { left: var(--cta-line-inset); }
+      .footer-line-bottom-left {
+        left: var(--partner-x-out);
+        transform-origin: left center;
+      }
       .footer-line-top-right,
-      .footer-line-bottom-right { right: var(--cta-line-inset); }
+      .footer-line-bottom-right {
+        right: var(--partner-x-out);
+        transform-origin: right center;
+      }
       .footer-line-top-left,
-      .footer-line-top-right { top: calc(50% - var(--cta-line-offset)); }
+      .footer-line-top-right { top: calc(50% - var(--partner-y-gap)); }
       .footer-line-bottom-left,
-      .footer-line-bottom-right { top: calc(50% + var(--cta-line-offset)); }
+      .footer-line-bottom-right { top: calc(50% + var(--partner-y-gap)); }
 
       .footer-cta-title {
         margin: 0;
-        font-size: var(--cta-title-size);
+        font-size: var(--partner-title-size);
         font-weight: 700;
         letter-spacing: 0.04em;
         color: #ffffff;
@@ -230,21 +247,21 @@ import { SOCIAL_LINKS } from '../../core/social/social-links';
       }
 
       /* Whole CTA link (title + lines + padding) is the hover target;
-         :focus-visible = keyboard parity. Hover width = 50% - inset, so
-         the two segments meet EXACTLY at the horizontal center: each pair
-         becomes ONE continuous line above / below the CTA text. Pure width
-         growth - outer edges never move. */
+         :focus-visible = keyboard parity. Each segment's scaleX goes to 1,
+         so its two inner ends meet AT the center and overlap by
+         --partner-line-overlap - invisible, no 1px seam, no double line.
+         Pure length growth; outer edges never move, nothing translates. */
       .footer-cta-link:hover .footer-line-top-left,
       .footer-cta-link:hover .footer-line-bottom-left,
       .footer-cta-link:focus-visible .footer-line-top-left,
       .footer-cta-link:focus-visible .footer-line-bottom-left {
-        width: calc(50% - var(--cta-line-inset));
+        transform: scaleX(1);
       }
       .footer-cta-link:hover .footer-line-top-right,
       .footer-cta-link:hover .footer-line-bottom-right,
       .footer-cta-link:focus-visible .footer-line-top-right,
       .footer-cta-link:focus-visible .footer-line-bottom-right {
-        width: calc(50% - var(--cta-line-inset));
+        transform: scaleX(1);
       }
       .footer-cta-link:hover .footer-line,
       .footer-cta-link:focus-visible .footer-line {
@@ -451,6 +468,9 @@ import { SOCIAL_LINKS } from '../../core/social/social-links';
         }
         .footer-block:nth-of-type(2) { grid-column: 1 / -1; }
       }
+      @media (max-width: 900px) {
+        .footer-cta-link { --partner-x-out: clamp(2rem, 9vw, 5rem); --partner-y-gap: 1.4rem; }
+      }
       @media (max-width: 640px) {
         .footer-content { grid-template-columns: 1fr; gap: 1.9rem; }
         .footer-brand-block {
@@ -463,11 +483,15 @@ import { SOCIAL_LINKS } from '../../core/social/social-links';
         .footer-cta-title { letter-spacing: 0.02em; }
         .footer-bottom { text-align: center; }
       }
+      @media (max-width: 480px) {
+        .footer-cta-link { --partner-x-out: 1.75rem; --partner-y-gap: 1.15rem; --partner-line-height: 1.5px; }
+      }
 
       /* ============ Reduced motion ============ */
       @media (prefers-reduced-motion: reduce) {
         .footer-line {
-          width: var(--cta-line-w-min) !important;
+          /* Stable final (connected) decorative state - no expansion. */
+          transform: scaleX(1) !important;
           transition: background-color 200ms ease, opacity 200ms ease;
         }
         .footer-cta-title { transition: color 200ms ease; text-shadow: none; }
