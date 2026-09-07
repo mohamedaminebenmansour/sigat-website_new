@@ -70,12 +70,15 @@ import { Values3dComponent } from "../about/components/values-3d.component";
       </div>
     </section>
 
-    <!-- ==================== CTA BANNER ==================== -->
+    <!-- ==================== CTA BANNER ====================
+         BUSINESS CTA ("Démarrer un projet") → /contact.
+         The footer owns "Devenir Partenaire" → /partnerships, so the two
+         conversion messages don't compete with identical text. -->
     <app-cta-banner
-      [title]="'home_cta_title' | translate"
-      [description]="'home_cta_subtitle' | translate"
-      [buttonText]="'home_cta_btn' | translate"
-      buttonRoute="/partnerships"
+      [title]="'contact_cta_title' | translate"
+      [description]="'contact_cta_subtitle' | translate"
+      [buttonText]="'contact_cta_btn' | translate"
+      buttonRoute="/contact"
     />
   `
 })

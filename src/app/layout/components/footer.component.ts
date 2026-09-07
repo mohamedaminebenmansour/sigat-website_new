@@ -1,6 +1,6 @@
 import { Component } from '@angular/core';
 import { RouterLink } from '@angular/router';
-import { TranslatePipe } from '@ngx-translate/core';
+import { TranslatePipe, TranslateService } from '@ngx-translate/core';
 import { NAV_LINKS } from '../../core/navigation/navigation.service';
 import { SOCIAL_LINKS } from '../../core/social/social-links';
 
@@ -10,19 +10,20 @@ import { SOCIAL_LINKS } from '../../core/social/social-links';
   imports: [RouterLink, TranslatePipe],
   template: `
     <footer class="site-footer">
-      <div class="footer-inner">
-        <!-- ============ ZONE A: SIGAT brand mark ============
-             Decorative brand signature. The four line segments are ANCHORED
-             at their outer ends and GROW in width toward the center on
-             hover/focus-within - they never translate. CSS only. -->
-        <section class="footer-brand-mark">
-          <span class="footer-line footer-line-top-left" aria-hidden="true"></span>
-          <span class="footer-line footer-line-top-right" aria-hidden="true"></span>
-          <h2 class="footer-brand-title">SIGAT</h2>
-          <span class="footer-line footer-line-bottom-left" aria-hidden="true"></span>
-          <span class="footer-line footer-line-bottom-right" aria-hidden="true"></span>
+      <section class="footer-cta">
+          <a
+            routerLink="/partnerships"
+            class="footer-cta-link"
+            [attr.aria-label]="'nav_partner_cta' | translate"
+          >
+            <span class="footer-line footer-line-top-left" aria-hidden="true"></span>
+            <span class="footer-line footer-line-top-right" aria-hidden="true"></span>
+            <span class="footer-cta-title">{{ 'nav_partner_cta' | translate }}</span>
+            <span class="footer-line footer-line-bottom-left" aria-hidden="true"></span>
+            <span class="footer-line footer-line-bottom-right" aria-hidden="true"></span>
+          </a>
         </section>
-
+      <div class="footer-inner">
         <!-- ============ ZONE B: corporate information ============
              FIVE balanced columns in ONE grid: brand (logo + social),
              two editorial navigation groups, the real address with a
@@ -108,7 +109,7 @@ import { SOCIAL_LINKS } from '../../core/social/social-links';
                 <svg xmlns="http://www.w3.org/2000/svg" class="footer-contact-icon" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true">
                   <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.6" d="M3 5a2 2 0 012-2h3.28a1 1 0 01.948.684l1.498 4.493a1 1 0 01-.502 1.21l-2.257 1.13a11.042 11.042 0 005.516 5.516l1.13-2.257a1 1 0 011.21-.502l4.493 1.498a1 1 0 01.684.949V19a2 2 0 01-2 2h-1C9.716 21 3 14.284 3 6V5z" />
                 </svg>
-                <span>{{ 'footer_phone' | translate }}</span>
+                <a [href]="phoneHref()" class="footer-contact-link">{{ 'footer_phone' | translate }}</a>
               </li>
               <li>
                 <svg xmlns="http://www.w3.org/2000/svg" class="footer-contact-icon" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true">
@@ -119,6 +120,14 @@ import { SOCIAL_LINKS } from '../../core/social/social-links';
             </ul>
           </div>
         </div>
+
+        <!-- ============ ZONE C: conversion CTA ============
+             RECOMMENDED centerpiece: all footer information above, then a
+             strong final conversion CTA. Routes to /partnerships via
+             Angular RouterLink. The four line segments stay ANCHORED and
+             GROW in width only (never translate) toward the center on
+             hover/focus/keyboard, converging into one continuous line. -->
+
       </div>
 
       <!-- ============ ZONE C: legal ============ -->
@@ -171,14 +180,19 @@ import { SOCIAL_LINKS } from '../../core/social/social-links';
         padding-inline: var(--footer-pad-x);
       }
 
-      /* ============ ZONE A: SIGAT brand mark ============
+      /* ============ ZONE C: conversion CTA ============
          The four segments are ANCHORED at their outer ends. The ONLY
          animated property is WIDTH (the inner end grows toward the
-         center) - no translateX/Y, no position/margin animation. */
-      .footer-brand-mark {
+         center) - no translateX/Y, no position/margin animation. The
+         whole CTA is a real Angular RouterLink (accessible, keyboard
+         focus, Enter navigates to /partnerships). */
+      .footer-cta-link {
         position: relative;
-        padding: clamp(2.5rem, 5vw, 3.75rem) 1rem;
+        display: block;
+        padding: clamp(2.25rem, 4.5vw, 3.5rem) 1rem;
         text-align: center;
+        text-decoration: none;
+        cursor: pointer;
       }
       .footer-line {
         position: absolute;
@@ -205,46 +219,41 @@ import { SOCIAL_LINKS } from '../../core/social/social-links';
       .footer-line-bottom-left,
       .footer-line-bottom-right { top: calc(50% + var(--cta-line-offset)); }
 
-      .footer-brand-title {
+      .footer-cta-title {
         margin: 0;
         font-size: var(--cta-title-size);
         font-weight: 700;
-        letter-spacing: 0.12em;
+        letter-spacing: 0.04em;
         color: #ffffff;
+        text-decoration: none;
         transition: color 350ms ease, text-shadow 350ms ease;
       }
 
-      /* Whole mark (title + lines + padding) is the hover target;
-         :focus-within = keyboard parity, :active = touch parity.
-         Hover width = 50% - inset, so the two segments meet EXACTLY at the
-         horizontal center: each pair becomes ONE continuous line above /
-         below SIGAT. Pure width growth - outer edges never move. */
-      .footer-brand-mark:hover .footer-line-top-left,
-      .footer-brand-mark:hover .footer-line-bottom-left,
-      .footer-brand-mark:focus-within .footer-line-top-left,
-      .footer-brand-mark:focus-within .footer-line-bottom-left,
-      .footer-brand-mark:active .footer-line-top-left,
-      .footer-brand-mark:active .footer-line-bottom-left {
+      /* Whole CTA link (title + lines + padding) is the hover target;
+         :focus-visible = keyboard parity. Hover width = 50% - inset, so
+         the two segments meet EXACTLY at the horizontal center: each pair
+         becomes ONE continuous line above / below the CTA text. Pure width
+         growth - outer edges never move. */
+      .footer-cta-link:hover .footer-line-top-left,
+      .footer-cta-link:hover .footer-line-bottom-left,
+      .footer-cta-link:focus-visible .footer-line-top-left,
+      .footer-cta-link:focus-visible .footer-line-bottom-left {
         width: calc(50% - var(--cta-line-inset));
       }
-      .footer-brand-mark:hover .footer-line-top-right,
-      .footer-brand-mark:hover .footer-line-bottom-right,
-      .footer-brand-mark:focus-within .footer-line-top-right,
-      .footer-brand-mark:focus-within .footer-line-bottom-right,
-      .footer-brand-mark:active .footer-line-top-right,
-      .footer-brand-mark:active .footer-line-bottom-right {
+      .footer-cta-link:hover .footer-line-top-right,
+      .footer-cta-link:hover .footer-line-bottom-right,
+      .footer-cta-link:focus-visible .footer-line-top-right,
+      .footer-cta-link:focus-visible .footer-line-bottom-right {
         width: calc(50% - var(--cta-line-inset));
       }
-      .footer-brand-mark:hover .footer-line,
-      .footer-brand-mark:focus-within .footer-line,
-      .footer-brand-mark:active .footer-line {
+      .footer-cta-link:hover .footer-line,
+      .footer-cta-link:focus-visible .footer-line {
         background: var(--footer-accent);
         opacity: 1;
         box-shadow: 0 0 10px rgba(245, 158, 11, 0.3);
       }
-      .footer-brand-mark:hover .footer-brand-title,
-      .footer-brand-mark:focus-within .footer-brand-title,
-      .footer-brand-mark:active .footer-brand-title {
+      .footer-cta-link:hover .footer-cta-title,
+      .footer-cta-link:focus-visible .footer-cta-title {
         color: var(--footer-accent);
         text-shadow: 0 0 18px rgba(245, 158, 11, 0.28);
       }
@@ -450,7 +459,8 @@ import { SOCIAL_LINKS } from '../../core/social/social-links';
           text-align: center;
         }
         .footer-social { justify-content: center; }
-        .footer-brand-mark { padding-inline: 0.25rem; }
+        .footer-cta-link { padding-inline: 0.25rem; }
+        .footer-cta-title { letter-spacing: 0.02em; }
         .footer-bottom { text-align: center; }
       }
 
@@ -460,7 +470,7 @@ import { SOCIAL_LINKS } from '../../core/social/social-links';
           width: var(--cta-line-w-min) !important;
           transition: background-color 200ms ease, opacity 200ms ease;
         }
-        .footer-brand-title { transition: color 200ms ease; text-shadow: none; }
+        .footer-cta-title { transition: color 200ms ease; text-shadow: none; }
         .footer-social-link { transition: none; transform: none !important; }
         .footer-nav-link::after { transition: none; }
       }
@@ -473,6 +483,8 @@ import { SOCIAL_LINKS } from '../../core/social/social-links';
   ],
 })
 export class FooterComponent {
+  constructor(private readonly translate: TranslateService) {}
+
   /** Single sources of truth - no duplicated navigation/social data. */
   readonly navLinks = NAV_LINKS;
   readonly socialLinks = SOCIAL_LINKS;
@@ -491,4 +503,16 @@ export class FooterComponent {
   readonly mapsUrl =
     'https://www.google.com/maps/search/?api=1&query=' +
     encodeURIComponent('2000, Immeuble Amira 20 Mars, Le Bardo, Tunisie');
+
+  /**
+   * tel: href derived from the REAL 'footer_phone' translation value
+   * (which is the project's own placeholder data - nothing is invented).
+   * Non-digit characters and spaces are stripped for a clean dial link.
+   * Falls back safely if the value cannot be read.
+   */
+  phoneHref(): string {
+    const raw = this.translate.instant('footer_phone') ?? '';
+    const digits = raw.replace(/\D/g, '');
+    return digits ? `tel:+${digits.replace(/^\+/, '')}` : '#';
+  }
 }
