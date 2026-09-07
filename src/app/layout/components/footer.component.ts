@@ -143,21 +143,21 @@ import { SOCIAL_LINKS } from '../../core/social/social-links';
         --footer-border: rgba(255, 255, 255, 0.12);
 
         /* CTA */
-        --cta-title-size: clamp(2rem, 4vw, 3.5rem);     /* SIGAT wordmark size */
+        --cta-title-size: clamp(1.8rem, 3vw, 2.8rem);   /* SIGAT wordmark size */
         --cta-line-thickness: 1px;                      /* 1-2px max */
-        --cta-line-offset: clamp(2.6rem, 4.5vw, 3.4rem);  /* vertical gap title<->lines */
+        --cta-line-offset: clamp(2.4rem, 4vw, 3rem);    /* vertical gap title<->lines */
         --cta-line-inset: 8%;                           /* horizontal inset from edges */
         --cta-line-opacity: 0.6;                        /* resting line visibility */
-        --cta-line-w-min: clamp(2.8rem, 14vw, 5.9rem);  /* resting length (~45-95px) */
-        --cta-line-w-max: clamp(5.6rem, 30vw, 12rem);   /* grown length (~90-190px) */
-        --cta-anim-duration: 900ms;                     /* width growth duration */
+        --cta-line-w-min: clamp(2.5rem, 12vw, 5rem);    /* resting length (~40-80px) */
+        --cta-line-w-max: clamp(5rem, 26vw, 10rem);     /* hover (resting) length (~80-160px) */
+        --cta-anim-duration: 700ms;                     /* width growth duration */
         --cta-anim-ease: cubic-bezier(0.22, 1, 0.36, 1);
 
         /* Layout */
         --footer-max-w: 75rem;             /* content max width */
         --footer-pad-x: clamp(1.25rem, 4vw, 2.5rem);
         --logo-width: clamp(6.9rem, 9vw, 9.4rem);       /* ~110-150px white logo */
-        --column-gap: clamp(1.5rem, 3.5vw, 3rem);
+        --column-gap: clamp(1.2rem, 2vw, 2.2rem);
         /* ================================ */
 
         background: var(--footer-bg);
@@ -208,7 +208,7 @@ import { SOCIAL_LINKS } from '../../core/social/social-links';
       .footer-brand-title {
         margin: 0;
         font-size: var(--cta-title-size);
-        font-weight: 800;
+        font-weight: 700;
         letter-spacing: 0.12em;
         color: #ffffff;
         transition: color 350ms ease, text-shadow 350ms ease;
@@ -253,19 +253,22 @@ import { SOCIAL_LINKS } from '../../core/social/social-links';
          FIVE columns: brand | nav 1 | nav 2 | visit | contact. */
       .footer-content {
         display: grid;
-        grid-template-columns: 1.1fr 0.9fr 0.9fr 1.35fr 1.25fr;
+        grid-template-columns: 1fr 0.8fr 0.8fr 1.2fr 1.2fr;
         gap: var(--column-gap);
         align-items: start;
-        padding-block: clamp(1.75rem, 3.5vw, 2.5rem) clamp(1.5rem, 3vw, 2rem);
+        padding: 20px var(--footer-pad-x) 10px;
         border-top: 1px solid var(--footer-border);
       }
 
-      /* Brand column: white logo + social, top-aligned like the others. */
+      /* Brand column: white logo + social, top-aligned like the others.
+         padding-top matches the headings' optical top so the logo aligns
+         with the other columns' heading baseline. */
       .footer-brand-block {
         display: flex;
         flex-direction: column;
         align-items: flex-start;
         gap: 1.1rem;
+        padding-top: 0.75rem;
       }
 
       .footer-heading {
@@ -319,7 +322,7 @@ import { SOCIAL_LINKS } from '../../core/social/social-links';
         width: 1.1rem;
         height: 1.1rem;
         flex-shrink: 0;
-        margin-top: 0.15rem;
+        margin-top: 0.2rem;
         color: var(--footer-muted);
         transition: color 250ms ease;
       }

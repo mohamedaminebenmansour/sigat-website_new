@@ -65,7 +65,7 @@ const pad2 = (n: number): string => String(n).padStart(2, '0');
       <div class="container mx-auto px-4">
         <div class="grid grid-cols-1 gap-12 lg:grid-cols-[40%_60%] lg:gap-14">
           <!-- ==================== Story sections ==================== -->
-          <div class="min-w-0">
+          <div class="min-w-0 self-center">
             @for (s of sections(); track s.key; let i = $index) {
               <div
                 class="border-t border-gray-200"

@@ -31,14 +31,17 @@ import { ProjectMapComponent } from '../../shared/components/project-map/project
   ],
   template: `
     <app-contact-hero />
-
+<app-contact-trust />
     <app-project-inquiry />
+    <app-contact-process />
 
-    <app-contact-information />
+
+
+
 
     <app-contact-office />
 
-    <app-contact-process />
+
 
     <!-- Map section -->
     @if (mapEntries().length > 0) {
@@ -56,7 +59,7 @@ import { ProjectMapComponent } from '../../shared/components/project-map/project
       </section>
     }
 
-    <app-contact-trust />
+
 
 
 
