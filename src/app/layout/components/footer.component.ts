@@ -11,22 +11,24 @@ import { SOCIAL_LINKS } from '../../core/social/social-links';
   template: `
     <footer class="site-footer">
       <div class="footer-inner">
-        <!-- ============ ZONE A: primary SIGAT CTA ============
-             Purely decorative brand signature: the four line segments
-             converge around SIGAT on hover/focus-within (CSS only).
-             aria-hidden lines; the title is real text for SEO/SR. -->
-        <section class="footer-cta">
-          <span class="footer-cta-line footer-cta-line--top-left" aria-hidden="true"></span>
-          <span class="footer-cta-line footer-cta-line--top-right" aria-hidden="true"></span>
-          <h2 class="footer-cta-title">SIGAT</h2>
-          <span class="footer-cta-line footer-cta-line--bottom-left" aria-hidden="true"></span>
-          <span class="footer-cta-line footer-cta-line--bottom-right" aria-hidden="true"></span>
+        <!-- ============ ZONE A: SIGAT brand mark ============
+             Decorative brand signature. The four line segments are ANCHORED
+             at their outer ends and GROW in width toward the center on
+             hover/focus-within - they never translate. CSS only. -->
+        <section class="footer-brand-mark">
+          <span class="footer-line footer-line-top-left" aria-hidden="true"></span>
+          <span class="footer-line footer-line-top-right" aria-hidden="true"></span>
+          <h2 class="footer-brand-title">SIGAT</h2>
+          <span class="footer-line footer-line-bottom-left" aria-hidden="true"></span>
+          <span class="footer-line footer-line-bottom-right" aria-hidden="true"></span>
         </section>
 
-        <!-- ============ ZONE B: corporate information ============ -->
+        <!-- ============ ZONE B: corporate information ============
+             FIVE balanced columns in ONE grid: brand (logo + social),
+             two editorial navigation groups, the real address with a
+             Google Maps action, and the real contact data. -->
         <div class="footer-content">
-          <!-- Brand: white logo + company identity + social -->
-          <div class="footer-brand">
+          <div class="footer-brand-block">
             <a routerLink="/home" class="footer-logo-link" aria-label="SIGAT">
               <img
                 src="assets/media/logo/sigatlogo-white.png"
@@ -35,8 +37,6 @@ import { SOCIAL_LINKS } from '../../core/social/social-links';
                 loading="lazy"
               />
             </a>
-            <p class="footer-brand-name">{{ 'footer_company_name' | translate }}</p>
-            <p class="footer-desc">{{ 'footer_company_desc' | translate }}</p>
             <ul class="footer-social">
               @for (social of socialLinks; track social.platform) {
                 <li>
@@ -52,11 +52,9 @@ import { SOCIAL_LINKS } from '../../core/social/social-links';
             </ul>
           </div>
 
-          <!-- Navigation: reused from NAV_LINKS (single source of truth) -->
-          <nav class="footer-nav" [attr.aria-label]="'nav_quick_links' | translate">
-            <h3 class="footer-heading">{{ 'nav_quick_links' | translate }}</h3>
+          <nav class="footer-nav-group" [attr.aria-label]="'nav_quick_links' | translate">
             <ul class="footer-links">
-              @for (link of navLinks; track link.path) {
+              @for (link of navPrimary; track link.path) {
                 <li>
                   <a
                     [routerLink]="link.path"
@@ -70,16 +68,47 @@ import { SOCIAL_LINKS } from '../../core/social/social-links';
             </ul>
           </nav>
 
-          <!-- Contact: existing SIGAT information (footer_* keys) -->
-          <div class="footer-contact">
-            <h3 class="footer-heading">{{ 'nav_contact' | translate }}</h3>
+          <nav class="footer-nav-group" [attr.aria-label]="'nav_quick_links' | translate">
+            <ul class="footer-links">
+              @for (link of navSecondary; track link.path) {
+                <li>
+                  <a
+                    [routerLink]="link.path"
+                    class="footer-nav-link"
+                    [class.footer-nav-link--cta]="link.isCta"
+                  >
+                    {{ link.label | translate }}
+                  </a>
+                </li>
+              }
+            </ul>
+          </nav>
+
+          <div class="footer-block">
+            <h3 class="footer-heading">{{ 'footer_visit_us' | translate }}</h3>
+            <p class="footer-address">{{ 'footer_address' | translate }}</p>
+            <a
+              class="footer-maps-link"
+              [href]="mapsUrl"
+              target="_blank"
+              rel="noopener noreferrer"
+            >
+              <svg xmlns="http://www.w3.org/2000/svg" class="footer-contact-icon" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.6" d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" />
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.6" d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" />
+              </svg>
+              <span class="footer-maps-cta">{{ 'footer_maps_cta' | translate }}</span>
+            </a>
+          </div>
+
+          <div class="footer-block">
+            <h3 class="footer-heading">{{ 'footer_contact_us' | translate }}</h3>
             <ul class="footer-contact-list">
               <li>
                 <svg xmlns="http://www.w3.org/2000/svg" class="footer-contact-icon" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true">
-                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.6" d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" />
-                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.6" d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" />
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.6" d="M3 5a2 2 0 012-2h3.28a1 1 0 01.948.684l1.498 4.493a1 1 0 01-.502 1.21l-2.257 1.13a11.042 11.042 0 005.516 5.516l1.13-2.257a1 1 0 011.21-.502l4.493 1.498a1 1 0 01.684.949V19a2 2 0 01-2 2h-1C9.716 21 3 14.284 3 6V5z" />
                 </svg>
-                <span>{{ 'footer_address' | translate }}</span>
+                <span>{{ 'footer_phone' | translate }}</span>
               </li>
               <li>
                 <svg xmlns="http://www.w3.org/2000/svg" class="footer-contact-icon" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true">
@@ -87,18 +116,12 @@ import { SOCIAL_LINKS } from '../../core/social/social-links';
                 </svg>
                 <a href="mailto:contact@sigat.tn" class="footer-contact-link">{{ 'footer_email' | translate }}</a>
               </li>
-              <li>
-                <svg xmlns="http://www.w3.org/2000/svg" class="footer-contact-icon" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true">
-                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.6" d="M3 5a2 2 0 012-2h3.28a1 1 0 01.948.684l1.498 4.493a1 1 0 01-.502 1.21l-2.257 1.13a11.042 11.042 0 005.516 5.516l1.13-2.257a1 1 0 011.21-.502l4.493 1.498a1 1 0 01.684.949V19a2 2 0 01-2 2h-1C9.716 21 3 14.284 3 6V5z" />
-                </svg>
-                <span>{{ 'footer_phone' | translate }}</span>
-              </li>
             </ul>
           </div>
         </div>
       </div>
 
-      <!-- Bottom legal row -->
+      <!-- ============ ZONE C: legal ============ -->
       <div class="footer-bottom">
         <p class="footer-copyright">{{ 'footer_copyright' | translate }}</p>
       </div>
@@ -120,23 +143,21 @@ import { SOCIAL_LINKS } from '../../core/social/social-links';
         --footer-border: rgba(255, 255, 255, 0.12);
 
         /* CTA */
-        --cta-title-size: clamp(2.6rem, 6vw, 4.6rem);   /* SIGAT wordmark size */
-        --cta-line-width: clamp(4.5rem, 20%, 12.5rem);  /* segment length */
+        --cta-title-size: clamp(2rem, 4vw, 3.5rem);     /* SIGAT wordmark size */
         --cta-line-thickness: 1px;                      /* 1-2px max */
-        --cta-line-offset: clamp(3.1rem, 6vw, 4.4rem);  /* vertical gap title<->lines */
-        --cta-line-inset: 9%;                           /* horizontal inset from edges */
+        --cta-line-offset: clamp(2.6rem, 4.5vw, 3.4rem);  /* vertical gap title<->lines */
+        --cta-line-inset: 8%;                           /* horizontal inset from edges */
         --cta-line-opacity: 0.6;                        /* resting line visibility */
-        /* Convergence is an ABSOLUTE distance (not a % of line width) so the
-           four segments travel a predictable, tunable amount toward SIGAT. */
-        --cta-convergence: clamp(3rem, 12vw, 10rem);    /* inward travel on hover */
-        --cta-anim-duration: 600ms;                     /* line movement duration */
+        --cta-line-w-min: clamp(2.8rem, 14vw, 5.9rem);  /* resting length (~45-95px) */
+        --cta-line-w-max: clamp(5.6rem, 30vw, 12rem);   /* grown length (~90-190px) */
+        --cta-anim-duration: 900ms;                     /* width growth duration */
         --cta-anim-ease: cubic-bezier(0.22, 1, 0.36, 1);
 
         /* Layout */
         --footer-max-w: 75rem;             /* content max width */
         --footer-pad-x: clamp(1.25rem, 4vw, 2.5rem);
-        --logo-width: clamp(6.25rem, 10vw, 9rem);       /* 100-144px white logo */
-        --column-gap: clamp(2rem, 5vw, 4rem);
+        --logo-width: clamp(6.9rem, 9vw, 9.4rem);       /* ~110-150px white logo */
+        --column-gap: clamp(1.5rem, 3.5vw, 3rem);
         /* ================================ */
 
         background: var(--footer-bg);
@@ -150,36 +171,41 @@ import { SOCIAL_LINKS } from '../../core/social/social-links';
         padding-inline: var(--footer-pad-x);
       }
 
-      /* ============ ZONE A: CTA ============ */
-      .footer-cta {
+      /* ============ ZONE A: SIGAT brand mark ============
+         The four segments are ANCHORED at their outer ends. The ONLY
+         animated property is WIDTH (the inner end grows toward the
+         center) - no translateX/Y, no position/margin animation. */
+      .footer-brand-mark {
         position: relative;
-        padding: clamp(4rem, 9vw, 6.75rem) 1rem;
+        padding: clamp(2.5rem, 5vw, 3.75rem) 1rem;
         text-align: center;
       }
-      .footer-cta-line {
+      .footer-line {
         position: absolute;
-        width: var(--cta-line-width);
         height: var(--cta-line-thickness);
         background: var(--footer-line);
         opacity: var(--cta-line-opacity);
+        width: var(--cta-line-w-min);
         transition:
-          transform var(--cta-anim-duration) var(--cta-anim-ease),
+          width var(--cta-anim-duration) var(--cta-anim-ease),
           background-color 350ms ease,
           opacity 350ms ease,
           box-shadow 350ms ease;
         pointer-events: none;
       }
-      /* Symmetric physical placement -> identical visual in LTR and RTL. */
-      .footer-cta-line--top-left,
-      .footer-cta-line--bottom-left { left: var(--cta-line-inset); }
-      .footer-cta-line--top-right,
-      .footer-cta-line--bottom-right { right: var(--cta-line-inset); }
-      .footer-cta-line--top-left,
-      .footer-cta-line--top-right { top: calc(50% - var(--cta-line-offset)); }
-      .footer-cta-line--bottom-left,
-      .footer-cta-line--bottom-right { top: calc(50% + var(--cta-line-offset)); }
+      /* Outer ends anchored: left lines anchored LEFT and grow rightward
+         (toward center); right lines anchored RIGHT and grow leftward.
+         Symmetric physical placement -> identical in LTR and RTL. */
+      .footer-line-top-left,
+      .footer-line-bottom-left { left: var(--cta-line-inset); }
+      .footer-line-top-right,
+      .footer-line-bottom-right { right: var(--cta-line-inset); }
+      .footer-line-top-left,
+      .footer-line-top-right { top: calc(50% - var(--cta-line-offset)); }
+      .footer-line-bottom-left,
+      .footer-line-bottom-right { top: calc(50% + var(--cta-line-offset)); }
 
-      .footer-cta-title {
+      .footer-brand-title {
         margin: 0;
         font-size: var(--cta-title-size);
         font-weight: 800;
@@ -188,76 +214,142 @@ import { SOCIAL_LINKS } from '../../core/social/social-links';
         transition: color 350ms ease, text-shadow 350ms ease;
       }
 
-      /* Whole CTA area is the hover target (large padding above);
-         :focus-within gives keyboard parity if the CTA ever becomes interactive. */
-      .footer-cta:hover .footer-cta-line--top-left,
-      .footer-cta:hover .footer-cta-line--bottom-left,
-      .footer-cta:focus-within .footer-cta-line--top-left,
-      .footer-cta:focus-within .footer-cta-line--bottom-left {
-        transform: translateX(var(--cta-convergence));
+      /* Whole mark (title + lines + padding) is the hover target;
+         :focus-within = keyboard parity, :active = touch parity.
+         Hover width = 50% - inset, so the two segments meet EXACTLY at the
+         horizontal center: each pair becomes ONE continuous line above /
+         below SIGAT. Pure width growth - outer edges never move. */
+      .footer-brand-mark:hover .footer-line-top-left,
+      .footer-brand-mark:hover .footer-line-bottom-left,
+      .footer-brand-mark:focus-within .footer-line-top-left,
+      .footer-brand-mark:focus-within .footer-line-bottom-left,
+      .footer-brand-mark:active .footer-line-top-left,
+      .footer-brand-mark:active .footer-line-bottom-left {
+        width: calc(50% - var(--cta-line-inset));
       }
-      .footer-cta:hover .footer-cta-line--top-right,
-      .footer-cta:hover .footer-cta-line--bottom-right,
-      .footer-cta:focus-within .footer-cta-line--top-right,
-      .footer-cta:focus-within .footer-cta-line--bottom-right {
-        transform: translateX(calc(var(--cta-convergence) * -1));
+      .footer-brand-mark:hover .footer-line-top-right,
+      .footer-brand-mark:hover .footer-line-bottom-right,
+      .footer-brand-mark:focus-within .footer-line-top-right,
+      .footer-brand-mark:focus-within .footer-line-bottom-right,
+      .footer-brand-mark:active .footer-line-top-right,
+      .footer-brand-mark:active .footer-line-bottom-right {
+        width: calc(50% - var(--cta-line-inset));
       }
-      .footer-cta:hover .footer-cta-line,
-      .footer-cta:focus-within .footer-cta-line {
+      .footer-brand-mark:hover .footer-line,
+      .footer-brand-mark:focus-within .footer-line,
+      .footer-brand-mark:active .footer-line {
         background: var(--footer-accent);
         opacity: 1;
         box-shadow: 0 0 10px rgba(245, 158, 11, 0.3);
       }
-      .footer-cta:hover .footer-cta-title,
-      .footer-cta:focus-within .footer-cta-title {
+      .footer-brand-mark:hover .footer-brand-title,
+      .footer-brand-mark:focus-within .footer-brand-title,
+      .footer-brand-mark:active .footer-brand-title {
         color: var(--footer-accent);
         text-shadow: 0 0 18px rgba(245, 158, 11, 0.28);
       }
 
-      /* ============ ZONE B: information area ============ */
+      /* ============ ZONE B: information area ============
+         FIVE columns: brand | nav 1 | nav 2 | visit | contact. */
       .footer-content {
         display: grid;
-        grid-template-columns: 1.6fr 1fr 1.2fr;
+        grid-template-columns: 1.1fr 0.9fr 0.9fr 1.35fr 1.25fr;
         gap: var(--column-gap);
-        padding-block: clamp(2.5rem, 6vw, 4rem) clamp(2.25rem, 5vw, 3.5rem);
+        align-items: start;
+        padding-block: clamp(1.75rem, 3.5vw, 2.5rem) clamp(1.5rem, 3vw, 2rem);
         border-top: 1px solid var(--footer-border);
       }
 
+      /* Brand column: white logo + social, top-aligned like the others. */
+      .footer-brand-block {
+        display: flex;
+        flex-direction: column;
+        align-items: flex-start;
+        gap: 1.1rem;
+      }
+
       .footer-heading {
-        margin: 0 0 1.1rem;
+        margin: 0 0 0.75rem;
         font-size: 0.78rem;
         font-weight: 700;
         text-transform: uppercase;
         letter-spacing: 0.18em;
         color: var(--footer-muted);
       }
-      /* Brand column */
-      .footer-logo-link { display: inline-block; }
-      .footer-logo {
-        display: block;
-        width: var(--logo-width);
-        max-width: 100%;
-        height: auto;
-        object-fit: contain;
-      }
-      .footer-brand-name {
-        margin: 1.1rem 0 0.35rem;
-        font-size: 0.92rem;
-        font-weight: 700;
-        color: #ffffff;
-      }
-      .footer-desc {
-        margin: 0;
-        max-width: 34ch;
+/*__MORE__*/
+      /* Visit-us block: real address + Google Maps action */
+      .footer-address {
+        margin: 0 0 0.6rem;
         font-size: 0.875rem;
-        line-height: 1.65;
+        line-height: 1.55;
+        color: var(--footer-text);
+        max-width: 30ch;
+      }
+      .footer-maps-link {
+        display: inline-flex;
+        align-items: center;
+        gap: 0.45rem;
+        font-size: 0.82rem;
+        color: var(--footer-muted);
+        text-decoration: none;
+        transition: color 250ms ease;
+      }
+      .footer-maps-link .footer-contact-icon {
+        width: 1rem;
+        height: 1rem;
+        margin-top: 0;
+      }
+      .footer-maps-link:hover { color: var(--footer-accent); }
+
+      /* Contact block */
+      .footer-contact-list {
+        margin: 0;
+        padding: 0;
+        list-style: none;
+      }
+      .footer-contact-list li {
+        display: flex;
+        align-items: flex-start;
+        gap: 0.65rem;
+        margin-bottom: 0.55rem;
+        font-size: 0.875rem;
+        line-height: 1.5;
+      }
+      .footer-contact-icon {
+        width: 1.1rem;
+        height: 1.1rem;
+        flex-shrink: 0;
+        margin-top: 0.15rem;
+        color: var(--footer-muted);
+        transition: color 250ms ease;
+      }
+      .footer-maps-link:hover .footer-contact-icon,
+      .footer-contact-list li:hover .footer-contact-icon {
+        color: var(--footer-accent);
+      }
+      .footer-contact-link {
+        color: var(--footer-text);
+        text-decoration: none;
+        transition: color 250ms ease;
+      }
+      .footer-contact-link:hover { color: var(--footer-accent); }
+
+      /* ============ ZONE C: legal ============ */
+      .footer-bottom {
+        padding-block: 1rem;
+        border-top: 1px solid var(--footer-border);
+        text-align: center;
+      }
+      .footer-copyright {
+        margin: 0;
+        font-size: 0.75rem;
         color: var(--footer-muted);
       }
       .footer-social {
         display: flex;
         flex-wrap: wrap;
-        gap: 0.65rem;
-        margin: 1.4rem 0 0;
+        gap: 0.55rem;
+        margin: 0;
         padding: 0;
         list-style: none;
       }
@@ -315,42 +407,17 @@ import { SOCIAL_LINKS } from '../../core/social/social-links';
       .footer-nav-link:hover::after { transform: scaleX(1); }
       .footer-nav-link--cta { color: var(--footer-accent); font-weight: 600; }
 
-      /* Contact column */
-      .footer-contact-list {
-        margin: 0;
-        padding: 0;
-        list-style: none;
-      }
-      .footer-contact-list li {
-        display: flex;
-        align-items: flex-start;
-        gap: 0.65rem;
-        margin-bottom: 0.85rem;
-        font-size: 0.875rem;
-        line-height: 1.6;
-      }
-      .footer-contact-icon {
-        width: 1.1rem;
-        height: 1.1rem;
+      /* White logo (bottom row) */
+      .footer-logo-link {
+        display: inline-block;
         flex-shrink: 0;
-        margin-top: 0.15rem;
-        color: var(--footer-muted);
       }
-      .footer-contact-link {
-        color: var(--footer-text);
-        text-decoration: none;
-        transition: color 250ms ease;
-      }
-      .footer-contact-link:hover { color: var(--footer-accent); }
-
-      /* Bottom legal row */
-      .footer-bottom { border-top: 1px solid var(--footer-border); }
-      .footer-copyright {
-        margin: 0;
-        padding: 1.15rem var(--footer-pad-x);
-        text-align: center;
-        font-size: 0.75rem;
-        color: var(--footer-muted);
+      .footer-logo {
+        display: block;
+        width: var(--logo-width);
+        max-width: 100%;
+        height: auto;
+        object-fit: contain;
       }
 
       /* ============ Accessibility ============ */
@@ -362,22 +429,35 @@ import { SOCIAL_LINKS } from '../../core/social/social-links';
 
       /* ============ Responsive ============ */
       @media (max-width: 1024px) {
+        /* Tablet: brand row on top, then 2x2 + full-width visit block. */
         .footer-content { grid-template-columns: 1fr 1fr; }
-        .footer-brand { grid-column: 1 / -1; }
+        .footer-brand-block {
+          grid-column: 1 / -1;
+          flex-direction: row;
+          align-items: center;
+          justify-content: space-between;
+        }
+        .footer-block:nth-of-type(2) { grid-column: 1 / -1; }
       }
       @media (max-width: 640px) {
-        .footer-content { grid-template-columns: 1fr; gap: 2.25rem; }
-        .footer-cta { padding-inline: 0.25rem; }
-        .footer-cta-line { width: clamp(3.75rem, 24%, 6rem); }
+        .footer-content { grid-template-columns: 1fr; gap: 1.9rem; }
+        .footer-brand-block {
+          flex-direction: column;
+          align-items: center;
+          text-align: center;
+        }
+        .footer-social { justify-content: center; }
+        .footer-brand-mark { padding-inline: 0.25rem; }
+        .footer-bottom { text-align: center; }
       }
 
       /* ============ Reduced motion ============ */
       @media (prefers-reduced-motion: reduce) {
-        .footer-cta-line {
-          transform: none !important;
+        .footer-line {
+          width: var(--cta-line-w-min) !important;
           transition: background-color 200ms ease, opacity 200ms ease;
         }
-        .footer-cta-title { transition: color 200ms ease; text-shadow: none; }
+        .footer-brand-title { transition: color 200ms ease; text-shadow: none; }
         .footer-social-link { transition: none; transform: none !important; }
         .footer-nav-link::after { transition: none; }
       }
@@ -393,4 +473,19 @@ export class FooterComponent {
   /** Single sources of truth - no duplicated navigation/social data. */
   readonly navLinks = NAV_LINKS;
   readonly socialLinks = SOCIAL_LINKS;
+
+  /** Editorial two-group navigation from the SAME NAV_LINKS source.
+      Group 1: Accueil / À propos / Expertise. Group 2: Projets / Partenariats / Contact. */
+  readonly navPrimary = NAV_LINKS.slice(0, 3);
+  readonly navSecondary = NAV_LINKS.slice(3);
+
+  /**
+   * Google Maps search for the REAL SIGAT address (same data as the
+   * 'footer_address' translation key). No coordinates are invented.
+   * TODO: replace with the exact Google Maps place URL / coordinates
+   * as soon as SIGAT provides them.
+   */
+  readonly mapsUrl =
+    'https://www.google.com/maps/search/?api=1&query=' +
+    encodeURIComponent('2000, Immeuble Amira 20 Mars, Le Bardo, Tunisie');
 }
