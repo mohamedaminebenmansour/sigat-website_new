@@ -14,7 +14,7 @@ import { TranslatePipe } from '@ngx-translate/core';
           <p class="text-lg text-gray-600">{{ 'contact_trust_subtitle' | translate }}</p>
         </div>
 
-        <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-8 max-w-6xl mx-auto">
+        <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-8">
           @for (item of trustItems; track item.title) {
             <div class="flex items-start gap-4">
               <div class="flex-shrink-0 w-10 h-10 rounded-full bg-orange-500 flex items-center justify-center mt-0.5">

@@ -16,6 +16,7 @@ import { ProjectMapComponent } from '../../shared/components/project-map/project
 @Component({
   selector: 'app-contact',
   standalone: true,
+  host: { class: 'contact-page' },
   imports: [
     RouterLink,
     TranslatePipe,
@@ -52,7 +53,7 @@ import { ProjectMapComponent } from '../../shared/components/project-map/project
             <h2 class="text-2xl md:text-3xl font-bold text-gray-900 mb-3">{{ 'contact_map_title' | translate }}</h2>
             <p class="text-gray-600">{{ 'contact_map_subtitle' | translate }}</p>
           </div>
-          <div class="max-w-5xl mx-auto">
+          <div>
             <app-project-map [projects]="mapEntries()" />
           </div>
         </div>

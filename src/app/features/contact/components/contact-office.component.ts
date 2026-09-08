@@ -14,7 +14,7 @@ import { TranslatePipe } from '@ngx-translate/core';
           <p class="text-lg text-gray-600">{{ 'contact_visit_subtitle' | translate }}</p>
         </div>
 
-        <div class="max-w-5xl mx-auto">
+        <div>
           <div class="bg-gray-50 rounded-xl p-8 md:p-10 border border-gray-100">
             <div class="flex flex-col md:flex-row md:items-center md:justify-between gap-8">
               <div class="flex items-start gap-5">

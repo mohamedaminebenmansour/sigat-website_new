@@ -1066,3 +1066,32 @@ html {
 .pm-popup-cta:hover {
   background: #ea580c;
 }
+
+/* ============================================================
+   CONTACT PAGE — unified responsive container system
+   Scoped to the Contact page only (.contact-page) so other pages
+   keep their existing global .container behaviour.
+   ------------------------------------------------------------
+   Principle: fluid width + maximum width + automatic centering.
+   The content grows with the viewport until it reaches the SIGAT
+   editorial grid (75rem = 1200px, the same max-width used by the
+   footer and the Company Story layout), then stops growing and the
+   outer whitespace expands symmetrically on large screens.
+   ============================================================ */
+.contact-page {
+  /* Content cap aligned with the rest of the SIGAT editorial grid. */
+  --contact-max-width: 75rem;                 /* 1200px */
+  /* Responsive horizontal padding: 16px mobile -> 40px desktop. */
+  --contact-pad-x: clamp(1rem, 3vw, 2.5rem);
+}
+
+.contact-page .container {
+  /* Fluid width (100% minus the responsive side padding) capped at the
+     editorial max, then auto-centered. This overrides Tailwind's
+     per-breakpoint .container caps (which reach 1536px) for Contact
+     sections, giving visible balanced margins on desktop and preventing
+     the content from stretching on large monitors. */
+  max-width: min(100%, var(--contact-max-width));
+  margin-inline: auto;
+  padding-inline: var(--contact-pad-x);
+}

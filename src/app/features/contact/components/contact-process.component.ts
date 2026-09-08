@@ -6,7 +6,7 @@ import { TranslatePipe } from '@ngx-translate/core';
   standalone: true,
   imports: [TranslatePipe],
   template: `
-    <section class="py-16 md:py-20 bg-white">
+    <section class="py-16 md:py-20 bg-gray-50">
       <div class="container mx-auto px-4">
         <div class="text-center max-w-3xl mx-auto mb-12 md:mb-16">
           <p class="text-sm font-semibold uppercase tracking-[0.18em] text-orange-500 mb-3">{{ 'contact_process_eyebrow' | translate }}</p>
@@ -14,7 +14,7 @@ import { TranslatePipe } from '@ngx-translate/core';
           <p class="text-lg text-gray-600">{{ 'contact_process_subtitle' | translate }}</p>
         </div>
 
-        <div class="max-w-5xl mx-auto">
+        <div>
           <div class="grid grid-cols-1 md:grid-cols-4 gap-8 relative">
             <!-- Desktop connecting line -->
             <div class="hidden md:block absolute top-8 left-[12.5%] right-[12.5%] h-0.5 bg-blue-100"></div>

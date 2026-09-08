@@ -19,6 +19,7 @@ import { SOCIAL_LINKS } from '../../core/social/social-links';
             <span class="footer-line footer-line-top-left" aria-hidden="true"></span>
             <span class="footer-line footer-line-top-right" aria-hidden="true"></span>
             <span class="footer-cta-title">{{ 'nav_partner_cta' | translate }}</span>
+            <span class="footer-cta-arrow" aria-hidden="true">→</span>
             <span class="footer-line footer-line-bottom-left" aria-hidden="true"></span>
             <span class="footer-line footer-line-bottom-right" aria-hidden="true"></span>
           </a>
@@ -154,18 +155,23 @@ import { SOCIAL_LINKS } from '../../core/social/social-links';
         /* ================================
            PARTNER CTA VISUAL TUNING
            ================================ */
-        --partner-title-size: clamp(1.8rem, 3vw, 2.8rem);  /* CTA title size */
-        --partner-line-height: 2px;                       /* architectural line */
+        --partner-title-size: clamp(1.8rem, 3vw, 2.8rem);   /* CTA title size */
+        --partner-line-height: 2px;                        /* architectural line */
         --partner-line-opacity: 0.6;
-        /* Outer edge anchored at this inset from the CTA wrapper side. */
-        --partner-x-out: clamp(2.5rem, 11vw, 7rem);
-        /* Resting length as a fraction of the final (fully-connected) length. */
-        --partner-rest-scale: 0.34;
-        /* Overlap each inner end past the center by this much to kill the 1px seam. */
-        --partner-line-overlap: 1.5px;
-        /* Vertical gap between the CTA title and the top/bottom line. */
+        /* Outward reach of each line from the CENTER anchor (capped, so wide
+           screens never stretch the lines away from the CTA). */
+        --partner-line-max: clamp(7rem, 12vw, 16rem);
+        /* Resting fragment length as a fraction of --partner-line-max (short,
+           close to the text, before hover). */
+        --partner-rest-scale: 0.38;
+        /* Shared center anchor; both halves overlap here so they meet with no
+           visible seam. Keep it a fraction of a pixel. */
+        --partner-center-overlap: 0.5px;
+        /* Vertical gap between the CTA title and the top/bottom lines. */
         --partner-y-gap: clamp(1.5rem, 3vw, 2.5rem);
-        --partner-anim-duration: 750ms;
+        /* Cap the whole composition so huge screens stay compact. */
+        --partner-cta-max-width: min(90vw, 52rem);
+        --partner-anim-duration: 850ms;
         --partner-anim-ease: cubic-bezier(0.22, 1, 0.36, 1);
 
         /* Layout */
@@ -187,29 +193,33 @@ import { SOCIAL_LINKS } from '../../core/social/social-links';
       }
 
       /* ============ ZONE C: conversion CTA ============
-         The four segments are ANCHORED at their outer ends. The ONLY
-         animated property is WIDTH (the inner end grows toward the
-         center) - no translateX/Y, no position/margin animation. The
-         whole CTA is a real Angular RouterLink (accessible, keyboard
-         focus, Enter navigates to /partnerships). */
+         Geometry model - the four line fragments are anchored at the CENTER
+         of the CTA composition (never the footer edges). Each fragment's
+         CENTER-facing end is fixed at the midline via a shared
+         --partner-center-overlap, so scaleX only grows it OUTWARD. The two
+         TOP fragments and the two BOTTOM fragments share the exact same
+         anchor, so they always meet in the middle with no seam. The whole
+         composition is capped by --partner-cta-max-width, and resting length
+         is a fraction (--partner-rest-scale) of --partner-line-max, so wide
+         screens never stretch the lines away from the text. */
       .footer-cta-link {
         position: relative;
         display: block;
-        padding: clamp(2.25rem, 4.5vw, 3.5rem) 1rem;
+        /* Cap the whole composition and center it relative to the text. */
+        margin-inline: auto;
+        width: min(100%, var(--partner-cta-max-width));
+        padding: clamp(2.25rem, 4.5vw, 3.5rem) 0.5rem;
         text-align: center;
         text-decoration: none;
         cursor: pointer;
       }
       .footer-line {
         position: absolute;
-        /* Full final length (reaching center plus a small overlap to kill the
-           1px seam); resting state is shown via scaleX below so the outer
-           edge stays PUT while only the inner end travels. */
-        width: calc(50% - var(--partner-x-out) + var(--partner-line-overlap));
+        /* Outward reach; the inner (CENTER) end is anchored below. */
+        width: var(--partner-line-max);
         height: var(--partner-line-height);
         background: var(--footer-line);
         opacity: var(--partner-line-opacity);
-        transform-origin: center;
         transform: scaleX(var(--partner-rest-scale));
         transition:
           transform var(--partner-anim-duration) var(--partner-anim-ease),
@@ -219,18 +229,21 @@ import { SOCIAL_LINKS } from '../../core/social/social-links';
         pointer-events: none;
         will-change: transform;
       }
-      /* Outer edges are FIXED. Each segment's transform-origin sits at its
-         OUTER end, so scaleX grows the inner end toward the center only. */
+      /* LEFT fragments: CENTER-facing (right) end is the anchor,
+         so they grow LEFTWARD (outward). */
       .footer-line-top-left,
       .footer-line-bottom-left {
-        left: var(--partner-x-out);
-        transform-origin: left center;
-      }
-      .footer-line-top-right,
-      .footer-line-bottom-right {
-        right: var(--partner-x-out);
+        right: calc(50% - var(--partner-center-overlap));
         transform-origin: right center;
       }
+      /* RIGHT fragments: CENTER-facing (left) end is the anchor,
+         so they grow RIGHTWARD (outward). */
+      .footer-line-top-right,
+      .footer-line-bottom-right {
+        left: calc(50% - var(--partner-center-overlap));
+        transform-origin: left center;
+      }
+      /* Vertical placement: a line above and a line below the title. */
       .footer-line-top-left,
       .footer-line-top-right { top: calc(50% - var(--partner-y-gap)); }
       .footer-line-bottom-left,
@@ -245,12 +258,19 @@ import { SOCIAL_LINKS } from '../../core/social/social-links';
         text-decoration: none;
         transition: color 350ms ease, text-shadow 350ms ease;
       }
+      /* Clickability: a discreet arrow that belongs to the same interactive
+         target as the text. Always present (also on mobile where there is no
+         hover) and nudges on hover/focus and on tap. */
+      .footer-cta-arrow {
+        display: inline-block;
+        margin-inline-start: 0.4rem;
+        font-size: 0.72em;
+        color: inherit;
+        transition: color 350ms ease, transform 350ms ease;
+      }
 
-      /* Whole CTA link (title + lines + padding) is the hover target;
-         :focus-visible = keyboard parity. Each segment's scaleX goes to 1,
-         so its two inner ends meet AT the center and overlap by
-         --partner-line-overlap - invisible, no 1px seam, no double line.
-         Pure length growth; outer edges never move, nothing translates. */
+      /* Hover/focus: fragments grow OUTWARD to --partner-line-max. Both
+         halves share the center anchor so they meet exactly in the middle. */
       .footer-cta-link:hover .footer-line-top-left,
       .footer-cta-link:hover .footer-line-bottom-left,
       .footer-cta-link:focus-visible .footer-line-top-left,
@@ -270,11 +290,20 @@ import { SOCIAL_LINKS } from '../../core/social/social-links';
         box-shadow: 0 0 10px rgba(245, 158, 11, 0.3);
       }
       .footer-cta-link:hover .footer-cta-title,
-      .footer-cta-link:focus-visible .footer-cta-title {
+      .footer-cta-link:focus-visible .footer-cta-title,
+      .footer-cta-link:hover .footer-cta-arrow,
+      .footer-cta-link:focus-visible .footer-cta-arrow {
         color: var(--footer-accent);
+      }
+      .footer-cta-link:hover .footer-cta-title,
+      .footer-cta-link:focus-visible .footer-cta-title {
         text-shadow: 0 0 18px rgba(245, 158, 11, 0.28);
       }
-
+      .footer-cta-link:hover .footer-cta-arrow,
+      .footer-cta-link:focus-visible .footer-cta-arrow,
+      .footer-cta-link:active .footer-cta-arrow {
+        transform: translateX(0.18rem);
+      }
       /* ============ ZONE B: information area ============
          FIVE columns: brand | nav 1 | nav 2 | visit | contact. */
       .footer-content {
@@ -469,7 +498,7 @@ import { SOCIAL_LINKS } from '../../core/social/social-links';
         .footer-block:nth-of-type(2) { grid-column: 1 / -1; }
       }
       @media (max-width: 900px) {
-        .footer-cta-link { --partner-x-out: clamp(2rem, 9vw, 5rem); --partner-y-gap: 1.4rem; }
+        .footer-cta-link { --partner-line-max: clamp(5rem, 12vw, 8rem); --partner-y-gap: 1.4rem; }
       }
       @media (max-width: 640px) {
         .footer-content { grid-template-columns: 1fr; gap: 1.9rem; }
@@ -481,10 +510,11 @@ import { SOCIAL_LINKS } from '../../core/social/social-links';
         .footer-social { justify-content: center; }
         .footer-cta-link { padding-inline: 0.25rem; }
         .footer-cta-title { letter-spacing: 0.02em; }
+        .footer-cta-arrow { font-size: 0.9em; }
         .footer-bottom { text-align: center; }
       }
       @media (max-width: 480px) {
-        .footer-cta-link { --partner-x-out: 1.75rem; --partner-y-gap: 1.15rem; --partner-line-height: 1.5px; }
+        .footer-cta-link { --partner-line-max: clamp(2.5rem, 15vw, 4rem); --partner-y-gap: 1.15rem; --partner-line-height: 1.5px; }
       }
 
       /* ============ Reduced motion ============ */
@@ -495,6 +525,7 @@ import { SOCIAL_LINKS } from '../../core/social/social-links';
           transition: background-color 200ms ease, opacity 200ms ease;
         }
         .footer-cta-title { transition: color 200ms ease; text-shadow: none; }
+        .footer-cta-arrow { transition: none; transform: none; }
         .footer-social-link { transition: none; transform: none !important; }
         .footer-nav-link::after { transition: none; }
       }
@@ -514,7 +545,7 @@ export class FooterComponent {
   readonly socialLinks = SOCIAL_LINKS;
 
   /** Editorial two-group navigation from the SAME NAV_LINKS source.
-      Group 1: Accueil / À propos / Expertise. Group 2: Projets / Partenariats / Contact. */
+      Group 1: Accueil / Ã¢â€Å“Ãƒâ€¡ propos / Expertise. Group 2: Projets / Partenariats / Contact. */
   readonly navPrimary = NAV_LINKS.slice(0, 3);
   readonly navSecondary = NAV_LINKS.slice(3);
 

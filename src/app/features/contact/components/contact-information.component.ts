@@ -14,7 +14,7 @@ import { TranslatePipe } from '@ngx-translate/core';
           <p class="text-lg text-gray-600">{{ 'contact_info_subtitle' | translate }}</p>
         </div>
 
-        <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-8 max-w-6xl mx-auto">
+        <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-8">
           <div class="bg-white rounded-xl p-6 text-center border border-gray-100">
             <div class="w-12 h-12 bg-blue-900 rounded-lg flex items-center justify-center mx-auto mb-4">
               <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">

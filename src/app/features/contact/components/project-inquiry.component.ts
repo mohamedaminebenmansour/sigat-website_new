@@ -15,7 +15,7 @@ import { TranslatePipe } from '@ngx-translate/core';
           <p class="text-lg text-gray-600">{{ 'contact_inquiry_subtitle' | translate }}</p>
         </div>
 
-        <div class="grid grid-cols-1 lg:grid-cols-5 gap-12 lg:gap-16 max-w-6xl mx-auto">
+        <div class="grid grid-cols-1 lg:grid-cols-5 gap-12 lg:gap-16">
           <!-- Form: 3 columns -->
           <div class="lg:col-span-3">
             <form [formGroup]="inquiryForm" (ngSubmit)="onSubmit()" class="space-y-8">
