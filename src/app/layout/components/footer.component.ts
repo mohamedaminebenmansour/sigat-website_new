@@ -61,7 +61,6 @@ import { SOCIAL_LINKS } from '../../core/social/social-links';
                   <a
                     [routerLink]="link.path"
                     class="footer-nav-link"
-                    [class.footer-nav-link--cta]="link.isCta"
                   >
                     {{ link.label | translate }}
                   </a>
@@ -77,7 +76,6 @@ import { SOCIAL_LINKS } from '../../core/social/social-links';
                   <a
                     [routerLink]="link.path"
                     class="footer-nav-link"
-                    [class.footer-nav-link--cta]="link.isCta"
                   >
                     {{ link.label | translate }}
                   </a>
@@ -463,7 +461,6 @@ import { SOCIAL_LINKS } from '../../core/social/social-links';
       }
       .footer-nav-link:hover { color: #ffffff; }
       .footer-nav-link:hover::after { transform: scaleX(1); }
-      .footer-nav-link--cta { color: var(--footer-accent); font-weight: 600; }
 
       /* White logo (bottom row) */
       .footer-logo-link {
