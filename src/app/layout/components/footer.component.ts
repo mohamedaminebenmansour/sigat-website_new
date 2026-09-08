@@ -145,7 +145,7 @@ import { SOCIAL_LINKS } from '../../core/social/social-links';
         /* Colors */
         --footer-bg: #032665;              /* dark charcoal, not pure black */
         --footer-text: #d6d7d9;            /* primary text on dark */
-        --footer-muted: #9a9ca1;           /* secondary text */
+        --footer-muted: #F7F9FB94;           /* secondary text */
         --footer-accent: #f59e0b;          /* existing SIGAT amber (header CTA) */
         --footer-line: rgba(255, 255, 255, 0.55);  /* resting line color */
         --footer-border: rgba(255, 255, 255, 0.12);
