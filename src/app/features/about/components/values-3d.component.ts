@@ -19,6 +19,15 @@ import { COMPANY_VALUES } from './values.data';
    NOTE: V3D_RX1_FRAC / V3D_STEP_FRAC below MUST stay identical
    to the CSS custom properties --v3d-orbit-rx-base / --v3d-orbit-step
    in the styles of this component (single source of truth pair).
+
+   3D CONTENT (sphere "printed text") controls:
+   - V3D_SELF_SPEEDS        axial spin (rad/s) ~28-37s per revolution
+   - V3D_CONTENT_MIN_OPACITY  how faint the back-facing content gets (0.06)
+   - V3D_CONTENT_MIN_SCALE    how much the back-facing content shrinks (0.86)
+   Corresponding CSS variables live in the .v3d-section styles:
+   --v3d-content-curve     convex bow of the spherical content (6deg)
+   --v3d-content-z         surface offset depth (fraction of planet size)
+   --v3d-content-scale     content scale relative to the surface cap
    ============================================================ */
 
 /** Dwell time between automatic active-value steps (autoplay). */
@@ -29,18 +38,23 @@ const V3D_SLOTS = 6;
 const V3D_STEP = 1;
 /**
  * Orbit plane tilt, expressed as the projection ratio of the tilted XZ
- * circle: radiusY = radiusX * cos(tilt). 0.6 == a circle on the XZ plane
- * viewed from ~53° above the horizon. The ring (CSS) and the planet
+ * circle: radiusY = radiusX * cos(tilt). The ring (CSS) and the planet
  * trajectory (JS) BOTH multiply the same radius by this ratio, so the
  * planet can never leave its ring.
+ *
+ * The LIVE value is read at resize-time from the CSS custom property
+ * `--v3d-orbit-ratio` (responsive: desktop 0.56 / tablet 0.58 / mobile
+ * 0.60), so the ellipse depth and the orbit rings always share one source
+ * of truth. This constant is used only as a fallback if the property is
+ * ever absent.
  */
-const V3D_ELLIPSE_RATIO = 0.6;
+const V3D_ELLIPSE_RATIO_FALLBACK = 0.56;
 const V3D_DEG = Math.PI / 180;
 /** Near/far visual scale range - smooth and deliberately modest. */
-const V3D_MIN_SCALE = 0.82;
-const V3D_MAX_SCALE = 1.06;
+const V3D_MIN_SCALE = 0.86;
+const V3D_MAX_SCALE = 1.08;
 /** Near/far opacity range (far planets stay clearly readable). */
-const V3D_MIN_OPACITY = 0.75;
+const V3D_MIN_OPACITY = 0.78;
 const V3D_MAX_OPACITY = 1;
 /** Depth -> z-index band. 200..300 renders BEHIND the sun (z:300),
     300..400 renders IN FRONT of it - planets visibly orbit around it. */
@@ -54,27 +68,28 @@ const V3D_START_ANGLES = [0.4, 1.6, 3.0, 4.4, 5.6, 2.4];
 const V3D_COLORS = ['#f59e0b', '#2563eb', '#0ea5e9', '#6366f1', '#1d4ed8', '#0f766e'];
 /**
  * radiusX = this fraction x scene width; successive orbits step by fraction.
- * MUST MATCH --v3d-orbit-rx-base (0.23) and --v3d-orbit-step (0.039) in CSS.
+ * MUST MATCH --v3d-orbit-rx-base (0.235) and --v3d-orbit-step (0.0405) in CSS.
  */
-const V3D_RX1_FRAC = 0.23;
-const V3D_STEP_FRAC = 0.039;
+const V3D_RX1_FRAC = 0.235;
+const V3D_STEP_FRAC = 0.0405;
 /** Subtle per-planet size variation (planet i is scaled by 1 - i*step). */
 const V3D_PLANET_SIZE_STEP = 0.03;
-/** Per-planet AXIAL (self) rotation speed (radians/s) - VERY slow celestial
-    rotation, NOT a spinning UI card. Inner planets rotate slightly faster.
-    In degrees/frame at 60fps this is ~0.018-0.031 (inside the 0.015-0.04
-    readability window). Fully independent of the orbital speeds (two
-    separate angle systems, one shared rAF clock). */
-const V3D_SELF_SPEEDS = [0.032, 0.03, 0.028, 0.026, 0.024, 0.022];
+/** Per-planet AXIAL (self) rotation speed (radians/s) - a calm, slow spin.
+    ~28-37s per full 360° (inner planets slightly faster), so the reader has
+    plenty of time to see icon + name + description. Fully independent of the
+    orbital speeds (two separate angle systems, one shared rAF clock). */
+const V3D_SELF_SPEEDS = [0.22, 0.21, 0.2, 0.19, 0.18, 0.17];
 /**
- * Content visibility model - keeps the TRUE 360deg rotation perceptible.
- * A hard backface cull makes the content vanish for a whole hemisphere,
- * which reads like a fake 0->180->0 oscillation. Instead the content fades
- * smoothly with the self-rotation angle and keeps a faint presence
- * (V3D_BACK_OPACITY) on the far side, so the cycle reads as one continuous
- * spin. opacity = BACK + (1 - BACK) * smoothstep(max(0, cos(selfAngle))).
+ * Content visibility model - the front-facing factor (0..1) drives the
+ * content's opacity + depth scale through the `--v3d-front` custom property
+ * (see applyAnimation / .v3d-planet-content). The back of the sphere keeps a
+ * very faint floor (V3D_CONTENT_MIN_OPACITY) and a slight shrink
+ * (V3D_CONTENT_MIN_SCALE) so the cycle reads as one continuous 360° spin
+ * rather than a hard 0->180->0 flip: front = 1, side fades, back is
+ * essentially hidden, smoothly and without any jump or teleport.
  */
-const V3D_BACK_OPACITY = 0.15;
+const V3D_CONTENT_MIN_OPACITY = 0.06;
+const V3D_CONTENT_MIN_SCALE = 0.86;
 
 /** Per-planet visual geometry, recomputed every frame from the orbit angle. */
 interface PlanetGeometry {
@@ -92,7 +107,7 @@ interface PlanetGeometry {
  * Geometry model (single mathematical source of truth per orbit):
  *   Every orbit is a circle of radius orbitRadius(i) on the XZ plane. The
  *   whole system is tilted toward the camera, so the circle projects onto
- *   the screen as an ellipse with radiusY = radiusX * V3D_ELLIPSE_RATIO.
+ *   the screen as an ellipse with radiusY = radiusX * this.ellipseRatio.
  *   The CSS rings and the JS planet trajectory use the SAME radius fractions
  *   about the SAME 50%/50% center, therefore a planet is always exactly on
  *   its ring - the ellipse look is the projection, never a faked path.
@@ -129,34 +144,27 @@ interface PlanetGeometry {
          Change these values to tune the composition.
          ============================================================ */
       .v3d-section {
-        /* Fixed navbar height: h-20 (5rem) mobile, md:h-24 (6rem) desktop. */
+        /* Navbar height + header block + bottom gap (all responsive below). */
         --v3d-header-offset: 6rem;
-        /* Vertical space used by the section header block above the scene. */
         --v3d-header-block: 7.5rem;
-        /* Breathing room kept below the section (was 8rem -> giant blank). */
         --v3d-bottom-gap: 4rem;
-        /* Scene aspect ratio as width/height multiplier (100 / 62). */
+        /* Scene aspect ratio + widest scene width (large screens stop here). */
         --v3d-scene-ar: 1.6129;
-        /* Widest the scene may ever get on desktop. */
-        --v3d-scene-max-w: 940px;
+        --v3d-scene-max-w: 1040px;
         /* Orbit radii: base + step * i (MUST match V3D_RX1_FRAC / V3D_STEP_FRAC). */
-        --v3d-orbit-rx-base: 23cqw;
-        --v3d-orbit-step: 3.9cqw;
-        /* Orbit plane tilt (radiusY = radiusX * ratio). */
-        --v3d-orbit-ratio: 0.6;
-        /* Sun vs planet sizes - the sun stays ~1.9x the largest planet even
-           though planets grew to carry icon + title + description. */
-        --v3d-sun: clamp(7.5rem, 19cqw, 12rem);
-        --v3d-planet: clamp(3.2rem, 10.8cqw, 6.4rem);
-        /* Surface-mounted content depth: translateZ = planet diameter x this
-           fraction. Small value = text sits just above the curved surface
-           (bowed toward the viewer by the 700px perspective), never floating. */
+        --v3d-orbit-rx-base: 23.5cqw;
+        --v3d-orbit-step: 4.05cqw;
+        /* Orbit tilt ratio - LIVE shared source between CSS rings and JS
+           trajectory (read by readEllipseRatio). Desktop .56 / tablet .58 / mobile .60. */
+        --v3d-orbit-ratio: 0.56;
+        /* Sun ~1.8-2.0x the largest planet: dominant but planets fit content. */
+        --v3d-sun: clamp(8rem, 19.5cqw, 12.5rem);
+        --v3d-planet: clamp(3.4rem, 11cqw, 6.75rem);
+        /* Content depth (translateZ fraction of diameter), cap-relative scale,
+           and convex "bowed" curvature (rotateX) - subtle to stay readable. */
         --v3d-content-z: 0.35;
-        /* Content scale relative to the surface cap (keeps it inside the
-           sphere silhouette). */
         --v3d-content-scale: 0.92;
-        /* ============================================================ */
-
+        --v3d-content-curve: 6deg;
         position: relative;
         background: linear-gradient(180deg, #ffffff 0%, #f4f7fc 100%);
         overflow: hidden;
@@ -192,23 +200,8 @@ interface PlanetGeometry {
         container-type: inline-size;
         position: relative;
         margin-inline: auto;
-        width: min(100%, var(--v3d-scene-max-w));
-        width: min(
-          100%,
-          var(--v3d-scene-max-w),
-          calc(
-            (100vh - var(--v3d-header-offset) - var(--v3d-header-block) - var(--v3d-bottom-gap))
-            * var(--v3d-scene-ar)
-          )
-        );
-        width: min(
-          100%,
-          var(--v3d-scene-max-w),
-          calc(
-            (100dvh - var(--v3d-header-offset) - var(--v3d-header-block) - var(--v3d-bottom-gap))
-            * var(--v3d-scene-ar)
-          )
-        );
+        width: min(100%, var(--v3d-scene-max-w), calc((100vh - var(--v3d-header-offset) - var(--v3d-header-block) - var(--v3d-bottom-gap)) * var(--v3d-scene-ar)));
+        width: min(100%, var(--v3d-scene-max-w), calc((100dvh - var(--v3d-header-offset) - var(--v3d-header-block) - var(--v3d-bottom-gap)) * var(--v3d-scene-ar)));
         aspect-ratio: 100 / 62;
       }
 
@@ -251,16 +244,20 @@ interface PlanetGeometry {
         /* Perspective for the rotating sphere layer (parent of the rotated
            element must carry it). */
         perspective: 700px;
-        /* Layered spherical shading: top-left light, bottom-right shadow. */
+        /* Layered spherical shading: top-left specular highlight, soft
+           mid-tone wrap to base color, lower-right core shadow, plus an
+           ambient rim — reads as a stylized sphere, not a plastic button. */
         background:
-          radial-gradient(circle at 30% 25%, rgba(255, 255, 255, 0.92) 0%, rgba(255, 255, 255, 0) 22%),
-          radial-gradient(circle at 65% 70%, rgba(0, 0, 0, 0.34) 0%, rgba(0, 0, 0, 0) 58%),
+          radial-gradient(circle at 26% 22%, rgba(255, 255, 255, 0.95) 0%, rgba(255, 255, 255, 0) 26%),
+          radial-gradient(circle at 34% 30%, rgba(255, 255, 255, 0.32) 0%, rgba(255, 255, 255, 0) 46%),
+          radial-gradient(circle at 67% 72%, color-mix(in srgb, var(--v3d-pc) 45%, #000 55%) 0%, color-mix(in srgb, var(--v3d-pc) 70%, #000 30%) 46%, transparent 74%),
           var(--v3d-pc);
-        border: 2px solid rgba(255, 255, 255, 0.45);
+        border: 2px solid rgba(255, 255, 255, 0.5);
         box-shadow:
           0 8px 20px rgba(15, 23, 42, 0.25),
-          inset 0 -10px 18px rgba(0, 0, 0, 0.26),
-          inset 4px 6px 10px rgba(255, 255, 255, 0.24);
+          inset 0 -12px 22px rgba(0, 0, 0, 0.3),
+          inset 5px 8px 14px rgba(255, 255, 255, 0.28),
+          inset -6px -8px 16px color-mix(in srgb, var(--v3d-pc) 45%, #000 55%);
         /* NO transform here beyond the rAF-owned one; only paint props may
            transition (never the orbital transform). */
         transition: box-shadow 250ms ease, border-color 250ms ease, filter 250ms ease;
@@ -293,7 +290,7 @@ interface PlanetGeometry {
          NO backface-visibility: hidden here - a hard cull hides the content
          for an entire hemisphere and makes the spin read like a fake
          0->180->0 oscillation; visibility is instead a smooth function of
-         the self-rotation angle (see V3D_BACK_OPACITY / applyAnimation), so
+         the self-rotation angle (see --v3d-front / applyAnimation), so
          the cycle is a genuine continuous 360deg. The sphere body on the
          static button is never affected and stays fully visible. No
          overflow:hidden either - it would flatten preserve-3d and kill the
@@ -307,32 +304,33 @@ interface PlanetGeometry {
         transform-style: preserve-3d;
       }
 
-      /* LAYER 4 (content): icon / title / description physically mounted on
-         the rotating surface cap. translateZ is proportional to the planet
-         diameter so the text bows toward the viewer with the sphere
-         curvature; the subtle scale keeps it inside the silhouette. The
-         content owns NO rotation transform - it simply inherits the sphere's
-         axial rotation, angle, speed and clock. */
+      /* LAYER 4 (content): printed on the cap; inherits sphere spin; the
+         --v3d-front factor fades/shrinks the whole icon+title+desc as one
+         surface group front->back; convex radial mask + circular clip. */
       .v3d-planet-content {
         position: absolute;
         inset: 0;
+        border-radius: 50%;
+        overflow: hidden;
         display: flex;
         flex-direction: column;
         align-items: center;
         justify-content: center;
         gap: 0.18rem;
-        /* Safe internal padding as a PERCENTAGE of the content box, so the
-           readable area scales with the planet (10-15% band, no fixed rem
-           that breaks on mobile). */
         padding: 12% 10%;
-        overflow: hidden;
         text-align: center;
         color: #ffffff;
+        background:
+          radial-gradient(circle at 42% 34%, rgba(255, 255, 255, 0.14) 0%, rgba(255, 255, 255, 0) 56%),
+          radial-gradient(circle at 66% 78%, rgba(0, 0, 0, 0.22) 0%, rgba(0, 0, 0, 0) 64%);
         text-shadow: 0 1px 3px rgba(15, 23, 42, 0.55), 0 1px 0 rgba(255, 255, 255, 0.14);
         user-select: none;
+        --v3d-front: 1;
+        opacity: calc(0.06 + 0.94 * var(--v3d-front));
         transform:
           translateZ(calc(var(--v3d-planet) * var(--v3d-content-z)))
-          scale(var(--v3d-content-scale));
+          rotateX(var(--v3d-content-curve))
+          scale(calc(var(--v3d-content-scale) * (0.86 + 0.14 * var(--v3d-front))));
       }
       /* Active planet: glow + brightness emphasis ONLY - never a transform
          (the orbital + self-rotation transforms are owned by the rAF loop),
@@ -365,9 +363,9 @@ interface PlanetGeometry {
          layer: the rAF loop writes rotateY(selfAngle) + cos-based opacity
          here. backface-visibility hides mirrored text past 90deg; the
          planet disc itself is NOT affected and never disappears. */
-      .v3d-planet i { font-size: clamp(0.95rem, 2.6cqw, 1.5rem); line-height: 1; }
+      .v3d-planet i { font-size: clamp(1rem, 2.8cqw, 1.6rem); line-height: 1; }
       .v3d-planet-title {
-        font-size: clamp(0.5rem, 1.45cqw, 0.75rem);
+        font-size: clamp(0.5rem, 1.6cqw, 0.85rem);
         font-weight: 700;
         line-height: 1.08;
         letter-spacing: 0.01em;
@@ -378,7 +376,7 @@ interface PlanetGeometry {
         text-overflow: ellipsis;
       }
       .v3d-planet-desc {
-        font-size: clamp(0.44rem, 1.1cqw, 0.58rem);
+        font-size: clamp(0.46rem, 1.25cqw, 0.68rem);
         line-height: 1.25;
         opacity: 0.92;
         max-width: 100%;
@@ -402,17 +400,28 @@ interface PlanetGeometry {
         transform: translate(-50%, -50%);
         border-radius: 50%;
         border: 2px solid rgba(255, 255, 255, 0.65);
-        background: radial-gradient(circle at 30% 28%, #fff6cf 0%, #ffd76b 48%, #ffb347 92%);
-        box-shadow: 0 0 40px rgba(255, 179, 71, 0.5), 0 0 110px rgba(255, 140, 0, 0.26),
-          inset 0 0 0 8px rgba(255, 245, 192, 0.6), inset 0 -14px 26px rgba(234, 88, 12, 0.34);
+        background: radial-gradient(
+          circle at 30% 28%,
+          #fffdf4 0%,
+          #fff2cd 30%,
+          #ffe58a 58%,
+          #ffc44d 82%,
+          #f59e0b 100%
+        );
+        box-shadow:
+          0 0 34px rgba(255, 191, 87, 0.42),
+          0 0 96px rgba(255, 150, 30, 0.2),
+          inset 0 0 0 8px rgba(255, 247, 208, 0.55),
+          inset 0 -16px 30px rgba(230, 92, 16, 0.32),
+          inset 4px 6px 12px rgba(255, 255, 240, 0.5);
         display: flex;
         align-items: center;
         justify-content: center;
         animation: v3d-sun-pulse 3.2s ease-in-out infinite;
       }
       @keyframes v3d-sun-pulse {
-        0%, 100% { box-shadow: 0 0 40px rgba(255, 179, 71, 0.5), 0 0 110px rgba(255, 140, 0, 0.26), inset 0 0 0 8px rgba(255, 245, 192, 0.6); }
-        50%      { box-shadow: 0 0 64px rgba(255, 179, 71, 0.66), 0 0 150px rgba(255, 140, 0, 0.34), inset 0 0 0 8px rgba(255, 245, 192, 0.66); }
+        0%, 100% { box-shadow: 0 0 34px rgba(255, 191, 87, 0.42), 0 0 96px rgba(255, 150, 30, 0.2), inset 0 0 0 8px rgba(255, 247, 208, 0.55), inset 0 -16px 30px rgba(230, 92, 16, 0.32), inset 4px 6px 12px rgba(255, 255, 240, 0.5); }
+        50%      { box-shadow: 0 0 54px rgba(255, 191, 87, 0.56), 0 0 132px rgba(255, 150, 30, 0.28), inset 0 0 0 8px rgba(255, 247, 208, 0.64), inset 0 -16px 30px rgba(230, 92, 16, 0.32), inset 4px 6px 12px rgba(255, 255, 240, 0.5); }
       }
       .v3d-sun-halo {
         position: absolute;
@@ -427,9 +436,7 @@ interface PlanetGeometry {
         filter: blur(2px);
         pointer-events: none;
       }
-      /* Sun content: subtle convex/embossed treatment. A slight perspective
-         tilt + layered highlight/shadow text makes the text feel embedded in
-         the glowing sphere while staying perfectly readable. */
+      /* Sun content: on the sphere surface, not a flat card - convex lighting. */
       .v3d-sun-content {
         position: relative;
         z-index: 2;
@@ -439,25 +446,30 @@ interface PlanetGeometry {
         justify-content: center;
         gap: 0.2rem;
         width: 100%;
+        height: 100%;
+        border-radius: 50%;
+        overflow: hidden;
         padding: 0 14%;
         text-align: center;
         color: #78350f;
         perspective: 480px;
+        background:
+          radial-gradient(circle at 38% 30%, rgba(255, 255, 255, 0.35) 0%, rgba(255, 255, 255, 0) 52%),
+          radial-gradient(circle at 62% 78%, rgba(124, 45, 18, 0.22) 0%, rgba(124, 45, 18, 0) 62%);
         animation: v3d-swap 300ms var(--v3d-ease) both;
       }
       .v3d-sun-content i,
       .v3d-sun-content h3,
       .v3d-sun-content p {
-        transform: rotateX(4deg);
         text-shadow:
           0 1px 0 rgba(255, 251, 235, 0.55),
           0 -1px 2px rgba(124, 45, 18, 0.28);
       }
-      .v3d-sun-content i { font-size: clamp(1.3rem, 4cqw, 2rem); line-height: 1; }
-      .v3d-sun-content h3 { margin: 0; font-size: clamp(0.85rem, 2.7cqw, 1.15rem); font-weight: 800; line-height: 1.18; }
+      .v3d-sun-content i { font-size: clamp(1.4rem, 4cqw, 2.1rem); line-height: 1; }
+      .v3d-sun-content h3 { margin: 0; font-size: clamp(0.9rem, 2.8cqw, 1.25rem); font-weight: 800; line-height: 1.18; }
       .v3d-sun-content p {
         margin: 0;
-        font-size: clamp(0.55rem, 1.75cqw, 0.78rem);
+        font-size: clamp(0.58rem, 1.8cqw, 0.82rem);
         line-height: 1.4;
         color: #92400e;
         display: -webkit-box;
@@ -496,13 +508,18 @@ interface PlanetGeometry {
       .v3d-dot:focus-visible { outline: 2px solid #1e3a8a; outline-offset: 2px; }
 
       /* ================= Responsive geometry =================
-         Same math everywhere: only the tuning variables shrink. */
+         Same math everywhere: only the tuning variables shrink.
+         The live --v3d-orbit-ratio (read by readEllipseRatio) is also
+         responsive: tablet 0.58, mobile 0.60, desktop 0.56 (base). */
+      @media (max-width: 1023px) {
+        .v3d-section { --v3d-orbit-ratio: 0.58; }
+      }
       @media (max-width: 900px) {
         .v3d-section {
           --v3d-header-block: 7rem;
           --v3d-scene-max-w: 34rem;
-          --v3d-sun: clamp(6.3rem, 18cqw, 8.5rem);
-          --v3d-planet: clamp(2.95rem, 10.6cqw, 5rem);
+          --v3d-sun: clamp(6.5rem, 18.5cqw, 9rem);
+          --v3d-planet: clamp(3rem, 10.8cqw, 5.4rem);
         }
       }
       @media (max-width: 560px) {
@@ -510,10 +527,14 @@ interface PlanetGeometry {
           --v3d-header-block: 6.5rem;
           --v3d-bottom-gap: 3rem;
           --v3d-scene-max-w: 23rem;
-          --v3d-sun: clamp(5.5rem, 19cqw, 7rem);
-          --v3d-planet: clamp(2.75rem, 11cqw, 4rem);
+          --v3d-orbit-ratio: 0.60;
+          /* Mobile planets are the largest that physically fit: the outer
+             orbit + a ~40px planet must stay inside a ~335px scene. Larger
+             would clip. The sun stays ~2x so hierarchy is preserved. */
+          --v3d-sun: clamp(5rem, 18cqw, 7rem);
+          --v3d-planet: clamp(2.5rem, 11cqw, 4rem);
         }
-        /* A ~42px circle cannot hold three text rows: the description is
+        /* A ~40px circle cannot hold three text rows: the description is
            hidden visually only (data + translations untouched; the full
            text remains in the sun and in each planet's aria-label). */
         .v3d-planet-desc { display: none; }
@@ -527,9 +548,9 @@ interface PlanetGeometry {
         .v3d-sun { animation: none; }
         .v3d-planet, .v3d-planet-surface, .v3d-dot { transition: none; }
         .v3d-planet-sphere { transform: none; }
-        /* !important overrides any inline opacity already written by the
+        /* !important overrides any inline value already written by the
            rAF loop before the preference changed - content stays readable. */
-        .v3d-planet-content { opacity: 1 !important; }
+        .v3d-planet-content { opacity: 1 !important; --v3d-front: 1 !important; }
         .v3d-planet.active { filter: none; }
         .v3d-planet.active::after { box-shadow: none; }
       }
@@ -641,6 +662,12 @@ export class Values3dComponent {
     matchMedia('(prefers-reduced-motion: reduce)').matches;
 
   private sceneWidth = 0;
+  /**
+   * Live orbit-plane tilt ratio (radiusY / radiusX). Read from the CSS
+   * custom property `--v3d-orbit-ratio` at resize time so the JS trajectory
+   * and the CSS orbit rings always share the same responsive ellipse depth.
+   */
+  private ellipseRatio = V3D_ELLIPSE_RATIO_FALLBACK;
 
   private scene: HTMLElement | null = null;
   private planets: HTMLElement[] = [];
@@ -696,7 +723,7 @@ export class Values3dComponent {
    * THE single orbit-radius source of truth in JavaScript.
    * Returns radiusX in px for orbit i; the visual ring is the SAME fraction
    * of the SAME container width via --v3d-orbit-rx-base/--v3d-orbit-step,
-   * and both share the vertical ratio V3D_ELLIPSE_RATIO, so:
+   * and both share the vertical ratio this.ellipseRatio, so:
    *   planet distance from center === ring radius  (for every i)
    */
   private orbitRadius(index: number): number {
@@ -713,7 +740,7 @@ export class Values3dComponent {
   private calculatePlanetGeometry(index: number, angle: number): PlanetGeometry {
     const radius = this.orbitRadius(index);
     const x = Math.cos(angle) * radius;
-    const y = Math.sin(angle) * radius * V3D_ELLIPSE_RATIO;
+    const y = Math.sin(angle) * radius * this.ellipseRatio;
     const depth = (Math.sin(angle) + 1) / 2; // 0 far (back) -> 1 near (front)
     const scale = V3D_MIN_SCALE + depth * (V3D_MAX_SCALE - V3D_MIN_SCALE);
     const opacity = V3D_MIN_OPACITY + depth * (V3D_MAX_OPACITY - V3D_MIN_OPACITY);
@@ -741,11 +768,24 @@ export class Values3dComponent {
     const host = this.elementRef.nativeElement;
     this.scene = host.querySelector<HTMLElement>('.v3d-scene');
     this.sceneWidth = this.scene ? this.scene.clientWidth : 0;
+    this.readEllipseRatio();
 
     this.planets = Array.from(host.querySelectorAll<HTMLElement>('.v3d-planet'));
     this.spheres = Array.from(host.querySelectorAll<HTMLElement>('.v3d-planet-sphere'));
     this.contents = Array.from(host.querySelectorAll<HTMLElement>('.v3d-planet-content'));
     this.applyAnimation();
+  }
+
+  /** Reads the responsive ellipse tilt ratio from the CSS custom property
+      `--v3d-orbit-ratio` (set on the section), so the JS trajectory always
+      matches the CSS orbit rings. Falls back to the constant if absent. */
+  private readEllipseRatio(): void {
+    if (!this.scene) return;
+    const css = getComputedStyle(this.scene).getPropertyValue('--v3d-orbit-ratio').trim();
+    const ratio = parseFloat(css);
+    if (Number.isFinite(ratio) && ratio > 0) {
+      this.ellipseRatio = ratio;
+    }
   }
 
   /**
@@ -762,6 +802,7 @@ export class Values3dComponent {
         const width = scene.clientWidth;
         if (width === this.sceneWidth) return;
         this.sceneWidth = width;
+        this.readEllipseRatio();
         this.applyAnimation();
       });
       this.resizeObserver.observe(scene);
@@ -800,11 +841,10 @@ export class Values3dComponent {
 
       // Self-rotation: the SPHERE rotates; the icon/title/description are its
       // physical children and inherit the exact same angle, speed and clock.
-      // The sphere's rotateY angle is CONTINUOUS (0 -> 360 -> 720 ...). A hard
-      // backface cull would hide the content for a whole hemisphere and read
-      // like a fake 0->180->0 oscillation, so visibility is instead a smooth
-      // front-facing factor: front = 1, ~45deg ~= 0.8, 90deg = back floor,
-      // back = V3D_BACK_OPACITY - continuous, no flip, no teleport, no jump.
+      // The content's front-facing factor --v3d-front is then written here as
+      // a smooth 0..1 value (front = 1, side fades, back ~0) — CSS derives the
+      // content's opacity + depth scale from it, so the whole surface group
+      // fades/shrinks as ONE continuous 360° cycle: no hard flip, no teleport.
       const sphere = this.spheres[i];
       if (sphere) {
         sphere.style.transform = this.composeSelfRotationTransform(this.selfAngles[i]);
@@ -813,9 +853,7 @@ export class Values3dComponent {
       if (content) {
         const front = Math.max(0, Math.cos(this.selfAngles[i]));
         const smooth = front * front * (3 - 2 * front); // smoothstep
-        content.style.opacity = (
-          V3D_BACK_OPACITY + (1 - V3D_BACK_OPACITY) * smooth
-        ).toFixed(3);
+        content.style.setProperty('--v3d-front', smooth.toFixed(3));
       }
     }
   }
