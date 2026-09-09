@@ -21,7 +21,7 @@ import { COMPANY_VALUES } from './values.data';
    in the styles of this component (single source of truth pair).
 
    3D CONTENT (sphere "printed text") controls:
-   - V3D_SELF_SPEEDS        axial spin (rad/s) ~28-37s per revolution
+   - PLANET_SELF_ROTATION_DEG_PER_SEC  axial spin (deg/s) ~40-70s per revolution
    - V3D_CONTENT_MIN_OPACITY  how faint the back-facing content gets (0.06)
    - V3D_CONTENT_MIN_SCALE    how much the back-facing content shrinks (0.86)
    Corresponding CSS variables live in the .v3d-section styles:
@@ -67,18 +67,43 @@ const V3D_START_ANGLES = [0.4, 1.6, 3.0, 4.4, 5.6, 2.4];
 /** Fixed planet accent colors (SIGAT identity: warm gold + cool blues). */
 const V3D_COLORS = ['#f59e0b', '#2563eb', '#0ea5e9', '#6366f1', '#1d4ed8', '#0f766e'];
 /**
- * radiusX = this fraction x scene width; successive orbits step by fraction.
- * MUST MATCH --v3d-orbit-rx-base (0.235) and --v3d-orbit-step (0.0405) in CSS.
+ * Content-aware, responsive planet sizing.
+ *
+ * Conceptual model:  content requirements -> minimum planet diameter ->
+ * responsive clamp -> available scene size -> final planet diameter.
+ * The MIN/MAX bounds are diameters (rem); PREFERRED is a scene-proportional
+ * fraction (cqw) resolved through the --v3d-planet custom property, so CSS
+ * and JS agree on the same value and planets grow/shrink with the scene.
+ * MAX is capped at the geometric ceiling: with the outer ring at 41.5cqw and
+ * a 50cqw scene, the largest safe planet radius is ~8cqw (41.5 + 8 = 49.5).
+ * Every planet keeps icon + a wrapping title + a full wrapping description
+ * (no ellipsis / clamp) inside its sphere. All six values share the same
+ * clamp so size is driven by the LONGEST content, not by orbit index.
  */
-const V3D_RX1_FRAC = 0.235;
-const V3D_STEP_FRAC = 0.0405;
-/** Subtle per-planet size variation (planet i is scaled by 1 - i*step). */
-const V3D_PLANET_SIZE_STEP = 0.03;
-/** Per-planet AXIAL (self) rotation speed (radians/s) - a calm, slow spin.
-    ~28-37s per full 360° (inner planets slightly faster), so the reader has
-    plenty of time to see icon + name + description. Fully independent of the
-    orbital speeds (two separate angle systems, one shared rAF clock). */
-const V3D_SELF_SPEEDS = [0.22, 0.21, 0.2, 0.19, 0.18, 0.17];
+const V3D_PLANET_MIN_REM = 7.25;
+const V3D_PLANET_PREF_CQW = 16;
+const V3D_PLANET_MAX_REM = 10;
+/**
+ * Orbit geometry (radius = fraction x scene width). MUST stay match
+ * --v3d-orbit-rx-base (19cqw) and --v3d-orbit-step (4.5cqw) in CSS - the
+ * CSS rings and the JS planet trajectory share this single source of truth.
+ * Rings land at 19 / 23.5 / 28 / 32.5 / 37 / 41.5cqw; the outer ring sits
+ * ~8.5cqw from the scene edge so the larger planets stay fully on-scene.
+ */
+const V3D_RX1_FRAC = 0.19;
+const V3D_STEP_FRAC = 0.045;
+/**
+ * UX TUNING: PLANET SELF-ROTATION (degrees per second).
+ * Lower = easier to read.  Higher = more dynamic.
+ * Recommended: 3–7 degrees/second.
+ *
+ * This drives ONLY the planet's slow axial spin around its own axis (the
+ * sphere + its icon / value name / description all rotate together). It is
+ * fully independent of the orbital movement around the sun (V3D_SPEEDS) and
+ * is time-based, so it feels the same on 60/120/144 Hz screens, on large
+ * monitors, laptops and tablets.
+ */
+const PLANET_SELF_ROTATION_DEG_PER_SEC = 5;
 /**
  * Content visibility model - the front-facing factor (0..1) drives the
  * content's opacity + depth scale through the `--v3d-front` custom property
@@ -148,18 +173,24 @@ interface PlanetGeometry {
         --v3d-header-offset: 6rem;
         --v3d-header-block: 7.5rem;
         --v3d-bottom-gap: 4rem;
-        /* Scene aspect ratio + widest scene width (large screens stop here). */
+        /* Scene aspect ratio + widest scene width (large screens scale to 1400px). */
         --v3d-scene-ar: 1.6129;
-        --v3d-scene-max-w: 1040px;
-        /* Orbit radii: base + step * i (MUST match V3D_RX1_FRAC / V3D_STEP_FRAC). */
-        --v3d-orbit-rx-base: 23.5cqw;
-        --v3d-orbit-step: 4.05cqw;
+        --v3d-scene-max-w: 1400px;
+        /* Orbit radii: base + step * i (MUST match V3D_RX1_FRAC / V3D_STEP_FRAC).
+           Rings: 19 / 23.5 / 28 / 32.5 / 37 / 41.5cqw - six clearly separated
+           paths; outer ring sits ~8.5cqw from the 50cqw scene edge so the
+           larger planets stay fully inside the scene and never touch the sun. */
+        --v3d-orbit-rx-base: 19cqw;
+        --v3d-orbit-step: 4.5cqw;
         /* Orbit tilt ratio - LIVE shared source between CSS rings and JS
            trajectory (read by readEllipseRatio). Desktop .56 / tablet .58 / mobile .60. */
         --v3d-orbit-ratio: 0.56;
-        /* Sun ~1.8-2.0x the largest planet: dominant but planets fit content. */
-        --v3d-sun: clamp(8rem, 19.5cqw, 12.5rem);
-        --v3d-planet: clamp(3.4rem, 11cqw, 6.75rem);
+        /* Content-first hierarchy: SUN > largest PLANET (sun ~1.35x the largest
+           resolved planet, always dominant). Planets are large enough to hold
+           icon + wrapping title + full wrapping description with comfortable
+           internal padding. Never touches the sun (inner ring clears it). */
+        --v3d-sun: clamp(9.5rem, 21.5cqw, 13.5rem);
+        --v3d-planet: clamp(7.25rem, 16cqw, 10rem);
         /* Content depth (translateZ fraction of diameter), cap-relative scale,
            and convex "bowed" curvature (rotateX) - subtle to stay readable. */
         --v3d-content-z: 0.35;
@@ -306,7 +337,13 @@ interface PlanetGeometry {
 
       /* LAYER 4 (content): printed on the cap; inherits sphere spin; the
          --v3d-front factor fades/shrinks the whole icon+title+desc as one
-         surface group front->back; convex radial mask + circular clip. */
+         surface group front->back; convex radial mask + circular clip.
+         The larger diameter is used for a comfortable internal area so the
+         icon / wrapping title / full wrapping description sit well inside
+         the disc and never touch the spherical edge. Content stays centered
+         (justify-content: center) so a long description does not push the
+         icon+title toward the top. overflow:hidden only serves the circular
+         clip - it is never used to hide text (no ellipsis / clamp). */
       .v3d-planet-content {
         position: absolute;
         inset: 0;
@@ -316,8 +353,8 @@ interface PlanetGeometry {
         flex-direction: column;
         align-items: center;
         justify-content: center;
-        gap: 0.18rem;
-        padding: 12% 10%;
+        gap: 0.24rem;
+        padding: 17% 13%;
         text-align: center;
         color: #ffffff;
         background:
@@ -358,33 +395,30 @@ interface PlanetGeometry {
         pointer-events: none;
       }
 
-      /* LAYER 3 (content): icon / title / description, clipped to the circle
+      /* LAYER 4 (content): icon / title / description, clipped to the circle
          so nothing escapes the planet surface. This is the SELF-ROTATION
          layer: the rAF loop writes rotateY(selfAngle) + cos-based opacity
          here. backface-visibility hides mirrored text past 90deg; the
-         planet disc itself is NOT affected and never disappears. */
-      .v3d-planet i { font-size: clamp(1rem, 2.8cqw, 1.6rem); line-height: 1; }
+         planet disc itself is NOT affected and never disappears.
+         Typography is content-aware (scales with the scene): the title may
+         wrap instead of ellipsizing, and the description wraps freely with
+         NO line-clamp / text-overflow so the complete value is always
+         readable in every language (FR / EN / AR, including RTL). */
+      .v3d-planet i { font-size: clamp(1.2rem, 3cqw, 2rem); line-height: 1; }
       .v3d-planet-title {
-        font-size: clamp(0.5rem, 1.6cqw, 0.85rem);
+        font-size: clamp(0.62rem, 2cqw, 1.02rem);
         font-weight: 700;
-        line-height: 1.08;
+        line-height: 1.12;
         letter-spacing: 0.01em;
         max-width: 100%;
         display: block;
-        white-space: nowrap;
-        overflow: hidden;
-        text-overflow: ellipsis;
       }
       .v3d-planet-desc {
-        font-size: clamp(0.46rem, 1.25cqw, 0.68rem);
-        line-height: 1.25;
+        font-size: clamp(0.5rem, 1.45cqw, 0.82rem);
+        line-height: 1.35;
         opacity: 0.92;
         max-width: 100%;
-        display: -webkit-box;
-        -webkit-line-clamp: 2;
-        line-clamp: 2;
-        -webkit-box-orient: vertical;
-        overflow: hidden;
+        display: block;
       }
 
       /* ================= Central sun ================= */
@@ -449,7 +483,7 @@ interface PlanetGeometry {
         height: 100%;
         border-radius: 50%;
         overflow: hidden;
-        padding: 0 14%;
+        padding: 5% 13%;
         text-align: center;
         color: #78350f;
         perspective: 480px;
@@ -465,18 +499,14 @@ interface PlanetGeometry {
           0 1px 0 rgba(255, 251, 235, 0.55),
           0 -1px 2px rgba(124, 45, 18, 0.28);
       }
-      .v3d-sun-content i { font-size: clamp(1.4rem, 4cqw, 2.1rem); line-height: 1; }
-      .v3d-sun-content h3 { margin: 0; font-size: clamp(0.9rem, 2.8cqw, 1.25rem); font-weight: 800; line-height: 1.18; }
+      .v3d-sun-content i { font-size: clamp(1.6rem, 4.2cqw, 2.4rem); line-height: 1; }
+      .v3d-sun-content h3 { margin: 0; font-size: clamp(1rem, 3cqw, 1.5rem); font-weight: 800; line-height: 1.14; }
       .v3d-sun-content p {
         margin: 0;
-        font-size: clamp(0.58rem, 1.8cqw, 0.82rem);
-        line-height: 1.4;
+        font-size: clamp(0.62rem, 1.95cqw, 0.95rem);
+        line-height: 1.45;
         color: #92400e;
-        display: -webkit-box;
-        -webkit-line-clamp: 4;
-        line-clamp: 4;
-        -webkit-box-orient: vertical;
-        overflow: hidden;
+        display: block;
       }
       @keyframes v3d-swap {
         0%   { opacity: 0; transform: scale(0.94); }
@@ -518,8 +548,10 @@ interface PlanetGeometry {
         .v3d-section {
           --v3d-header-block: 7rem;
           --v3d-scene-max-w: 34rem;
-          --v3d-sun: clamp(6.5rem, 18.5cqw, 9rem);
-          --v3d-planet: clamp(3rem, 10.8cqw, 5.4rem);
+          /* Tablet: content-proportional (cqw); rem floors keep the outer
+             planet inside the ~544px scene while preserving SUN > planet. */
+          --v3d-sun: clamp(6.75rem, 20cqw, 8.25rem);
+          --v3d-planet: clamp(4.75rem, 15cqw, 6rem);
         }
       }
       @media (max-width: 560px) {
@@ -528,16 +560,12 @@ interface PlanetGeometry {
           --v3d-bottom-gap: 3rem;
           --v3d-scene-max-w: 23rem;
           --v3d-orbit-ratio: 0.60;
-          /* Mobile planets are the largest that physically fit: the outer
-             orbit + a ~40px planet must stay inside a ~335px scene. Larger
-             would clip. The sun stays ~2x so hierarchy is preserved. */
-          --v3d-sun: clamp(5rem, 18cqw, 7rem);
-          --v3d-planet: clamp(2.5rem, 11cqw, 4rem);
+          /* Mobile: every planet holds icon + full title + full wrapping
+             description (nothing hidden) at a reduced-but-readable size;
+             the sun stays ~1.35x and carries the primary legible focus. */
+          --v3d-sun: clamp(5.25rem, 19.5cqw, 6.75rem);
+          --v3d-planet: clamp(3.4rem, 14.5cqw, 4.75rem);
         }
-        /* A ~40px circle cannot hold three text rows: the description is
-           hidden visually only (data + translations untouched; the full
-           text remains in the sun and in each planet's aria-label). */
-        .v3d-planet-desc { display: none; }
       }
 
       /* ================= Reduced motion =================
@@ -704,12 +732,30 @@ export class Values3dComponent {
   }
 
   /**
-   * Responsive planet size from the scene custom property, with a subtle
-   * per-planet variation (planet i is scaled by 1 - i * V3D_PLANET_SIZE_STEP).
+   * Responsive planet diameter. Every planet uses the SAME content-aware
+   * clamp (`--v3d-planet`) - no per-index shrinking, because the resolved
+   * size must be driven by the content a planet must hold (icon + title +
+   * wrapping description), never by its orbit position. The method stays
+   * parameterised by index so the template API is unchanged; all six values
+   * share identical geometry. Width and height are identical (circular
+   * sphere; also enforced by aspect-ratio: 1 / border-radius: 50%).
    */
   planetSize(i: number): string {
-    const f = 1 - (i % V3D_SLOTS) * V3D_PLANET_SIZE_STEP;
-    return `calc(var(--v3d-planet) * ${f.toFixed(3)})`;
+    return 'var(--v3d-planet)';
+  }
+
+  /**
+   * Degrees per second for the planet's own axial rotation (planet i).
+   * Outer planets rotate slightly slower so the smaller text stays readable,
+   * but never below ~3°/s. Controlled by the single UX knob
+   * PLANET_SELF_ROTATION_DEG_PER_SEC. Time-based (see startAnimation), so
+   * the speed is identical on every screen / device / frame rate.
+   *
+   *   i: 0 -> 5.00 °/s (~72s per 360°)   ... fast inner
+   *   i: 5 -> 3.50 °/s (~103s per 360°)  ... calm outer
+   */
+  private selfRotationSpeed(i: number): number {
+    return PLANET_SELF_ROTATION_DEG_PER_SEC * Math.max(0.65, 1 - i * 0.06);
   }
 
   selectPlanet(index: number): void {
@@ -812,15 +858,24 @@ export class Values3dComponent {
   /** ONE rAF loop: advances every planet continuously until destroyed, runs
       outside the Angular zone and writes only to style props (no CD per frame).
       Each frame: (1) delta time, (2) orbital angles, (3) SELF-rotation angles,
-      (4) direct DOM writes. The two angle systems are fully independent. */
+      (4) direct DOM writes. The two angle systems are fully independent.
+
+      Two separate time units are used on purpose:
+        delta        = frame-time ratio (≈1 at 60 Hz) - drives ORBITAL movement.
+        deltaSeconds = actual elapsed seconds           - drives SELF-rotation
+                     so the axial spin is a true °/second speed, identical on
+                     60/120/144 Hz screens. This fixes the previous behaviour
+                     where the self-rotation was applied per-FRAME (~60x faster
+                     than intended) instead of per-SECOND. */
   private startAnimation(): void {
     this.zone.runOutsideAngular(() => {
       const step = (timestamp: number) => {
         const delta = this.lastTimestamp ? (timestamp - this.lastTimestamp) / 16.667 : 1;
+        const deltaSeconds = this.lastTimestamp ? (timestamp - this.lastTimestamp) / 1000 : 0;
         this.lastTimestamp = timestamp;
         for (let i = 0; i < this.angles.length; i++) {
           this.angles[i] += V3D_SPEEDS[i] * V3D_DEG * delta;
-          this.selfAngles[i] += V3D_SELF_SPEEDS[i] * delta;
+          this.selfAngles[i] += this.selfRotationSpeed(i) * V3D_DEG * deltaSeconds;
         }
         this.applyAnimation();
         this.animationFrame = requestAnimationFrame(step);

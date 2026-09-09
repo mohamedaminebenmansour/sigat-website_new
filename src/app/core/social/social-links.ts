@@ -22,11 +22,5 @@ export const SOCIAL_LINKS: SocialLink[] = [
     url: 'https://www.linkedin.com/company/placeholder-sigat',
     labelKey: '',
     icon: 'fa-brands fa-linkedin-in'
-  },
-  {
-    platform: 'instagram',
-    url: 'https://www.instagram.com/placeholder-sigat',
-    labelKey: '',
-    icon: 'fa-brands fa-instagram'
   }
 ];

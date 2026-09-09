@@ -320,6 +320,7 @@ import { SOCIAL_LINKS } from '../../core/social/social-links';
         display: flex;
         flex-direction: column;
         align-items: flex-start;
+        align-items: center;
         gap: 1.1rem;
         padding-top: 0.75rem;
       }
