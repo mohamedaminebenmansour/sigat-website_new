@@ -16,25 +16,50 @@ import { COMPANY_VALUES } from './values.data';
 
 /* ============================================================
    3D VALUES — MANUAL VISUAL TUNING (TypeScript side)
-   Change these values to tune the composition.
+
+   The component is split in TWO independent layers:
+
+   1. POSITION (locked) — where a body is on screen:
+      orbit angles + speeds (V3D_ORBITS), the classic projected
+      orbit (x = cos(angle) * radius, y = sin(angle) * radius * ratio),
+      the z-band, the self-rotation and the autoplay. NOTHING in the
+      VISUAL SIZE CONTROLS block can move a body: resizing a sphere
+      never changes its x, y, angle, orbit radius or orbit centre.
+      It always stays centred on exactly the same ring point.
+
+   2. VISUAL SIZE + CONTENT — see the "VISUAL SIZE CONTROLS" block
+      below: V3D_SUN_RADIUS (Sun size), V3D_PLANET_RADII (one size per
+      planet), V3D_PLANET_CONTENT (per-planet padding / text scale /
+      text width) and V3D_BAND_GAP_RATIO (band spacing). The whole
+      composition is authored once and uniformly scaled to the
+      MEASURED scene (--v3d-fit), so these values are RELATIVE
+      weights: their ratios are what you see on screen.
+
+   CONTENT-FIRST SIZING (fitContentToPlanets, init + resize only):
+   the real text of every planet (icon + title + description, in the
+   active language FR / EN / AR) is measured, and a planet is grown
+   when its content needs more room than the configured radius gives:
+       final radius = max(configured radius, radius needed by content)
+   Growth is capped (V3D_CONTENT_FIT_MAX_GROWTH) and, if even the
+   grown planet cannot hold the text, that planet's text is scaled
+   down by the exact shortfall. Content is NEVER clipped.
 
    ORBITAL GEOMETRY (single source of truth):
-   The radial grid (updateOrbitGeometry) is THE geometry source. At init
-   and on every ResizeObserver tick it derives the six radii from the
-   MEASURED scene (width AND height) inside a SAFE usable rectangle
-   (responsive edge margin) and writes them into the CSS custom properties
-   --v3d-orbit-rx-N on .v3d-scene; the CSS rings consume exactly those
-   values (with the adaptive --v3d-orbit-ratio tilt), so a planet can never
-   drift off its ring or out of the component bounds. The CSS defaults in .v3d-scene mirror these
-   numbers (fallback before JS runs).
+   the radial grid (updateOrbitGeometry) is THE geometry source: at
+   init and on every ResizeObserver tick it derives the six radii
+   from the MEASURED scene (width AND height) and writes them into
+   the CSS custom properties --v3d-orbit-rx-N on .v3d-scene; the CSS
+   rings consume exactly those values (with the adaptive
+   --v3d-orbit-ratio tilt), so a planet can never drift off its ring
+   or out of the component bounds.
 
    3D CONTENT (sphere "printed text") controls:
-   - PLANET_SELF_ROTATION_DEG_PER_SEC  axial spin (deg/s) ~40-70s per revolution
-   - V3D_CONTENT_MIN_OPACITY  how faint the back-facing content gets (0.06)
-   - V3D_CONTENT_MIN_SCALE    how much the back-facing content shrinks (0.86)
+   - PLANET_SELF_ROTATION_DEG_PER_SEC  axial spin (deg/s)
+   - V3D_CONTENT_MIN_OPACITY  how faint the back-facing content gets
+   - V3D_CONTENT_MIN_SCALE    how much the back-facing content shrinks
    Corresponding CSS variables live in the .v3d-section styles:
    --v3d-content-curve     convex bow of the spherical content (6deg)
-   --v3d-content-z         surface offset depth (fraction of planet size)
+   --v3d-content-z         surface offset depth (fraction of body size)
    --v3d-content-scale     content scale relative to the surface cap
    ============================================================ */
 
@@ -59,149 +84,195 @@ const V3D_Z_SPAN = 200;
 const V3D_COLORS = ['#f59e0b', '#2563eb', '#0ea5e9', '#6366f1', '#1d4ed8', '#0f766e'];
 
 /* ============================================================
-   ORBITAL SYSTEM — CENTRALIZED MANUAL TUNING
-   The six radii are DERIVED at init/resize from the MEASURED
-   scene (never hand-picked, no hard-coded max width):
+   ORBITAL SYSTEM — POSITION MODEL (locked geometry)
+   Positions are DERIVED at init/resize from the MEASURED scene
+   (never hand-picked, no hard-coded max width):
 
-     R1        = sunRadius + SUN_TO_FIRST_ORBIT_GAP * sceneWidth
-     R_{i+1}   = R_i + planetRadius_i + planetRadius_{i+1}
-                 + ORBIT_VISUAL_BUFFER * sceneWidth   (per-planet sizes)
-     R6max     = min(widthBound, heightBound) inside the safe
-                 rectangle (margin + depth-scale headroom)
-     weights   = 1 + i * SPACING_WEIGHT (i = 0..4)  -> non-linear:
-                 outer bands get slightly more breathing room
-     gap_i     = span * w_i / sum(w);  R_i = R_{i-1} + gap_i
+     R1      = sunRadius
+               + 2 * sunRadius * SUN_TO_FIRST_ORBIT_GAP_RATIO
+               + planetRadius_1 * V3D_MAX_SCALE      (depth headroom)
+     gap_i   = V3D_BAND_GAP_RATIO * (planetRadius_i + planetRadius_i+1) / 2
+     R_i+1   = R_i + gap_i                       (per-planet visual sizes)
+     ratio   = scene-aspect tilt, clamped to
+               V3D_ELLIPSE_RATIO_MIN .. V3D_ELLIPSE_RATIO
+     fit     = ONE uniform scale that makes the whole composition fit
+               the measured scene on BOTH axes
 
-   On large desktops span >= 5 * clearance, so every neighboring
-   band automatically satisfies R2-R1 >= 2*planetRadius + buffer.
-   On smaller scenes the full span is still distributed with the
-   same balanced weighting (best physically possible, no clipping,
-   no physics). Movement itself is the CLASSIC orbital projection:
+   The radii above are the VISUAL radii of the VISUAL SIZE CONTROLS
+   block (plus the content-driven growth), which is exactly why a
+   size change can never produce a stray orbit: the ring and the
+   trajectory are always computed from the same numbers, so a planet
+   is always exactly on its ring. Movement is the CLASSIC orbital
+   projection (unchanged):
      x = cos(angle) * R
-     y = sin(angle) * R * V3D_ELLIPSE_RATIO
+     y = sin(angle) * R * ratio
    ============================================================ */
 
-/** SUN -> FIRST ORBIT: generous visible empty gap (sun EDGE to PLANET 1
-    EDGE). R1 = sunRadius + gap*sceneWidth + planetRadius(1)*maxScale, so
-    the planet BODY - not just its orbit path - clears the Sun by this gap. */
-const V3D_SUN_TO_FIRST_ORBIT_GAP = 0.06;
-/** Planet-to-planet radial breathing room: R2-R1 >= 2r + buffer. */
-const V3D_ORBIT_VISUAL_BUFFER = 0.025;
+/** SUN -> FIRST ORBIT gap as a fraction of the Sun's logical diameter.
+    Controls ONLY the Sun -> Planet 1 distance. */
+const V3D_SUN_TO_FIRST_ORBIT_GAP_RATIO = 0.28;
+
 // =====================================================
-// MANUAL ORBIT SPACING CONTROL
-// Change this value to increase/decrease the distance
-// between Planet 1 → Planet 2 → Planet 3 → Planet 4 →
-// Planet 5 → Planet 6.
-//
-// Examples:
-// 6.0  = large spacing
-// 8.0  = very large spacing
-// 10.0 = extremely large spacing
-//
-// Sun → Planet 1 is NOT controlled by this value.
+// VISUAL SIZE CONTROLS
+// These values change VISUAL SIZE only.
+// They NEVER change a planet's position: not its x / y, not its
+// orbit radius, not its orbit centre, not its orbital angle.
+// A sphere can be resized freely - it always stays centred on
+// exactly the same point of exactly the same orbit ring.
 // =====================================================
-/**
- * The PREFERRED gap between neighboring orbits is
- *   gap = V3D_ORBIT_GAP_MULTIPLIER * (planetRadiusA + planetRadiusB + buffer)
- * R1 is NOT multiplied - the Sun -> Planet 1 distance stays EXACTLY as-is
- * (see firstOrbitRadius). When the requested total does not fit inside the
- * available radial span, ALL gaps are compressed UNIFORMLY (proportions
- * preserved) so Planet 6 stays inside the scene - the largest safe spacing
- * that fits is used; on wide screens the multiplier renders as-is.
- *
- * IMPORTANT:
- * If you change V3D_ORBIT_GAP_MULTIPLIER, you normally do NOT need to
- * change the other orbit-spacing values manually:
- *   - V3D_ORBIT_VISUAL_BUFFER : the visual buffer INSIDE each band size.
- *   - V3D_HARD_GAP_FRACTION   : absolute safety floor (containment only -
- *                               never used to create spacing).
- *   - V3D_SPACING_WEIGHT      : only distributes LEFTOVER span toward the
- *                               outer bands.
- *   - V3D_SUN_TO_FIRST_ORBIT_GAP : the Sun -> Planet 1 gap. Do NOT touch
- *                               it for planet spacing - it is already good.
- *
- * OPTIONAL per-orbit control (only if ever needed): the five gaps are
- * computed in ONE loop in updateOrbitGeometry():
- *   gap index 0 = Planet 1 -> Planet 2
- *   gap index 1 = Planet 2 -> Planet 3
- *   gap index 2 = Planet 3 -> Planet 4
- *   gap index 3 = Planet 4 -> Planet 5
- *   gap index 4 = Planet 5 -> Planet 6
- * A per-band override is a 3-line change there - no second system exists.
- */
-const V3D_ORBIT_GAP_MULTIPLIER = 8.0;
-/** Absolute per-band no-clipping floor: gap >= HARD * (rA + rB). Used by
-    the distribution fallback and the validator; below this the pure
-    proportional split + containment rescale take over (extreme
-    viewports). */
-const V3D_HARD_GAP_FRACTION = 0.5;
-/** Extra configurable safety (fraction of scene width) subtracted from
-    the maximum safe outer orbit, so Planet 6 (radius + max depth scale +
-    glow) never touches the component edge - without wasting width. */
-const V3D_OUTER_ORBIT_MARGIN = 0.006;
-/** Non-linear spacing factor: weight_i = 1 + i * SPACING_WEIGHT, so the
-    outer orbital bands receive progressively more breathing room (the
-    outer planets fan out toward the safe boundary). */
-const V3D_SPACING_WEIGHT = 0.22;
+
+/** =============================================================
+     POSITION BASELINE — LOCKED. DO NOT EDIT.
+     These values (and only these) drive the orbit rings, the
+     planet centres, the tilt and the fit scale. They reproduce the
+     approved composition EXACTLY. Visual size knobs below never
+     influence them.
+   ============================================================= */
+const V3D_POSITION_BASELINE_SUN_RADIUS = 125;
+const V3D_POSITION_BASELINE_PLANET_RADII = [
+  66, // Planet 1 - quality
+  70, // Planet 2 - commitment
+  75, // Planet 3 - responsibility
+  62, // Planet 4 - safety
+  69, // Planet 5 - sustainability
+  65, // Planet 6 - environment
+];
+
+// =====================================================
+// VISUAL SIZE CONTROLS — size only, position never changes.
+// A bigger value makes a body LOOK bigger; it stays centred on
+// exactly the same point of exactly the same (frozen) orbit.
+// =====================================================
+
+/** SUN - visual radius, in the same units as the baseline above.
+    The engine never lets the Sun become smaller than 1.25x the
+    largest planet, and never larger than planet 1's orbit clearance
+    (so planet 1 is never hidden behind the Sun). */
+const V3D_SUN_RADIUS = 200;
+
+/** PLANETS 1..6 - MINIMUM visual radius. Values are read RELATIVE to
+    V3D_SUN_RADIUS (140 with the Sun at 200 = 0.70 x the Sun's radius).
+    This is a floor only: CONTENT-FIRST SIZING grows a planet beyond it
+    whenever its text needs more room. Orbital position is untouched. */
+const V3D_PLANET_RADII = [
+  140, // Planet 1
+  155, // Planet 2
+  145, // Planet 3
+  170, // Planet 4
+  150, // Planet 5
+  165, // Planet 6
+];
+
+/** Per-planet CONTENT tuning (one entry per planet, same order). */
+interface V3DPlanetContentConfig {
+  /** Text size multiplier for this planet (1 = the reference size for
+      the current screen category). Bigger = bigger text AND a bigger
+      planet (the planet grows to keep the text fully visible). */
+  scale: number;
+  /** Inner padding of the text area, in % of the planet diameter.
+      Bigger = airier, but the planet then needs to be larger. */
+  padding: number;
+  /** Optional max width of the text column, in % of the planet
+      diameter (100 = the full cap width). */
+  maxWidth?: number;
+}
+
+const V3D_PLANET_CONTENT: readonly V3DPlanetContentConfig[] = [
+  { scale: 1, padding: 12 }, // Planet 1
+  { scale: 1, padding: 12 }, // Planet 2
+  { scale: 1, padding: 12 }, // Planet 3
+  { scale: 1, padding: 12 }, // Planet 4
+  { scale: 1, padding: 12 }, // Planet 5
+  { scale: 1, padding: 12 }, // Planet 6
+];
+
+// ============================================================
+// MANUAL ORBIT SPACING - distance between consecutive planets
+// (1 -> 2 -> 3 -> 4 -> 5 -> 6). Sun -> Planet 1 is NOT controlled
+// by this value (see V3D_SUN_TO_FIRST_ORBIT_GAP_RATIO above).
+// The band spacing is proportional to the planet radii, so the
+// composition keeps the same rhythm however big the planets get.
+// 2.0 = neighbours never overlap (smaller planets); 1.15 = a mild
+// overlap only while two planets cross; 1.0 = biggest planets.
+// ============================================================
+const V3D_BAND_GAP_RATIO = 1.05;
+
+/** Breathing room (logical px) between the outermost orbit and the edge
+    of the logical design space. */
+const V3D_STAGE_PADDING = 24;
 /** THE orbit tilt: one shared ellipse ratio for the classic projection
-    (same visual model as the original component). Lower = wider usable
-    orbits on wide/short stages, flatter look. 0.5 = current feel.
-    NOTE: this is the DEFAULT - on tight stages the geometry engine may
-    adapt it downward (never below V3D_ELLIPSE_RATIO_MIN) to keep the
-    whole system inside the scene. */
+    (same visual model as the original component). */
 const V3D_ELLIPSE_RATIO = 0.5;
-/** Absolute floor for the adaptive ellipse ratio (never flatter than this). */
-const V3D_ELLIPSE_RATIO_MIN = 0.32;
+/** Lower bound of the ellipse tilt on short (wide) scenes. A flatter tilt
+    uses less height and more width - exactly what a wide laptop scene needs
+    to show the composition as large as possible. Raise it (e.g. 0.32) if you
+    prefer rounder rings on short scenes (the composition then renders
+    smaller, because the scene height starts to limit it). */
+const V3D_ELLIPSE_RATIO_MIN = 0.2;
 
-/**
- * PER-PLANET SIZE FACTORS (content-driven, one entry per planet, order =
- * COMPANY_VALUES). NOT all six planets are forced to the same radius:
- * values holding longer text (FR/EN/AR descriptions measured at design
- * time) get a slightly larger sphere, shorter ones a slightly smaller one.
- *   0 quality        1.00  (short description)
- *   1 engagement     1.04  (medium-long)
- *   2 responsibility 1.10  (longest description)
- *   3 safety         0.94  (shortest description)
- *   4 sustainability 1.06  (medium-long)
- *   5 environment    0.98  (medium)
- * Multiplied by `--v3d-planet` (and the adaptive fit shrink), so the
- * factors stay fully responsive at every breakpoint.
- */
-const V3D_PLANET_SIZE_FACTORS = [1.0, 1.04, 1.1, 0.94, 1.06, 0.98];
+// -----------------------------------------------------
+// CONTENT-FIRST TEXT SIZE + CONTENT FIT
+// The text size is CHOSEN for readability (per screen category), and
+// the planet is then grown to hold it completely:
+//     content -> required space -> planet size
+// never the opposite. If a planet cannot grow any further (scene edge
+// or orbit-1 clearance), THAT planet's text is scaled down by the
+// exact shortfall - it is never clipped, hidden or ellipsised.
+// -----------------------------------------------------
 
-/* ============================================================
-   BOUNDARY SAFETY - SAFE USABLE RECTANGLE
-   The orbital system is laid out inside a SAFE RECTANGLE derived
-   from the MEASURED .v3d-scene size, not from raw 100% / 100vw:
-     margin      = max(V3D_EDGE_MARGIN_PX, RATIO * min(sceneW, sceneH))
-     usableHalfW = sceneWidth  / 2 - margin
-     usableHalfH = sceneHeight / 2 - margin
-   Every orbit bound, sun position and planet containment check runs
-   against this rectangle (including the depth-scale headroom so a
-   scaled-up near planet can never clip). Proportional + fixed floor:
-   tiny margins on phones, comfortable breathing room on desktop.
-   ============================================================ */
-/** Absolute horizontal/vertical safety floor (px). */
-const V3D_EDGE_MARGIN_PX = 20;
-/** Proportional safety margin (fraction of the smaller scene dimension). */
-const V3D_EDGE_MARGIN_RATIO = 0.015;
-/** Adaptive planet-size shrink floor: planets are never reduced below
-    80% of their preferred (factor-based) size. The adaptation ladder only
-    shrinks when the scene cannot even host the HARD no-overlap floor
-    (0.5x(rA+rB)) per band - planet size is the LAST lever. */
-const V3D_PLANET_SHRINK_MIN = 0.8;
-/** Per-adaptation-step planet shrink decrement. */
-const V3D_PLANET_SHRINK_STEP = 0.04;
-/** Content scale floor when planets are shrunk (keeps text proportional,
-    readable - never microscopic). */
-const V3D_CONTENT_SCALE_MIN = 0.84;
-/** Content scale ceiling - never scale content UP beyond the base. */
-const V3D_CONTENT_MAX_SCALE = 0.92;
-/** Base content scale (matches the .v3d-section CSS default). */
-const V3D_CONTENT_SCALE_BASE = 0.92;
-/** Buffer floor fraction when the engine is forced to trade breathing
-    room for containment (never below half the preferred buffer). */
-const V3D_BUFFER_FACTOR_MIN = 0.5;
+/** Title px per screen category (mobile / tablet / PC / large desktop).
+    THE main "make the content readable" knob: raise it and every planet
+    grows to keep its text fully visible. */
+const V3D_CONTENT_TITLE_PX = [9, 11, 13, 16];
+/** Description px = title px x this ratio. */
+const V3D_DESC_PER_TITLE = 0.78;
+/** Icon px = title px x this ratio. */
+const V3D_ICON_PER_TITLE = 1.7;
+/** The Sun carries the active value, so its text is bigger than any
+    planet's: sun title px = Sun visual diameter x this ratio. */
+const V3D_SUN_TITLE_PER_DIAMETER = 1 / 13;
+/** The Sun must stay at least this factor bigger than the largest
+    planet (visual sizes). */
+const V3D_SUN_DOMINANCE = 1.25;
+
+// Internal to the POSITION layer (baseline geometry): the ratio model the
+// frozen orbit computation was calibrated with. Do not edit - it keeps the
+// approved ring/centre positions byte-identical.
+/** Title px = body diameter x this ratio (position layer only). */
+const V3D_TITLE_PER_DIAMETER = 1 / 16;
+/** Absolute upper bound (design px) of the title, per screen category
+    (position layer only). */
+const V3D_TITLE_MAX_PX = [11, 13, 16, 20];
+/** Text size per screen category (position layer only). */
+const V3D_CONTENT_TYPE_SCALE_BY_CATEGORY = [0.9, 0.95, 1, 1];
+
+/** Max automatic growth (x) of a planet whose content needs more room
+    than the configured radius provides. */
+const V3D_CONTENT_FIT_MAX_GROWTH = 1.35;
+/** Safety margin applied to the measured content when sizing a planet. */
+const V3D_CONTENT_FIT_SAFETY = 1.06;
+/** Measured passes of the content fit (converges in 1-2; 3 = hard stop). */
+const V3D_CONTENT_FIT_PASSES = 3;
+/** Bounded passes of the last-resort TEXT shrink. Each pass re-measures the
+    REAL block, because the text, the icon, the wrapping and the fixed gaps do
+    not shrink in exactly the same proportion - a single proportional shrink
+    would leave the content slightly too big. */
+const V3D_TEXT_FIT_PASSES = 6;
+/** Sphere "surface cap" radius as a fraction of the body diameter
+    (matches .v3d-planet-surface { inset: 8% }). */
+const V3D_CAP_RADIUS_FRAC = 0.42;
+/** Content layer scale - must match the --v3d-content-scale CSS default. */
+const V3D_CONTENT_SCALE_BASE = 1;
+/** Horizontal padding of the Sun's content box, as a fraction of the Sun
+    diameter. MUST match .v3d-sun-content { padding: 5% 13% } in the styles. */
+const V3D_SUN_CONTENT_PAD_X = 0.13;
+/** Font weights used by the content (only for the off-screen measurement). */
+const V3D_FONT_WEIGHT_TITLE = 700;
+const V3D_FONT_WEIGHT_DESC = 400;
+/** Line heights of the content (must match the CSS) - used to turn a measured
+    line count into a block height for the worst-case Sun check. */
+const V3D_LINE_HEIGHT_TITLE = 1.14;
+const V3D_LINE_HEIGHT_DESC = 1.45;
 
 /**
  * Per-planet motion tuning (one entry per planet, order = COMPANY_VALUES).
@@ -261,16 +332,19 @@ interface PlanetGeometry {
  * "SIGAT Values Solar System" - company values as a premium orbital system.
  *
  * Geometry model (single mathematical source of truth):
- *   The radial grid (updateOrbitGeometry) derives the six radii in px from
- *   the MEASURED scene (sun size, planet size, width, height) at init and
- *   on resize, and writes them into the CSS custom properties that draw
- *   the rings. The planet position is the CLASSIC projected orbit:
+ *   SIZES first: applyVisualSizes() resolves the Sun radius and the six
+ *   planet radii from the VISUAL SIZE CONTROLS block (manual values, plus the
+ *   automatic content-driven growth of fitContentToPlanets()).
+ *   POSITIONS second: updateOrbitGeometry() turns those radii into the six
+ *   orbit radii + the uniform fit scale and writes them into the CSS custom
+ *   properties that draw the rings. The planet position is the CLASSIC
+ *   projected orbit (unchanged):
  *     x = cos(angle) * radius
- *     y = sin(angle) * radius * V3D_ELLIPSE_RATIO
+ *     y = sin(angle) * radius * ellipseRatio
  *   The ring is drawn from the SAME radius + ratio, therefore a planet is
- *   always exactly on its ring. Collisions are minimized by design: the
- *   planet-aware non-linear radial spacing, deterministic initial angles
- *   and non-linear speeds. No per-frame physics.
+ *   always exactly on its ring, whatever its visual size. Overlap while two
+ *   planets cross is tuned by the single V3D_BAND_GAP_RATIO value - there is
+ *   no per-frame physics and no collision system.
  *
  * Transform layers (one job per element):
  *   button.v3d-planet        -> orbital position + depth scale (owned by rAF,
@@ -301,7 +375,12 @@ interface PlanetGeometry {
 
       /* ============================================================
          3D VALUES — MANUAL VISUAL TUNING (CSS side)
-         Change these values to tune the composition.
+         Body sizes (Sun, planets) and all text sizes are written by the
+         TypeScript engine (see VISUAL SIZE CONTROLS) in px, so tune them
+         there - not here. This side owns only the LOOK: the shading, the
+         depth/curve of the printed content and the responsive section
+         layout. Every size variable below has a safe fallback for the
+         very first paint, before the engine runs.
          ============================================================ */
       .v3d-section {
         /* Navbar height + header block + bottom gap (all responsive below). */
@@ -314,12 +393,14 @@ interface PlanetGeometry {
            Kept deliberately small (1.5vw) so the radial grid receives the
            maximum real width to distribute across the six orbits. */
         --v3d-edge-padding: clamp(0.6rem, 1.5vw, 1.5rem);
-        /* Content-first hierarchy: SUN clearly dominant (2x the planet) with
-           an 11cqw planet that still holds icon + wrapping title + full
-           wrapping description. The radial GRID derives every orbit from
-           the measured scene, so these two clamps fully define the layout. */
-        --v3d-sun: clamp(11.5rem, 22cqw, 19rem);
-        --v3d-planet: clamp(4.25rem, 11cqw, 9.5rem);
+        /* Body sizes. The orbital system is authored in ONE design space and
+           uniformly scaled to fit the real scene (.v3d-stage / --v3d-fit).
+           The TS engine writes the real values at init/resize: --v3d-sun on
+           .v3d-scene and --v3d-pd (that planet's diameter) + the text sizes
+           on each planet, from the VISUAL SIZE CONTROLS block. The values
+           below are the pre-JS fallbacks for the very first paint. */
+        --v3d-sun: 240px;
+        --v3d-pd: 140px;
         /* Per-orbit radii (single source of truth = radial grid in TS):
            at init/resize the component writes --v3d-orbit-rx-N in px onto
            .v3d-scene; the cqw values below are equivalent desktop-grid
@@ -333,10 +414,12 @@ interface PlanetGeometry {
         --v3d-orbit-rx-4: 30.5cqw;
         --v3d-orbit-rx-5: 37.5cqw;
         --v3d-orbit-rx-6: 43.5cqw;
-        /* Content depth (translateZ fraction of diameter), cap-relative scale,
-           and convex "bowed" curvature (rotateX) - subtle to stay readable. */
+        /* Content depth (translateZ fraction of the body diameter), cap-relative
+           scale, and convex "bowed" curvature (rotateX) - subtle to stay readable.
+           --v3d-content-scale = 1 keeps the printed text exactly at the size the
+           engine computed for the planet (it is NOT used to shrink text). */
         --v3d-content-z: 0.35;
-        --v3d-content-scale: 0.92;
+        --v3d-content-scale: 1;
         --v3d-content-curve: 6deg;
         position: relative;
         background: linear-gradient(180deg, #ffffff 0%, #f4f7fc 100%);
@@ -358,32 +441,23 @@ interface PlanetGeometry {
       }
       .v3d-header { width: 100%; }
 
-      /* Scene - FULL-WIDTH ORBITAL STAGE and geometry root.
-         Previously the width was min(100%, 1400px, (availHeight) * 1.6129)
-         with aspect-ratio: 100/62 - the height-derived candidate was the
-         effective binder on most screens, so the scene (and .v3d-orbits,
-         inset: 0) stopped far short of the section edges. Now the stage
-         uses the FULL available parent width minus the small edge-safety
-         margin, and fills the vertical space the one-viewport section
-         already allots it (flex: 1 + min-height: 0 - no aspect-ratio lock,
-         no 100vw, no horizontal scrollbar). container-type is kept, so
-         1cqw now means 1% of the FULL stage; the sun/planet clamps' rem
-         caps keep their resolved sizes stable on wide stages. The TS
-         radial grid measures this element's clientWidth/clientHeight and
-         re-derives every orbit from the new coordinate space.
+      /* Scene - the MEASURED coordinate system. Everything inside it lives
+         on .v3d-stage, which is authored in a fixed LOGICAL design space
+         (large Sun, large planets, generous manual orbit gaps) and then
+         uniformly scaled with --v3d-fit so the full composition always
+         fits the real scene: the manual gap is never clamped, no planet
+         is ever clipped, and guides + planets share one coordinate space.
 
          DEBUG LAYOUT (disabled): uncomment to verify the coordinate space.
          .v3d-scene { outline: 1px dashed red; }
-         .v3d-orbits { outline: 1px dashed blue; } */
+         .v3d-stage { outline: 1px dashed blue; } */
       .v3d-scene {
         --v3d-ease: cubic-bezier(0.22, 1, 0.36, 1);
         /* Defaults before the TS geometry engine runs; at init/resize the
-           engine overrides these with measured px values: the six orbit
-           radii (--v3d-orbit-rx-N), the adaptive tilt (--v3d-orbit-ratio),
-           the planet fit shrink (--v3d-planet-shrink) and the content
-           scale (--v3d-content-scale). Containment is guaranteed by the
-           geometry (safe usable rectangle), NOT by clipping. */
-        --v3d-planet-shrink: 1;
+           engine overrides these with logical design values: the six orbit
+           radii (--v3d-orbit-rx-N), the tilt (--v3d-orbit-ratio) and the
+           fit scale (--v3d-fit). */
+        --v3d-fit: 1;
         container-type: inline-size;
         position: relative;
         margin-inline: auto;
@@ -391,6 +465,15 @@ interface PlanetGeometry {
         max-width: none;
         flex: 1 1 auto;
         min-height: 0;
+      }
+      /* The design-space surface: all orbital elements (guides, sun,
+         planets, dots) are children of this ONE element and are scaled
+         TOGETHER - perfect orbit/planet synchronization by construction. */
+      .v3d-stage {
+        position: absolute;
+        inset: 0;
+        transform: scale(var(--v3d-fit));
+        transform-origin: 50% 50%;
       }
 
       /* Orbit rings - the classic projected orbit: width = 2R, height =
@@ -453,6 +536,12 @@ interface PlanetGeometry {
         position: absolute;
         left: 50%;
         top: 50%;
+        /* VISUAL SIZE - written on this element by the engine from
+           V3D_PLANET_RADII[i] (+ content-driven growth). This is the ONLY
+           thing a size change touches: the position (left/top 50% + the
+           rAF-owned translate) and the orbit radius are independent. */
+        width: var(--v3d-pd, 140px);
+        height: var(--v3d-pd, 140px);
         border-radius: 50%;
         padding: 0;
         margin: 0;
@@ -540,7 +629,10 @@ interface PlanetGeometry {
         align-items: center;
         justify-content: center;
         gap: 0.24rem;
-        padding: 17% 13%;
+        /* Per-planet inner padding (% of the planet diameter) - written by
+           the engine from V3D_PLANET_CONTENT[i].padding. Smaller = more room
+           for the text, bigger = airier but tighter for long descriptions. */
+        padding: var(--v3d-content-pad, 9%);
         text-align: center;
         color: #ffffff;
         background:
@@ -551,7 +643,7 @@ interface PlanetGeometry {
         --v3d-front: 1;
         opacity: calc(0.06 + 0.94 * var(--v3d-front));
         transform:
-          translateZ(calc(var(--v3d-planet) * var(--v3d-content-z)))
+          translateZ(calc(var(--v3d-pd, 140px) * var(--v3d-content-z)))
           rotateX(var(--v3d-content-curve))
           scale(calc(var(--v3d-content-scale) * (0.86 + 0.14 * var(--v3d-front))));
       }
@@ -584,27 +676,35 @@ interface PlanetGeometry {
       /* LAYER 4 (content): icon / title / description, clipped to the circle
          so nothing escapes the planet surface. This is the SELF-ROTATION
          layer: the rAF loop writes rotateY(selfAngle) + cos-based opacity
-         here. backface-visibility hides mirrored text past 90deg; the
-         planet disc itself is NOT affected and never disappears.
-         Typography is content-aware (scales with the scene): the title may
-         wrap instead of ellipsizing, and the description wraps freely with
-         NO line-clamp / text-overflow so the complete value is always
-         readable in every language (FR / EN / AR, including RTL). */
-      .v3d-planet i { font-size: clamp(1.2rem, 3cqw, 2rem); line-height: 1; }
+         here. The planet disc itself is NEVER hidden.
+         Typography is CONTENT-FIRST: the engine writes the real px sizes per
+         planet (--v3d-title-size / --v3d-desc-size / --v3d-icon-size) from
+         the planet's diameter, so a bigger planet always gets bigger, fully
+         readable text. The title and the description wrap freely with NO
+         line-clamp / text-overflow / ellipsis, so the complete value is
+         always visible in every language (FR / EN / AR, including RTL).
+         inline-block on the icon: lets the engine measure it reliably. */
+      .v3d-planet i {
+        font-size: var(--v3d-icon-size, 1.1rem);
+        line-height: 1;
+        display: inline-block;
+      }
       .v3d-planet-title {
-        font-size: clamp(0.62rem, 2cqw, 1.02rem);
+        font-size: var(--v3d-title-size, 0.95rem);
         font-weight: 700;
         line-height: 1.12;
         letter-spacing: 0.01em;
-        max-width: 100%;
+        max-width: var(--v3d-content-maxw, 100%);
         display: block;
+        overflow-wrap: break-word;
       }
       .v3d-planet-desc {
-        font-size: clamp(0.5rem, 1.45cqw, 0.82rem);
+        font-size: var(--v3d-desc-size, 0.75rem);
         line-height: 1.35;
         opacity: 0.92;
-        max-width: 100%;
+        max-width: var(--v3d-content-maxw, 100%);
         display: block;
+        overflow-wrap: break-word;
       }
 
       /* ================= Central sun ================= */
@@ -685,14 +785,21 @@ interface PlanetGeometry {
           0 1px 0 rgba(255, 251, 235, 0.55),
           0 -1px 2px rgba(124, 45, 18, 0.28);
       }
-      .v3d-sun-content i { font-size: clamp(1.6rem, 4.2cqw, 2.4rem); line-height: 1; }
-      .v3d-sun-content h3 { margin: 0; font-size: clamp(1rem, 3cqw, 1.5rem); font-weight: 800; line-height: 1.14; }
+      .v3d-sun-content i { font-size: var(--v3d-sun-icon-size, 2rem); line-height: 1; }
+      .v3d-sun-content h3 {
+        margin: 0;
+        font-size: var(--v3d-sun-title-size, 1.25rem);
+        font-weight: 800;
+        line-height: 1.14;
+        overflow-wrap: break-word;
+      }
       .v3d-sun-content p {
         margin: 0;
-        font-size: clamp(0.62rem, 1.95cqw, 0.95rem);
+        font-size: var(--v3d-sun-desc-size, 0.95rem);
         line-height: 1.45;
         color: #92400e;
         display: block;
+        overflow-wrap: break-word;
       }
       @keyframes v3d-swap {
         0%   { opacity: 0; transform: scale(0.94); }
@@ -724,26 +831,18 @@ interface PlanetGeometry {
       .v3d-dot:focus-visible { outline: 2px solid #1e3a8a; outline-offset: 2px; }
 
       /* ================= Responsive geometry =================
-         Only the tuning variables shrink; the geometry engine in TS
-         re-measures and rebuilds every orbit on resize, so the sun gap,
-         orbit spacing and edge safety hold at every breakpoint. */
+         The design-space fit scale and the logical body sizes are written
+         by the TS geometry engine on every resize; only the section
+         layout variables remain responsive here. */
       @media (max-width: 900px) {
         .v3d-section {
           --v3d-header-block: 7rem;
-          /* Tablet: full-width stage + edge safety; the radial grid
-             re-derives every orbit from the measured scene. */
-          --v3d-sun: clamp(7.5rem, 21.5cqw, 9.5rem);
-          --v3d-planet: clamp(5rem, 11cqw, 9.5rem);
         }
       }
       @media (max-width: 560px) {
         .v3d-section {
           --v3d-header-block: 6.5rem;
           --v3d-bottom-gap: 3rem;
-          /* Mobile: full available width (no desktop max-width reuse), no
-             horizontal scrolling; sun ~1.27x planet, full content kept. */
-          --v3d-sun: clamp(5.5rem, 21.5cqw, 7rem);
-          --v3d-planet: clamp(3.9rem, 11cqw, 9.5rem);
         }
       }
 
@@ -773,6 +872,11 @@ interface PlanetGeometry {
       </div>
 
       <div class="v3d-scene">
+        <!-- The whole orbital system lives on ONE design-space surface that
+             is uniformly scaled to fit the real scene (--v3d-fit): Sun,
+             guides and planets share a single coordinate system, so every
+             orbit guide passes exactly through its planet's path. -->
+        <div class="v3d-stage">
         <!-- Orbital guide rings (projected tilted XZ circles) - behind everything. -->
         <div class="v3d-orbits" aria-hidden="true">
           <div class="v3d-orbit o1"></div>
@@ -822,8 +926,6 @@ interface PlanetGeometry {
               class="v3d-planet"
               [class.active]="i === activeIndex()"
               [style.--v3d-pc]="planetColor(i)"
-              [style.width]="planetSize(i)"
-              [style.height]="planetSize(i)"
               (click)="selectPlanet(i)"
               [attr.aria-label]="value.titleKey | translate"
               [attr.aria-current]="i === activeIndex() ? 'true' : null"
@@ -839,6 +941,7 @@ interface PlanetGeometry {
               </span>
             </button>
           }
+        </div>
         </div>
       </div>
     </section>
@@ -880,28 +983,61 @@ export class Values3dComponent {
    */
   private readonly orbitRx = new Float64Array(V3D_SLOTS);
   private readonly orbitRy = new Float64Array(V3D_SLOTS);
-  /** Measured sun radius in px (drives the sun -> first-orbit gap). */
-  private sunRadiusPx = 0;
-  /** Measured BASE planet radius in px (factor 1.0 planet, shrink = 1). */
-  private basePlanetRadiusPx = 0;
   /**
-   * Per-planet radius in px (base radius * content-driven size factor *
-   * adaptive fit shrink). THE sizes used by the radial grid, the bounds
-   * and the containment validation - real per-planet values, never one
-   * shared radius.
+   * POSITION LAYER - Sun radius that feeds the frozen orbit geometry
+   * (baseline values only). Never written to the DOM directly.
+   */
+  private sunRadiusPx = 0;
+  /**
+   * POSITION LAYER - planet radii that feed the frozen orbit geometry
+   * (baseline values + the internal growth the geometry was calibrated
+   * with). Never written to the DOM directly.
    */
   private readonly planetRadiiPx = new Float64Array(V3D_SLOTS);
-  /** Adaptive planet shrink applied this pass (1 = preferred sizes). */
-  private planetFitShrink = 1;
-  /** Adaptive content scale written to --v3d-content-scale this pass. */
-  private contentScale = V3D_CONTENT_SCALE_BASE;
-  /** Live ellipse ratio (adapts downward on tight stages, bounded below). */
+  /**
+   * VISUAL LAYER - the Sun radius actually rendered (--v3d-sun). Grows
+   * around the fixed centre so the Sun stays the largest body.
+   */
+  private visualSunRadiusPx = 0;
+  /**
+   * VISUAL LAYER - the planet radii actually rendered (--v3d-pd):
+   * max(baseline radius, manual minimum, radius required by the content),
+   * capped by the scene edge and orbit-1 clearance. Positions never move.
+   */
+  private readonly visualRadiiPx = new Float64Array(V3D_SLOTS);
+  /** Configured (manual) radius per planet, before the content fit. */
+  private readonly manualRadiiPx = new Float64Array(V3D_SLOTS);
+  /** Per-planet content box config, resolved once per geometry pass. */
+  private readonly contentPadPct = new Float64Array(V3D_SLOTS);
+  private readonly contentMaxWPct = new Float64Array(V3D_SLOTS);
+  /** Per-planet title size in px (the description and icon derive from it). */
+  private readonly contentTitlePx = new Float64Array(V3D_SLOTS);
+  /** Sun content title size in px. */
+  private sunTitlePx = 0;
+  /** Content layer scale - kept in sync with --v3d-content-scale in CSS. */
+  private readonly contentScale = V3D_CONTENT_SCALE_BASE;
+  /** Gap between the content children in px (read once from the live CSS). */
+  private contentGapPx = 0;
+  /** Gap between the SUN's content children in px (live CSS, re-read). */
+  private sunContentGapPx = 0;
+  /** Real font family used by the content (canvas measurement). */
+  private measureFontFamily = 'sans-serif';
+  /**
+   * The REAL text of every planet, read from the live DOM (so it is the
+   * translated string of the active language, FR / EN / AR). Used to measure
+   * every value against the SUN's font sizes: the Sun cycles through all six
+   * values, so the longest one decides the Sun's size.
+   */
+  private readonly planetTitleText: string[] = ['', '', '', '', '', ''];
+  private readonly planetDescText: string[] = ['', '', '', '', '', ''];
+  /** Screen category of the current pass (0 mobile ... 3 large desktop). */
+  private category = 2;
+  /** Off-screen 2D context used to measure the real text (FR / EN / AR). */
+  private measureCtx: CanvasRenderingContext2D | null = null;
+  /** Live ellipse ratio (balances the design with the scene's aspect). */
   private ellipseRatio = V3D_ELLIPSE_RATIO;
-  /** Current safe-rectangle margin in px (responsive, proportional+floor). */
-  private usableMarginPx = 0;
-  /** Radial-grid tightness: achieved fraction of the ideal rA+rB+buffer
-      separation (reported by the dev validator; k=1 = literal rule). */
-  private gridRatioK = 0;
+  /** Current uniform fit scale (design space -> real scene). */
+  private currentFit = 1;
 
   private scene: HTMLElement | null = null;
   private planets: HTMLElement[] = [];
@@ -909,6 +1045,8 @@ export class Values3dComponent {
   private spheres: HTMLElement[] = [];
   /** Cached content layers (one per planet) - smooth visibility per frame. */
   private contents: HTMLElement[] = [];
+  /** Cached Sun content block - measured once, never per frame. */
+  private sunContent: HTMLElement | null = null;
   private animationFrame: number | null = null;
   private lastTimestamp = 0;
   private timer: ReturnType<typeof setTimeout> | null = null;
@@ -940,18 +1078,495 @@ export class Values3dComponent {
   }
 
   /**
-   * Responsive planet diameter (per planet, NOT uniform). Every planet
-   * holds a different amount of text, so the diameter is the responsive
-   * base `--v3d-planet` scaled by a content-driven factor
-   * (V3D_PLANET_SIZE_FACTORS - longest descriptions get the largest
-   * spheres) and by the adaptive `--v3d-planet-shrink` written by the
-   * geometry engine when the scene is too tight for the preferred sizes.
-   * Width and height are identical (circular sphere).
+   * VISUAL SIZE PASS (init + resize ONLY, never per frame).
+   * Turns the manual VISUAL SIZE CONTROLS into real px:
+   *   - the Sun radius,
+   *   - one visual radius per planet (independent per planet),
+   *   - the per-planet content box (padding + text width),
+   *   - the content-first type scale (title px = body diameter * ratio).
+   * Positions are NOT touched here: they are derived from these radii
+   * afterwards (updateOrbitGeometry), so a size can never move a body.
    */
-  planetSize(i: number): string {
-    const factor = V3D_PLANET_SIZE_FACTORS[i % V3D_SLOTS];
-    return `calc(var(--v3d-planet) * ${factor} * var(--v3d-planet-shrink, 1))`;
+  private applyVisualSizes(): void {
+    // Refresh the measured text (live DOM = active language) on every pass.
+    this.readContentText(this.elementRef.nativeElement);
+    const cat = this.selectCategory(this.sceneWidth);
+    this.category = cat;
+    const typeScale =
+      V3D_CONTENT_TYPE_SCALE_BY_CATEGORY[cat % V3D_CONTENT_TYPE_SCALE_BY_CATEGORY.length];
+    const maxTitle = V3D_TITLE_MAX_PX[cat % V3D_TITLE_MAX_PX.length];
+
+    // POSITION LAYER: the frozen baseline values (never the visual knobs).
+    this.sunRadiusPx = V3D_POSITION_BASELINE_SUN_RADIUS;
+
+    for (let i = 0; i < V3D_SLOTS; i++) {
+      const cfg = V3D_PLANET_CONTENT[i % V3D_PLANET_CONTENT.length];
+      this.contentPadPct[i] = cfg.padding;
+      this.contentMaxWPct[i] = cfg.maxWidth ?? 100;
+      // Always restart from the RAW manual weights: this pass must be
+      // stateless, otherwise a previous pass's growth would feed back into
+      // the normalization and the sizes could drift or collapse.
+      this.manualRadiiPx[i] =
+        V3D_POSITION_BASELINE_PLANET_RADII[i % V3D_POSITION_BASELINE_PLANET_RADII.length];
+      this.planetRadiiPx[i] = this.manualRadiiPx[i];
+    }
+
+    // SCENE NORMALIZATION: the manual radii are RELATIVE weights, so Sun and
+    // planets are scaled TOGETHER until the design exactly fills the measured
+    // scene width. The composition then always uses the full available width
+    // (no empty side margins) at every screen size - while keeping every
+    // manual ratio (Sun vs planets, planets vs each other) untouched.
+    this.normalizeToSceneWidth();
+    // VISUAL LAYER starts as an exact copy of the baseline; the content-first
+    // pass (growVisualBodies, after the geometry) grows it from here.
+    this.visualSunRadiusPx = this.sunRadiusPx;
+    for (let i = 0; i < V3D_SLOTS; i++) {
+      this.visualRadiiPx[i] = this.planetRadiiPx[i];
+    }
+    this.applySunContentScale();
+
+    for (let i = 0; i < V3D_SLOTS; i++) {
+      // Content-first type scale: the text grows with the planet's radius
+      // (never the opposite) and is bounded by the category ceiling.
+      const scale = Math.max(0.5, V3D_PLANET_CONTENT[i % V3D_PLANET_CONTENT.length].scale) * typeScale;
+      this.contentTitlePx[i] = Math.min(
+        this.planetRadiiPx[i] * 2 * V3D_TITLE_PER_DIAMETER * scale,
+        maxTitle,
+      );
+    }
   }
+
+  /**
+   * Half extent (design px) of the composition with the CURRENT radii:
+   * the outermost ring + the body that rides it. Used to normalize the
+   * manual radii against the measured scene width.
+   */
+  private designHalfExtent(): number {
+    let radius = this.firstOrbitRadius();
+    for (let i = 0; i < V3D_SLOTS - 1; i++) {
+      radius += this.bandGap(i);
+    }
+    return radius + this.planetRadiiPx[V3D_SLOTS - 1] * V3D_MAX_SCALE;
+  }
+
+  /**
+   * Scales Sun + planets TOGETHER until the composition's half extent
+   * exactly fills the measured scene width. State-less: it always works
+   * from the current radii, so it can never drift between two passes.
+   */
+  private normalizeToSceneWidth(): void {
+    if (this.sceneWidth <= 0) return;
+    const available = this.sceneWidth / 2 - V3D_STAGE_PADDING;
+    const extent = this.designHalfExtent();
+    if (!(extent > 0)) return;
+    const normalize = available / extent;
+    if (!(normalize > 0) || !isFinite(normalize)) return;
+    this.sunRadiusPx *= normalize;
+    for (let i = 0; i < V3D_SLOTS; i++) {
+      this.manualRadiiPx[i] *= normalize;
+      this.planetRadiiPx[i] = this.manualRadiiPx[i];
+    }
+  }
+
+  /**
+   * Re-absorbs the content-driven planet growth into the Sun's radius, so
+   * the composition keeps filling the scene width exactly (fit scale 1)
+   * while every planet keeps exactly the size its content needs.
+   */
+  private absorbGrowthIntoSun(): void {
+    if (this.sceneWidth <= 0) return;
+    const available = this.sceneWidth / 2 - V3D_STAGE_PADDING;
+    const extent = this.designHalfExtent();
+    if (!(extent > available)) return;
+    const sunFactor = 1 + 2 * V3D_SUN_TO_FIRST_ORBIT_GAP_RATIO;
+    const planetsExtent = extent - this.sunRadiusPx * sunFactor;
+    if (planetsExtent >= available) return; // planets alone fill the scene
+    const wantedSun = (available - planetsExtent) / sunFactor;
+    // The Sun must stay clearly the largest body in the system.
+    const maxPlanetR = Math.max(...Array.from(this.planetRadiiPx));
+    this.sunRadiusPx = Math.max(wantedSun, maxPlanetR * 1.25);
+  }
+
+  /** Content-first type scale of the Sun (title px from its VISUAL
+      diameter, bounded so it never dwarfs the planets' text). */
+  private applySunContentScale(): void {
+    const maxTitle =
+      V3D_CONTENT_TITLE_PX[this.category % V3D_CONTENT_TITLE_PX.length] * 1.2;
+    this.sunTitlePx = Math.min(
+      this.visualSunRadiusPx * 2 * V3D_SUN_TITLE_PER_DIAMETER,
+      maxTitle,
+    );
+  }
+
+  /**
+   * CONTENT-FIRST VISUAL PASS (init + resize ONLY, AFTER the frozen
+   * geometry). Determines how much room every planet's REAL content needs
+   * and sizes the sphere to hold it - WITHOUT moving anything:
+   *
+   *   visualRadius = clamp( max(baseline radius, manual minimum,
+   *                             radius required by the content),
+   *                        … , min(scene-edge cap, orbit-1 cap) )
+   *
+   * The caps are the "adjust the size, never the position" rule: a planet
+   * grows until it would touch the scene edge or outgrow the Sun, and only
+   * then is its text scaled down by the exact shortfall (never clipped).
+   * The text size is CHOSEN first (per screen category), so the measurement
+   * converges in 1-2 passes with no feedback loop.
+   */
+  private growVisualBodies(): void {
+    // 1. Text size first: chosen for readability, not derived from the body.
+    const cat = this.category % V3D_CONTENT_TITLE_PX.length;
+    for (let i = 0; i < V3D_SLOTS; i++) {
+      const cfg = V3D_PLANET_CONTENT[i % V3D_PLANET_CONTENT.length];
+      this.contentTitlePx[i] = V3D_CONTENT_TITLE_PX[cat] * Math.max(0.5, cfg.scale);
+    }
+
+        // 2. Sun size: the manual wish, capped by orbit-1 clearance so the Sun can
+    //    never swallow planet 1's path (position is frozen). The cap is depth-
+    //    scaled so the Sun stays the largest body at the worst orbital angle.
+    const planetCap = this.orbitCapRadius();
+    const sunWishCap = V3D_SUN_DOMINANCE * V3D_MAX_SCALE * planetCap;
+    this.visualSunRadiusPx = Math.max(
+      this.sunRadiusPx,
+      Math.min(
+        (V3D_SUN_RADIUS / V3D_POSITION_BASELINE_SUN_RADIUS) * this.sunRadiusPx,
+        sunWishCap,
+      ),
+    );
+    this.applySunContentScale();
+
+    // 3. Planets: content-first, bounded by the edge and the Sun dominance.
+    for (let pass = 0; pass < V3D_CONTENT_FIT_PASSES; pass++) {
+      this.writeBodySizes();
+      let changed = false;
+      for (let i = 0; i < V3D_SLOTS; i++) {
+        const baseline = this.planetRadiiPx[i];
+        const need = this.requiredRadius(i);
+        const min = Math.max(baseline, this.manualVisualMinRadius(i));
+        const cap = Math.max(baseline, Math.min(this.edgeCapRadius(i), planetCap));
+        const next = Math.min(Math.max(min, need), cap);
+        if (Math.abs(next - this.visualRadiiPx[i]) > 0.25) {
+          this.visualRadiiPx[i] = next;
+          changed = true;
+        }
+      }
+      if (!changed) break;
+    }
+
+    // 3b. The caps are hard: after the growth pass every radius is clamped to
+    //     max(baseline, min(scene-edge cap, orbit-1 cap)) so a planet can never
+    //     outgrow the Sun or leave the scene - the size gives way, never the
+    //     position. Clamping happens BEFORE the text shrink below, so the
+    //     shrink always works against the radius that will really be rendered.
+    for (let i = 0; i < V3D_SLOTS; i++) {
+      const baseline = this.planetRadiiPx[i];
+      const cap = Math.max(baseline, Math.min(this.edgeCapRadius(i), planetCap));
+      this.visualRadiiPx[i] = Math.min(this.visualRadiiPx[i], cap);
+    }
+
+    // 4. A planet at its cap whose content still needs more room gets its
+    //    text scaled by the exact shortfall - content is never clipped. The
+    //    shrink is re-measured (bounded passes), because the icon, the
+    //    wrapping and the fixed gaps do not follow the text proportionally.
+    for (let i = 0; i < V3D_SLOTS; i++) {
+      for (let pass = 0; pass < V3D_TEXT_FIT_PASSES; pass++) {
+        const need = this.requiredRadius(i);
+        if (!(need > this.visualRadiiPx[i] + 0.5)) break;
+        if (!(need > 0)) break;
+        this.contentTitlePx[i] *= this.visualRadiiPx[i] / need;
+        this.writeBodySizes();
+      }
+      const remaining = this.requiredRadius(i);
+      if (remaining > this.visualRadiiPx[i] + 0.5 && isDevMode()) {
+        console.warn(
+          `[values-3d] Planet ${i + 1}: content still needs Ø${(remaining * 2).toFixed(0)}px, capped at Ø${(this.visualRadiiPx[i] * 2).toFixed(0)}px (scene edge / orbit clearance).`,
+        );
+      }
+    }
+
+    // 5. The Sun must stay the largest body: enforce the dominance floor on the
+    //    FINAL planet sizes, depth-scaled so the Sun wins at the worst angle,
+    //    then keep the Sun's own text inside its disc (shrink, never move).
+    const largestPlanet = Math.max(...Array.from(this.visualRadiiPx));
+    this.visualSunRadiusPx = Math.max(
+      this.visualSunRadiusPx,
+      V3D_SUN_DOMINANCE * V3D_MAX_SCALE * largestPlanet,
+    );
+    this.applySunContentScale();
+    this.writeBodySizes();
+    for (let pass = 0; pass < V3D_TEXT_FIT_PASSES; pass++) {
+      const need = this.requiredSunRadius();
+      if (!(need > this.visualSunRadiusPx + 0.5)) break;
+      if (!(need > 0)) break;
+      this.sunTitlePx *= this.visualSunRadiusPx / need;
+      this.writeBodySizes();
+    }
+    if (isDevMode() && this.requiredSunRadius() > this.visualSunRadiusPx + 0.5) {
+      console.warn('[values-3d] Sun content still does not fit its disc - reduce V3D_SUN_TITLE_PER_DIAMETER.');
+    }
+    this.writeBodySizes();
+  }
+
+  /**
+   * Radius the Sun needs so that EVERY value stays inside its disc - the Sun
+   * cycles through all six, so the longest one is the authority, not the one
+   * displayed right now. Each value's own title / description text is wrapped
+   * with the SUN's font sizes on the off-screen canvas (no DOM change, no
+   * per-frame cost) and the live block is measured exactly as well. Purely a
+   * size decision: the Sun never moves.
+   */
+  private requiredSunRadius(): number {
+    if (this.visualSunRadiusPx <= 0) return 0;
+    const boxWidth = this.visualSunRadiusPx * 2 * (1 - 2 * V3D_SUN_CONTENT_PAD_X);
+    const titleFont = this.sunFont(V3D_FONT_WEIGHT_TITLE, this.sunTitlePx);
+    const descFont = this.sunFont(V3D_FONT_WEIGHT_DESC, this.sunTitlePx * V3D_DESC_PER_TITLE);
+    const iconPx = this.sunTitlePx * V3D_ICON_PER_TITLE;
+    const gap = this.sunContentGapPx;
+
+    let need = 0;
+    for (let i = 0; i < V3D_SLOTS; i++) {
+      const title = this.wrapBlock(this.planetTitleText[i], titleFont, boxWidth, V3D_LINE_HEIGHT_TITLE);
+      const desc = this.wrapBlock(this.planetDescText[i], descFont, boxWidth, V3D_LINE_HEIGHT_DESC);
+      const blockWidth = Math.max(title.w, desc.w);
+      const blockHeight = iconPx + title.h + desc.h + 2 * gap;
+      if (blockWidth > 0 && blockHeight > 0) {
+        need = Math.max(need, (Math.hypot(blockWidth, blockHeight) / 2) * V3D_CONTENT_FIT_SAFETY);
+      }
+    }
+
+    // Exact check of the block actually laid out in the DOM (the visible
+    // value), so a real layout is always at least as strong as the estimate.
+    const content = this.sunContent;
+    if (content && content.children.length > 0) {
+      let blockWidth = 0;
+      let blockHeight = 0;
+      for (let k = 0; k < content.children.length; k++) {
+        const el = content.children[k] as HTMLElement;
+        blockHeight += el.offsetHeight;
+        blockWidth = Math.max(blockWidth, this.contentLineWidth(el, boxWidth));
+      }
+      blockHeight += gap * (content.children.length - 1);
+      if (blockWidth > 0 && blockHeight > 0) {
+        need = Math.max(need, (Math.hypot(blockWidth, blockHeight) / 2) * V3D_CONTENT_FIT_SAFETY);
+      }
+    }
+    return need;
+  }
+
+  /** A CSS font shorthand for the measurement canvas. */
+  private sunFont(weight: number, sizePx: number): string {
+    return `${weight} ${sizePx.toFixed(2)}px ${this.measureFontFamily}`;
+  }
+
+  /**
+   * Wrapped size of a text block at a given font inside maxWidth: the height
+   * is the line count x line-height (word wrapping, greedy - the same rule the
+   * browser uses) and the width is the widest resulting line. Canvas only.
+   */
+  private wrapBlock(
+    text: string,
+    font: string,
+    maxWidth: number,
+    lineHeight: number,
+  ): { w: number; h: number } {
+    const ctx = this.measureCtx;
+    const words = (text ?? '').trim().split(/\s+/).filter((w) => w.length > 0);
+    if (!ctx || words.length === 0 || !(maxWidth > 0)) return { w: 0, h: 0 };
+    ctx.font = font;
+    const sizePx = parseFloat(font.split(' ')[1]) || 1;
+    let lines = 1;
+    let lineWidth = 0;
+    let widest = 0;
+    for (const word of words) {
+      const wordWidth = ctx.measureText(word).width;
+      if (lineWidth > 0 && lineWidth + sizePx * 0.32 + wordWidth > maxWidth) {
+        widest = Math.max(widest, lineWidth);
+        lines++;
+        lineWidth = wordWidth;
+      } else {
+        lineWidth = lineWidth === 0 ? wordWidth : lineWidth + sizePx * 0.32 + wordWidth;
+      }
+    }
+    widest = Math.max(widest, lineWidth);
+    return { w: Math.min(widest, maxWidth), h: lines * sizePx * lineHeight };
+  }
+
+  /** Manual minimum visual radius of planet i, read relative to the rendered
+      Sun so V3D_PLANET_RADII / V3D_SUN_RADIUS keep the ratio you configured. */
+  private manualVisualMinRadius(i: number): number {
+    return (V3D_PLANET_RADII[i % V3D_PLANET_RADII.length] / V3D_SUN_RADIUS) *
+      this.visualSunRadiusPx;
+  }
+
+  /**
+   * Largest a planet may grow at its FROZEN orbit position without ever
+   * being clipped by the scene edge (checked at the worst orbital angle,
+   * including the depth scale). Size only - the planet is never moved.
+   */
+  private edgeCapRadius(i: number): number {
+    const rx = this.orbitRx[i];
+    const halfW = this.sceneWidth / 2 - rx;
+    const halfH =
+      (this.sceneHeightPx > 0 ? this.sceneHeightPx / 2 : this.sceneWidth * 0.31) -
+      rx * this.ellipseRatio;
+    const room = Math.max(0, Math.min(halfW, halfH));
+    return room / V3D_MAX_SCALE - 4;
+  }
+
+  /**
+   * Largest ANY planet may grow while keeping BOTH hard invariants true at
+   * the worst orbital angle (i.e. including the depth scale the rAF applies):
+   *   - the Sun stays the largest body: sun >= dominance x planet x depth,
+   *   - planet 1 stays clear of the Sun's edge: sun x (1 + 2 x gap) <= R1.
+   * Combining the two gives R <= R1 / (dominance x depth x (1 + 2 x gap)),
+   * derived from the frozen first orbit. Size gives way, the position never.
+   */
+  private orbitCapRadius(): number {
+    const sunFootprint =
+      V3D_SUN_DOMINANCE * V3D_MAX_SCALE * (1 + 2 * V3D_SUN_TO_FIRST_ORBIT_GAP_RATIO);
+    return Math.max(0, (this.orbitRx[0] - 4) / sunFootprint);
+  }
+
+  /**
+   * CONTENT-FIRST FIT (init + resize ONLY, never per frame, no physics).
+   * Measures the REAL content of every planet - icon + title + description
+   * exactly as laid out right now, in layout px, so neither the stage zoom
+   * nor the sphere transforms can distort the measurement - and grows the
+   * planet whenever its content needs more room than the configured radius
+   * gives:
+   *     final radius = max(configured radius, radius required by content)
+   * Growth is capped (V3D_CONTENT_FIT_MAX_GROWTH). If even the grown planet
+   * cannot hold the text, THAT planet's text is scaled down by the exact
+   * shortfall - content is never clipped, never ellipsised and never hidden
+   * behind the sphere edge. Converges in 1-2 measured passes.
+   */
+  private fitContentToPlanets(): void {
+    for (let pass = 0; pass < V3D_CONTENT_FIT_PASSES; pass++) {
+      this.writeBodySizes();
+      let grew = false;
+      for (let i = 0; i < V3D_SLOTS; i++) {
+        const need = this.requiredRadius(i);
+        const ceiling = this.manualRadiiPx[i] * V3D_CONTENT_FIT_MAX_GROWTH;
+        // More content -> bigger planet (never smaller text).
+        if (need > this.planetRadiiPx[i] + 0.5 && need <= ceiling) {
+          this.planetRadiiPx[i] = need;
+          grew = true;
+        }
+      }
+      if (!grew) break;
+    }
+    this.writeBodySizes();
+
+    // Last resort, so that nothing is ever clipped: shrink the text of a
+    // planet that still cannot hold its content. Iterative and re-measured
+    // (bounded), because the icon, the wrapping and the fixed gaps do not
+    // shrink in exactly the same proportion as the text.
+    for (let i = 0; i < V3D_SLOTS; i++) {
+      for (let pass = 0; pass < V3D_TEXT_FIT_PASSES; pass++) {
+        const need = this.requiredRadius(i);
+        if (!(need > this.planetRadiiPx[i] + 0.5)) break;
+        if (!(need > 0)) break;
+        this.contentTitlePx[i] *= this.planetRadiiPx[i] / need;
+        this.writeBodySizes();
+      }
+      const remaining = this.requiredRadius(i);
+      if (remaining > this.planetRadiiPx[i] + 0.5 && isDevMode()) {
+        console.warn(
+          `[values-3d] Planet ${i + 1}: content still needs Ø${(remaining * 2).toFixed(0)}px, planet has Ø${(this.planetRadiiPx[i] * 2).toFixed(0)}px.`,
+        );
+      }
+    }
+    // Re-absorb the growth into the Sun so the fit scale stays at 1 (the
+    // composition keeps filling the scene width) and every planet keeps
+    // exactly the size its content needs.
+    this.absorbGrowthIntoSun();
+    this.applySunContentScale();
+    this.writeBodySizes();
+  }
+
+  /**
+   * Radius (px) a planet needs so its measured content stays completely
+   * inside the sphere's front cap:
+   *   - block height = the REAL laid-out height of icon + title + description
+   *     (line wrapping included, so a longer FR/AR text needs a bigger planet)
+   *   - block width  = the widest real line, measured with the same font
+   *   - the half-diagonal of that block must stay inside the cap circle.
+   */
+  private requiredRadius(i: number): number {
+    const content = this.contents[i];
+    if (!content) return 0;
+    const kids = content.children;
+    if (kids.length === 0) return 0;
+
+    const boxWidth = this.contentBoxWidth(i);
+    let blockWidth = 0;
+    let blockHeight = 0;
+    for (let k = 0; k < kids.length; k++) {
+      const el = kids[k] as HTMLElement;
+      blockHeight += el.offsetHeight;
+      blockWidth = Math.max(blockWidth, this.contentLineWidth(el, boxWidth));
+    }
+    blockHeight += this.contentGapPx * (kids.length - 1);
+    if (blockWidth <= 0 || blockHeight <= 0) return 0;
+
+    const halfDiagonal = Math.hypot(blockWidth, blockHeight) / 2;
+    return (halfDiagonal * V3D_CONTENT_FIT_SAFETY * this.contentScale) / (2 * V3D_CAP_RADIUS_FRAC);
+  }
+
+  /** Usable text width (px) inside a planet: surface cap minus its padding.
+      Uses the VISUAL radius, so a grown planet automatically gives its text
+      a wider column (fewer lines -> less required height). */
+  private contentBoxWidth(i: number): number {
+    const diameter = this.visualRadiiPx[i] * 2;
+    const pad = Math.min(30, Math.max(0, this.contentPadPct[i])) / 100;
+    return diameter * (2 * V3D_CAP_RADIUS_FRAC) * (1 - 2 * pad);
+  }
+
+  /**
+   * Widest line of one content child, measured with the child's OWN font.
+   * Canvas metrics = no layout thrash, no dependence on the stage zoom, and
+   * the same result for every language. Non-text children (the icon) fall
+   * back to their laid-out width.
+   */
+  private contentLineWidth(el: HTMLElement, boxWidth: number): number {
+    const text = (el.textContent ?? '').trim();
+    if (!text) return Math.min(el.offsetWidth, boxWidth) || el.offsetHeight;
+    const ctx = this.measureCtx;
+    if (!ctx) return Math.min(el.offsetWidth, boxWidth);
+    const style = getComputedStyle(el);
+    ctx.font = `${style.fontWeight} ${style.fontSize} ${style.fontFamily}`;
+    let widestWord = 0;
+    for (const word of text.split(/\s+/)) {
+      widestWord = Math.max(widestWord, ctx.measureText(word).width);
+    }
+    // A wrapped paragraph fills its box; a single long word can overflow it,
+    // and that word is then what the planet must be big enough to hold.
+    const natural = ctx.measureText(text).width;
+    return Math.max(widestWord, Math.min(natural, boxWidth));
+  }
+
+  /** Writes the rendered SIZES of every body into the DOM (init + resize).
+      Size only - the position of every body stays owned by the rAF loop. */
+  private writeBodySizes(): void {
+    if (this.scene) {
+      this.scene.style.setProperty('--v3d-sun', `${(this.visualSunRadiusPx * 2).toFixed(1)}px`);
+      this.scene.style.setProperty('--v3d-sun-title-size', `${this.sunTitlePx.toFixed(2)}px`);
+      this.scene.style.setProperty('--v3d-sun-desc-size', `${(this.sunTitlePx * V3D_DESC_PER_TITLE).toFixed(2)}px`);
+      this.scene.style.setProperty('--v3d-sun-icon-size', `${(this.sunTitlePx * V3D_ICON_PER_TITLE).toFixed(2)}px`);
+    }
+    for (let i = 0; i < this.planets.length; i++) {
+      const el = this.planets[i];
+      if (!el) continue;
+      const title = this.contentTitlePx[i];
+      el.style.setProperty('--v3d-pd', `${(this.visualRadiiPx[i] * 2).toFixed(1)}px`);
+      el.style.setProperty('--v3d-title-size', `${title.toFixed(2)}px`);
+      el.style.setProperty('--v3d-desc-size', `${(title * V3D_DESC_PER_TITLE).toFixed(2)}px`);
+      el.style.setProperty('--v3d-icon-size', `${(title * V3D_ICON_PER_TITLE).toFixed(2)}px`);
+      el.style.setProperty('--v3d-content-pad', `${this.contentPadPct[i]}%`);
+      el.style.setProperty('--v3d-content-maxw', `${this.contentMaxWPct[i]}%`);
+    }
+  }
+
 
   /**
    * Degrees per second for the planet's own axial rotation (planet i).
@@ -975,255 +1590,100 @@ export class Values3dComponent {
   }
 
   /**
-   * ORBITAL GEOMETRY ENGINE - runs at init and on resize ONLY (never per
-   * frame). The six radii are DERIVED from the measured scene:
-   *
-   *   R1        = sunRadius + SUN_TO_FIRST_ORBIT_GAP * sceneWidth
-   *   R6max     = halfWidth - planetRadius - OUTER_EDGE_MARGIN * sceneWidth
-   *   clearance = 2 * planetRadius + ORBIT_VISUAL_BUFFER * sceneWidth
-   *   gap_i     = span * (1 + i*SPACING_WEIGHT) / sum(weights)
-   *
-   * On large desktops span >= 5 * clearance, so every neighboring band
-   * satisfies R2-R1 >= 2*planetRadius + buffer automatically; on smaller
-   * scenes the same non-linear balance simply uses the full available span.
-   * The same radii are written to the .v3d-scene CSS custom properties used
-   * by the orbit rings, so rings and trajectory share ONE source of truth.
-   */
-  /**
-   * ORBITAL GEOMETRY ENGINE - runs at init and on resize ONLY (never per
-   * frame). Everything is derived from the MEASURED scene (clientWidth +
-   * clientHeight of .v3d-scene), laid out inside a SAFE usable rectangle:
-   *
-   *   margin      = max(V3D_EDGE_MARGIN_PX, RATIO * min(w, h))
-   *   usableHalfW = w/2 - margin      usableHalfH = h/2 - margin
-   *   r_i         = r_{i-1} + planetRadii[i-1] + planetRadii[i] + buffer
-   *   R6max       = min(widthBound, heightBound) - incl. depth-scale headroom
-   *
-   * ADAPTATION (only when the preferred composition does not fit, in
-   * order, all with floors so nothing collapses):
-   *   1. shrink planet DIAMETERS slightly (>= V3D_PLANET_SHRINK_MIN) and
-   *      pair it with a proportional content-scale reduction (>= MIN)
-   *   2. reduce the orbit visual buffer (>= 50%)
-   *   3. flatten the ellipse ratio (>= V3D_ELLIPSE_RATIO_MIN)
-   *   4. if the floors are still not enough, the FULL span is distributed
-   *      PROPORTIONALLY to the required gaps (contained proximity - the
-   *      outermost orbit can never leave the safe rectangle).
-   * The SUN is never shrunk - it stays visually dominant.
-   * The same radii are written to the .v3d-scene CSS custom properties
-   * used by the orbit rings, so rings and trajectory share ONE source.
+   * ORBITAL GEOMETRY ENGINE - init + resize ONLY (never per frame).
+   * POSITION ONLY: it turns the visual radii into the six orbit radii and
+   * the uniform fit scale. It never changes a size:
+   *   R1     = sunRadius + 2*sunRadius*SUN_TO_FIRST_ORBIT_GAP_RATIO
+   *            + planetRadius_1 * V3D_MAX_SCALE       (depth headroom)
+   *   gap_i  = V3D_BAND_GAP_RATIO * (R_i + R_i+1) / 2
+   *   R_i+1  = R_i + gap_i
+   * The radii come from ONE source (planetRadiiPx, already grown by the
+   * content fit), the rings are drawn from these very values, and the whole
+   * design space is uniformly scaled with --v3d-fit - so guides, Sun and
+   * planets always share exactly one coordinate system.
    */
   private updateOrbitGeometry(): void {
     const w = this.sceneWidth;
     const h = this.sceneHeightPx;
     if (w <= 0) return;
 
-    // --- SAFE USABLE RECTANGLE (responsive margin: floor + proportional).
-    this.usableMarginPx = Math.max(
-      V3D_EDGE_MARGIN_PX,
-      V3D_EDGE_MARGIN_RATIO * Math.min(w, h > 0 ? h : w),
-    );
-    const usableHalfW = w / 2 - this.usableMarginPx;
-    const usableHalfH =
-      (h > 0 ? h / 2 : w * 0.31) - this.usableMarginPx;
-    const sunR = this.sunRadiusPx;
-    const effectiveScale = V3D_MAX_SCALE; // near-planet depth headroom
-
-    // --- ADAPTATION LOOP (deterministic, init/resize only).
-    // Priority (spacing first, planet size LAST):
-    //   1. use the full outer radius (R6max, minus V3D_OUTER_ORBIT_MARGIN)
-    //   2. flatten the adaptive ellipse ratio (>= V3D_ELLIPSE_RATIO_MIN)
-    //   3. trim the orbit visual buffer (>= 50%)
-    //   4. ONLY THEN shrink the planet diameters (>= V3D_PLANET_SHRINK_MIN)
-    // The ladder's GOAL is the achievable no-overlap floor: the span must
-    // host V3D_HARD_GAP_FRACTION * (rA + rB) per band. The spacing
-    // preference (V3D_ORBIT_GAP_MULTIPLIER) is applied by the DISTRIBUTION
-    // below - never by shrinking planets.
-    let shrink = 1;
-    let bufferFactor = 1;
-    let ratio = V3D_ELLIPSE_RATIO;
-    const hardSpanFor = (): number => {
-      let sum = 0;
-      for (let i = 0; i + 1 < V3D_SLOTS; i++) {
-        sum += V3D_HARD_GAP_FRACTION * (this.planetRadiiPx[i] + this.planetRadiiPx[i + 1]);
-      }
-      return sum;
-    };
-    let attempt = 0;
-    for (; attempt < 24; attempt++) {
-      this.derivePlanetRadii(shrink);
-      this.ellipseRatio = ratio;
-      const r1 = this.firstOrbitRadius(sunR, w, effectiveScale);
-      const outer = this.planetRadiiPx[V3D_SLOTS - 1] * effectiveScale;
-      const widthBound = usableHalfW - outer;
-      const heightBound = (usableHalfH - outer) / ratio;
-      const r6Max = Math.max(
-        Math.min(widthBound, heightBound) - V3D_OUTER_ORBIT_MARGIN * w,
-        r1 + 0.015 * w,
-      );
-      const buf = V3D_ORBIT_VISUAL_BUFFER * w * bufferFactor;
-      const span = r6Max - r1;
-      // Accept as soon as the no-overlap floor fits - UNLESS the height
-      // bound is still the binder while horizontal width remains unused
-      // (large monitors): flatten the adaptive ellipse further (floor
-      // V3D_ELLIPSE_RATIO_MIN) so the outer orbit expands to the width
-      // limit and the scene's full width is used.
-      if (span >= hardSpanFor()) {
-        if (ratio > V3D_ELLIPSE_RATIO_MIN && widthBound > heightBound) {
-          ratio = Math.max(V3D_ELLIPSE_RATIO_MIN, ratio - 0.04);
-          continue;
-        }
-        break; // preferred/stepped state fits
-      }
-
-      // Preferred sizes do not fit -> adapt (bounded, in priority order).
-      if (ratio > V3D_ELLIPSE_RATIO_MIN) {
-        ratio = Math.max(V3D_ELLIPSE_RATIO_MIN, ratio - 0.04);
-        continue;
-      }
-      if (bufferFactor > V3D_BUFFER_FACTOR_MIN) {
-        bufferFactor = Math.max(V3D_BUFFER_FACTOR_MIN, bufferFactor - 0.1);
-        continue;
-      }
-      if (shrink > V3D_PLANET_SHRINK_MIN) {
-        shrink = Math.max(V3D_PLANET_SHRINK_MIN, shrink - V3D_PLANET_SHRINK_STEP);
-        continue;
-      }
-      // All floors reached: the full span is distributed PROPORTIONALLY to
-      // the required per-planet gaps below - always inside the rectangle.
-      break;
-    }
-
-    this.planetFitShrink = shrink;
-    // Content scale follows the planet shrink so text stays proportional
-    // and readable inside the (possibly smaller) spheres.
-    this.contentScale = Math.min(
-      V3D_CONTENT_MAX_SCALE,
-      Math.max(
-        V3D_CONTENT_SCALE_MIN,
-        V3D_CONTENT_SCALE_BASE * Math.pow(shrink, 0.5),
-      ),
-    );
-
-    // --- RADIAL DISTRIBUTION (4x preference + balanced outer weights).
-    this.derivePlanetRadii(shrink);
-    const buf = V3D_ORBIT_VISUAL_BUFFER * w * bufferFactor;
-    const required: number[] = [];
-    const raw: number[] = [];
-    let requiredSpan = 0;
-    let weightSum = 0;
-    for (let i = 0; i + 1 < V3D_SLOTS; i++) {
-      const req = this.planetRadiiPx[i] + this.planetRadiiPx[i + 1] + buf;
-      required.push(req);
-      requiredSpan += req;
-      const weight = 1 + i * V3D_SPACING_WEIGHT;
-      raw.push(weight);
-      weightSum += weight;
-    }
-    const r1 = this.firstOrbitRadius(sunR, w, effectiveScale);
-    const outer = this.planetRadiiPx[V3D_SLOTS - 1] * effectiveScale;
-    const r6Max = Math.max(
-      Math.min(
-        usableHalfW - outer,
-        (usableHalfH - outer) / this.ellipseRatio,
-      ) - V3D_OUTER_ORBIT_MARGIN * w,
-      r1 + 0.015 * w,
-    );
-    const span = Math.max(r6Max - r1, 0.015 * w);
-    this.gridRatioK = span / Math.max(V3D_ORBIT_GAP_MULTIPLIER * requiredSpan, 1);
-
-    // Preferred: V3D_ORBIT_GAP_MULTIPLIER x the previous band requirement
-    // per gap (R1 untouched).
-    const preferredSpan = V3D_ORBIT_GAP_MULTIPLIER * requiredSpan;
-    // Hard no-overlap floor sum: 0.5x(rA+rB) per band.
-    let hardSum = 0;
-    for (let i = 0; i + 1 < V3D_SLOTS; i++) {
-      hardSum +=
-        V3D_HARD_GAP_FRACTION *
-        (this.planetRadiiPx[i] + this.planetRadiiPx[i + 1]);
-    }
-    const hardFits = hardSum <= span;
-
-    let prev = r1;
+    // Sizes are already resolved (applyVisualSizes + fitContentToPlanets):
+    // here they are only turned into positions, so a size change can never
+    // move a body - it only redraws the ring it travels on.
+    let radius = this.firstOrbitRadius();
     for (let i = 0; i < V3D_SLOTS; i++) {
-      const rx = prev;
-      this.orbitRx[i] = rx;
-      this.orbitRy[i] = rx * this.ellipseRatio;
+      this.orbitRx[i] = radius;
       if (i < V3D_SLOTS - 1) {
-        let gap: number;
-        if (preferredSpan <= span) {
-          // The multiplier target fits (wide screens): preferred gaps +
-          // any spare span shared by the outer-weighted balance.
-          const spare = span - preferredSpan;
-          gap =
-            V3D_ORBIT_GAP_MULTIPLIER * required[i] + (spare * raw[i]) / weightSum;
-        } else {
-          // The multiplier total cannot fit: compress ALL gaps UNIFORMLY
-          // (proportions preserved) to the full available span - the
-          // largest safe spacing possible, Planet 6 stays inside. Every
-          // band keeps at least the
-          // HARD no-overlap floor while the floors collectively fit; on
-          // extreme viewports the pure proportional split + the strict
-          // outer-bound guard below keep R6 INSIDE the safe rectangle.
-          const proportional = span * (required[i] / requiredSpan);
-          gap = hardFits
-            ? Math.max(
-                V3D_HARD_GAP_FRACTION *
-                  (this.planetRadiiPx[i] + this.planetRadiiPx[i + 1]),
-                proportional,
-              )
-            : proportional;
-        }
-        prev = rx + gap;
+        radius += this.bandGap(i);
       }
     }
-    // Strict outer-bound guarantee: uneven per-band floors could in theory
-    // accumulate slightly past r6Max; if so, fall back to the pure
-    // proportional split so the outer orbit NEVER leaves the rectangle.
-    if (this.orbitRx[V3D_SLOTS - 1] > r6Max) {
-      let prevP = r1;
-      for (let i = 0; i < V3D_SLOTS; i++) {
-        this.orbitRx[i] = prevP;
-        this.orbitRy[i] = prevP * this.ellipseRatio;
-        if (i < V3D_SLOTS - 1) {
-          prevP += span * (required[i] / requiredSpan);
-        }
-      }
+    const outerR = this.orbitRx[V3D_SLOTS - 1];
+
+    // Ellipse ratio: balance the design's height with the scene's aspect
+    // (bounded), so the fit scale stays as large as possible.
+    const outerBody = this.planetRadiiPx[V3D_SLOTS - 1] * V3D_MAX_SCALE;
+    // Vertical budget: the ring's vertical extent + the body on the outer
+    // band + the stage padding must fit the scene height, so the ratio uses
+    // the available height instead of overflowing it.
+    const halfHScene = (h > 0 ? h / 2 : w * 0.31) - V3D_STAGE_PADDING - outerBody;
+    const targetRatio = halfHScene / outerR;
+    this.ellipseRatio = Math.min(
+      V3D_ELLIPSE_RATIO,
+      Math.max(V3D_ELLIPSE_RATIO_MIN, targetRatio),
+    );
+    for (let i = 0; i < V3D_SLOTS; i++) {
+      this.orbitRy[i] = this.orbitRx[i] * this.ellipseRatio;
     }
-    this.writeOrbitCssVariables();
+
+    // Uniform fit scale: the full design is scaled to fit the real scene on
+    // BOTH axes (width usually binds, the height takes over on short scenes).
+    const halfW = outerR + outerBody + V3D_STAGE_PADDING;
+    const halfH = outerR * this.ellipseRatio + outerBody + V3D_STAGE_PADDING;
+    const fit = Math.min(
+      w / (2 * halfW),
+      (h > 0 ? h : 2 * halfH) / (2 * halfH),
+    );
+    this.currentFit = fit;
+    this.writeOrbitCssVariables(fit);
   }
 
-  /**
-   * SUN -> FIRST ORBIT radius. The gap is measured from the Sun EDGE to
-   * PLANET 1's EDGE (not merely its orbit path), so the visible empty
-   * space between the Sun and the planet BODY is exactly
-   * V3D_SUN_TO_FIRST_ORBIT_GAP * sceneWidth - generous by design:
-   *   R1 = sunRadius + gap + planetRadius(1) * maxDepthScale
-   */
-  private firstOrbitRadius(
-    sunR: number,
-    sceneWidth: number,
-    effectiveScale: number,
-  ): number {
-    if (sunR <= 0) return 0.2 * sceneWidth;
+  /** Band spacing between planet i and planet i+1: proportional to the two
+      radii it separates, so bigger planets automatically get more room
+      without ever changing the rhythm of the composition. */
+  private bandGap(i: number): number {
+    return (V3D_BAND_GAP_RATIO * (this.planetRadiiPx[i] + this.planetRadiiPx[i + 1])) / 2;
+  }
+
+  /** Screen category from the MEASURED scene width: 0 mobile, 1 tablet,
+      2 PC/laptop, 3 large desktop. */
+  private selectCategory(sceneWidth: number): number {
+    if (sceneWidth <= 560) return 0;
+    if (sceneWidth <= 900) return 1;
+    if (sceneWidth <= 1919) return 2;
+    return 3;
+  }
+
+  /** First-orbit radius: Sun EDGE + gap + PLANET 1 EDGE headroom. */
+  private firstOrbitRadius(): number {
+    if (this.sunRadiusPx <= 0) return 0.2 * this.sceneWidth;
     return (
-      sunR +
-      V3D_SUN_TO_FIRST_ORBIT_GAP * sceneWidth +
-      this.planetRadiiPx[0] * effectiveScale
+      this.sunRadiusPx +
+      this.sunRadiusPx * 2 * V3D_SUN_TO_FIRST_ORBIT_GAP_RATIO +
+      this.planetRadiiPx[0] * V3D_MAX_SCALE
     );
   }
 
-  /** Writes the per-orbit radii (px) plus the adaptive ratio / planet
-      shrink / content scale into the CSS custom properties consumed by
-      the ring elements and the planet sizes. Init + resize ONLY. */
-  private writeOrbitCssVariables(): void {
+  /** Writes the orbit radii + the tilt + the uniform fit scale into the CSS
+      custom properties consumed by the guides and the stage. Init + resize
+      ONLY. Body sizes are written by writeBodySizes(). */
+  private writeOrbitCssVariables(fit: number): void {
     if (!this.scene) return;
     const style = this.scene.style;
     for (let i = 0; i < V3D_SLOTS; i++) {
       style.setProperty(`--v3d-orbit-rx-${i + 1}`, `${this.orbitRx[i].toFixed(2)}px`);
     }
     style.setProperty('--v3d-orbit-ratio', this.ellipseRatio.toFixed(3));
-    style.setProperty('--v3d-planet-shrink', this.planetFitShrink.toFixed(3));
-    style.setProperty('--v3d-content-scale', this.contentScale.toFixed(3));
+    style.setProperty('--v3d-fit', fit.toFixed(4));
   }
 
   /**
@@ -1258,6 +1718,24 @@ export class Values3dComponent {
     return `rotateY(${(angle / V3D_DEG).toFixed(2)}deg)`;
   }
 
+  /**
+   * Reads the REAL rendered text of every planet (the translated string of
+   * the active language) plus the content font family - init/resize only.
+   * Sizes only: nothing here can move a body.
+   */
+  private readContentText(host: HTMLElement): void {
+    const titles = host.querySelectorAll<HTMLElement>('.v3d-planet-title');
+    const descs = host.querySelectorAll<HTMLElement>('.v3d-planet-desc');
+    for (let i = 0; i < V3D_SLOTS; i++) {
+      this.planetTitleText[i] = (titles[i]?.textContent ?? '').trim();
+      this.planetDescText[i] = (descs[i]?.textContent ?? '').trim();
+    }
+    if (titles.length > 0) {
+      const family = getComputedStyle(titles[0]).fontFamily;
+      if (family) this.measureFontFamily = family;
+    }
+  }
+
   /** Reads the scene size once and caches the planet/content nodes for the
       rAF loop (no DOM queries inside the animation frames). */
   private applyStaticGeometry(): void {
@@ -1270,158 +1748,79 @@ export class Values3dComponent {
     this.spheres = Array.from(host.querySelectorAll<HTMLElement>('.v3d-planet-sphere'));
     this.contents = Array.from(host.querySelectorAll<HTMLElement>('.v3d-planet-content'));
 
-    // Geometry pipeline: measure the real sun/planet sizes, then build the
-    // orbit system in px (first orbit = measured sun edge + gap), validate
-    // (dev only), and finally place the planets once.
-    this.measureBodies();
+    // Text measurement context (one 2D canvas reused for every planet; the
+    // real text is measured with the real font so FR / EN / AR all fit).
+    this.measureCtx =
+      typeof document !== 'undefined' ? document.createElement('canvas').getContext('2d') : null;
+    // Gap between the content children (px) - read from the live CSS once.
+    this.contentGapPx = this.contents.length > 0
+      ? parseFloat(getComputedStyle(this.contents[0]).rowGap) || 0
+      : 0;
+    this.sunContent = host.querySelector<HTMLElement>('.v3d-sun-content');
+    this.sunContentGapPx = this.sunContent
+      ? parseFloat(getComputedStyle(this.sunContent).rowGap) || 0
+      : this.contentGapPx;
+    this.readContentText(host);
+
+    // POSITION FIRST (frozen baseline: rings, centres, tilt, fit scale),
+    // THEN the content-first visual pass on top of those fixed positions.
+    this.applyVisualSizes();
+    this.fitContentToPlanets();
     this.updateOrbitGeometry();
+    this.growVisualBodies();
     this.validateOrbitGeometry();
     this.applyAnimation();
   }
 
-  /** Measures the sun + BASE planet sizes once per init/resize pass. The
-      per-planet radii (base radius x content factor x adaptive shrink) are
-      derived in updateOrbitGeometry, which also decides the shrink. */
-  private measureBodies(): void {
-    if (!this.scene) return;
-    const sun = this.scene.querySelector<HTMLElement>('.v3d-sun');
-    const planet = this.scene.querySelector<HTMLElement>('.v3d-planet');
-    const sunD = sun ? sun.offsetWidth : 0;
-    // Planet 0 carries factor 1.00, so its rendered width is exactly
-    // (base * currentShrink); normalize back to the true base radius.
-    const planetD = planet ? planet.offsetWidth : 0;
-    this.sunRadiusPx = sunD / 2;
-    const shrink = this.planetFitShrink || 1;
-    this.basePlanetRadiusPx = planet ? planetD / 2 / shrink : 0;
-  }
-
-  /** Derives the real per-planet radii in px from the measured base radius,
-      the content-driven size factors and the current adaptive shrink. */
-  private derivePlanetRadii(shrink: number): void {
-    for (let i = 0; i < V3D_SLOTS; i++) {
-      this.planetRadiiPx[i] =
-        this.basePlanetRadiusPx * V3D_PLANET_SIZE_FACTORS[i] * shrink;
-    }
-  }
-
   /**
-   * DEV-TIME GEOMETRY VALIDATION - runs at init and on resize ONLY, never
-   * per frame. Diagnostic LOGGING is dev-only; the containment CORRECTION
-   * (validatePlanetBounds) runs in every build. Never throws: it safely
-   * adjusts what it can and logs useful development warnings. Checks:
-   *   1. sun larger than every planet (>= 1.25x)
-   *   2. sun -> first orbit gap positive and sufficient
-   *   3. neighboring orbit separations vs the exact rA+rB+buffer rule
-   *   4. FULL per-planet boundary containment (validatePlanetBounds):
-   *      every planet, at every sampled orbital position, inside the safe
-   *      usable rectangle; auto-shrinks the orbit set if anything clips.
+   * DEV-TIME VALIDATION - init/resize ONLY, never per frame. Containment is
+   * guaranteed by the uniform fit scale, so this is diagnostics + warnings:
+   *   1. full table: rendered sizes, content fit, rings, overlap, fit scale
+   *   2. the Sun must stay clearly bigger than every planet (>= 1.25x)
+   *   3. a planet must never be smaller than its own content needs
+   *   4. the first orbit must match the Sun -> Planet 1 formula
    */
   private validateOrbitGeometry(): void {
-    if (this.sceneWidth <= 0) return;
-    const dev = isDevMode();
-    const w = this.sceneWidth;
-    const h = this.sceneHeightPx;
-    const usableHalfW = w / 2 - this.usableMarginPx;
-    const usableHalfH = (h > 0 ? h / 2 : w * 0.31) - this.usableMarginPx;
-    const sunR = this.sunRadiusPx;
-    const maxPlanetR = Math.max(...Array.from(this.planetRadiiPx));
+    if (this.sceneWidth <= 0 || !isDevMode()) return;
+    const fit = this.currentFit;
+    const rendered = (r: number) => (r * 2 * fit).toFixed(0);
+    const maxPlanetR = Math.max(...Array.from(this.visualRadiiPx));
 
-    // Radial grid report (dev only).
-    if (dev && maxPlanetR > 0) {
-      console.info(
-        `[values-3d] Geometry: scene ${w.toFixed(0)}x${(h || 0).toFixed(0)}px, margin ${this.usableMarginPx.toFixed(0)}px, sun ${(sunR * 2).toFixed(0)}px, planets ${Array.from(this.planetRadiiPx, (r) => (r * 2).toFixed(0)).join('/')}px, shrink ${this.planetFitShrink.toFixed(2)}, ratio ${this.ellipseRatio.toFixed(2)}, k = ${this.gridRatioK.toFixed(2)}, orbits ${Array.from(this.orbitRx, (r) => r.toFixed(0)).join('/')}px`,
-      );
-    }
+    console.info(
+      `[values-3d] Sizes: scene ${this.sceneWidth.toFixed(0)}x${this.sceneHeightPx.toFixed(0)}px, fit ${fit.toFixed(2)}, tilt ${this.ellipseRatio.toFixed(2)}, orbits ${Array.from(this.orbitRx, (r) => (r * fit).toFixed(0)).join('/')}px (position layer - locked), sun Ø${rendered(this.visualSunRadiusPx)}px (text ${(this.sunTitlePx * fit).toFixed(1)}px), planets Ø${Array.from(this.visualRadiiPx, (r) => rendered(r)).join('/')}px, titles ${Array.from(this.contentTitlePx, (t) => (t * fit).toFixed(1)).join('/')}px`,
+    );
 
-    // 1. Sun dominance (>= 1.25x the largest planet).
-    if (dev && sunR > 0 && maxPlanetR > 0 && sunR < maxPlanetR * 1.25) {
+    // 1. Sun dominance (visual / depth-scaled: the Sun wins at the worst angle).
+    if (this.visualSunRadiusPx > 0 && maxPlanetR > 0 && this.visualSunRadiusPx < maxPlanetR * V3D_SUN_DOMINANCE * V3D_MAX_SCALE) {
       console.warn(
-        `[values-3d] Sun (${(sunR * 2).toFixed(0)}px) should be >= 1.25x the largest planet (${(maxPlanetR * 2).toFixed(0)}px). Increase --v3d-sun or reduce --v3d-planet.`,
+        `[values-3d] Sun Ø${rendered(this.visualSunRadiusPx)}px should be >= ${V3D_SUN_DOMINANCE}x the largest planet Ø${rendered(maxPlanetR)}px (x V3D_MAX_SCALE) - increase V3D_SUN_RADIUS (or reduce V3D_PLANET_RADII).`,
       );
     }
 
-    // 2. Sun -> first orbit gap (Sun EDGE to PLANET 1 EDGE - same formula
-    // as firstOrbitRadius, so the validator enforces the real visible gap).
-    if (
-      dev &&
-      this.orbitRx[0] <
-        sunR + V3D_SUN_TO_FIRST_ORBIT_GAP * w + this.planetRadiiPx[0] * V3D_MAX_SCALE
-    ) {
-      console.warn('[values-3d] First orbit does not clear the sun edge + gap.');
-    }
-
-    // 3. Neighboring orbit separation. On tight stages the full span is
-    // distributed proportionally (accepted, contained proximity - the exact
-    // ideal rA+rB+buffer cannot physically fit six content-sized planets in
-    // one viewport), so only a HARD shortfall warns: radial gap below half
-    // the sum of the two planet radii would risk visible overlap.
-    for (let i = 0; i + 1 < V3D_SLOTS; i++) {
-      const gap = this.orbitRx[i + 1] - this.orbitRx[i];
-      const hardFloor =
-        V3D_HARD_GAP_FRACTION * (this.planetRadiiPx[i] + this.planetRadiiPx[i + 1]);
-      if (gap < hardFloor && dev) {
-        console.warn(
-          `[values-3d] Orbits ${i + 1}->${i + 2}: radial gap ${gap.toFixed(0)}px < hard floor ${hardFloor.toFixed(0)}px. Reduce --v3d-planet.`,
-        );
-      }
-    }
-
-    // 4. FULL BOUNDARY CONTAINMENT (all six planets, all orbital positions).
-    this.validatePlanetBounds(usableHalfW, usableHalfH);
-  }
-
-  /**
-   * Boundary containment check (init/resize, never per frame; runs in ALL
-   * builds so containment is guaranteed in production too - the diagnostic
-   * console warnings are dev-only). Samples each orbit and verifies the
-   * planet (at its maximum depth-scale size) stays inside the safe usable
-   * rectangle horizontally AND vertically. If anything would clip, the
-   * whole orbit set is safely scaled down to fit and the rings are
-   * re-synced - geometry-first containment, never overflow clipping.
-   */
-  private validatePlanetBounds(usableHalfW: number, usableHalfH: number): void {
-    const SAMPLES = 90;
-    const scale = V3D_MAX_SCALE; // planets grow up to this at the near pass
-    let maxOverflowX = 0;
-    let maxOverflowY = 0;
+    // 2. Content fit + neighbour overlap, planet by planet (visual sizes).
     for (let i = 0; i < V3D_SLOTS; i++) {
-      const r = this.planetRadiiPx[i] * scale;
-      for (let s = 0; s < SAMPLES; s++) {
-        const a = (s / SAMPLES) * Math.PI * 2;
-        const [x, y] = this.orbitPoint(i, a);
-        maxOverflowX = Math.max(maxOverflowX, Math.abs(x) + r - usableHalfW);
-        maxOverflowY = Math.max(maxOverflowY, Math.abs(y) + r - usableHalfH);
-      }
-    }
-    if (maxOverflowX > 0.5 || maxOverflowY > 0.5) {
-      // BOTH constraints must hold, so apply the MORE aggressive (smaller)
-      // correction factor - Math.min, never Math.max.
-      const bound = Math.min(
-        maxOverflowX > 0.5 ? usableHalfW / (usableHalfW + maxOverflowX) : 1,
-        maxOverflowY > 0.5
-          ? (usableHalfH - this.planetRadiiPx[V3D_SLOTS - 1] * scale) /
-              (usableHalfH - this.planetRadiiPx[V3D_SLOTS - 1] * scale + maxOverflowY)
-          : 1,
-      );
-      for (let i = 0; i < V3D_SLOTS; i++) {
-        this.orbitRx[i] = Math.max(this.orbitRx[i] * bound, 1);
-        this.orbitRy[i] = this.orbitRx[i] * this.ellipseRatio;
-      }
-      this.writeOrbitCssVariables();
-      if (isDevMode()) {
+      const need = this.requiredRadius(i);
+      if (need > 0 && need > this.visualRadiiPx[i] + 0.5) {
         console.warn(
-          `[values-3d] Planets exceeded the safe rectangle (overflow x=${Math.max(maxOverflowX, 0).toFixed(0)}px, y=${Math.max(maxOverflowY, 0).toFixed(0)}px). Orbits scaled by ${(bound * 100).toFixed(0)}%. Reduce --v3d-planet or --v3d-sun.`,
+          `[values-3d] Planet ${i + 1}: content wants Ø${rendered(need)}px but the sphere is Ø${rendered(this.visualRadiiPx[i])}px - text was scaled down to keep it fully visible.`,
         );
       }
+      if (i < V3D_SLOTS - 1) {
+        const overlap =
+          (this.visualRadiiPx[i] + this.visualRadiiPx[i + 1] - this.bandGap(i)) * fit;
+        if (overlap > 0) {
+          console.info(
+            `[values-3d] Planets ${i + 1}-${i + 2} may overlap by ${overlap.toFixed(0)}px while crossing (V3D_BAND_GAP_RATIO ${V3D_BAND_GAP_RATIO}).`,
+          );
+        }
+      }
     }
-  }
 
-  /** Point on orbit i at parametric angle a (classic projection). */
-  private orbitPoint(i: number, a: number): [number, number] {
-    return [
-      Math.cos(a) * this.orbitRx[i],
-      Math.sin(a) * this.orbitRx[i] * this.ellipseRatio,
-    ];
+    // 3. First orbit matches the Sun -> Planet 1 design formula.
+    const expectedR1 = this.firstOrbitRadius();
+    if (Math.abs(this.orbitRx[0] - expectedR1) > 0.5) {
+      console.warn('[values-3d] First orbit does not match the Sun -> Planet 1 design.');
+    }
   }
 
   /**
@@ -1441,11 +1840,13 @@ export class Values3dComponent {
         if (width === this.sceneWidth && height === this.sceneHeightPx) return;
         this.sceneWidth = width;
         this.sceneHeightPx = height;
-        // Re-measure the bodies (rem/cqw clamps shift with the viewport),
-        // rebuild the orbit geometry, and re-validate (dev only). All of
-        // this runs on resize ticks only - never inside a frame.
-        this.measureBodies();
+        // Full pipeline on every scene size change: frozen position geometry
+        // first, then the content-first visual pass on top of it. Runs on
+        // resize ticks only - never inside a frame.
+        this.applyVisualSizes();
+        this.fitContentToPlanets();
         this.updateOrbitGeometry();
+        this.growVisualBodies();
         this.validateOrbitGeometry();
         this.applyAnimation();
       });
