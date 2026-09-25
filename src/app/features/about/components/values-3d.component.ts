@@ -329,23 +329,11 @@ const V3D_INITIAL_ANGLES = [0.053, 2.593, 3.182, 5.642, 4.143, 0.820];
  */
 const PLANET_SELF_ROTATION_DEG_PER_SEC = 5;
 /**
- * Content visibility model - each planet carries TWO content faces (front
- * + back, identical translated content), so exactly one of them is readable
- * at any time. Each face has its own facing factor (0..1) written by the
- * rAF loop into `--v3d-front`: the front face uses cos(angle), the back
- * face -cos(angle). The CSS derives opacity + depth scale from it, and
- * backface-visibility hides the face whose surface points away from the
- * camera, so the two faces can never be readable at the same time: no
- * duplicated text, no mirroring, no popping - and the content stays
- * readable for about two thirds of every revolution instead of one third.
- * V3D_CONTENT_FADE_START keeps a face FULLY opaque until it is this far
- * off-axis (1 = only when perfectly facing the camera, 0 = fades from the
- * very first degree). The faint floor (V3D_CONTENT_MIN_OPACITY) and the
- * slight shrink (V3D_CONTENT_MIN_SCALE) keep the cycle continuous.
- */
-const V3D_CONTENT_MIN_OPACITY = 0.06;
-const V3D_CONTENT_MIN_SCALE = 0.86;
-const V3D_CONTENT_FADE_START = 0.35;
+  * Content visibility model - each planet carries FOUR identical content
+  * faces (0/90/180/270 degrees around the Y axis), so at least one face
+  * is always facing the camera. backface-visibility (CSS) hides each face
+  * when it points away, so the content never disappears for a long period.
+  */
 
 /** Per-planet visual geometry, recomputed every frame from the orbit angle. */
 interface PlanetGeometry {
@@ -654,14 +642,17 @@ interface PlanetGeometry {
          text - so when the sphere itself has rotated 180deg the composed
          rotation is the identity: Latin and Arabic (RTL) text are rendered
          exactly as upright and as readable as on the front cap. */
-      .v3d-planet-surface.back {
-        transform: rotateY(180deg);
-      }
+      .v3d-planet-surface.face-0 { transform: rotateY(0deg); }
+      .v3d-planet-surface.face-90 { transform: rotateY(90deg); }
+      .v3d-planet-surface.face-180 { transform: rotateY(180deg); }
+      .v3d-planet-surface.face-270 { transform: rotateY(270deg); }
       /* In reduced motion the sphere never rotates, so only the front cap is
          ever presented; the back cap is removed outright (deterministic - it
          does not rely on backface culling). */
       @media (prefers-reduced-motion: reduce) {
-        .v3d-planet-surface.back { display: none; }
+        .v3d-planet-surface.face-90,
+        .v3d-planet-surface.face-180,
+        .v3d-planet-surface.face-270 { display: none; }
       }
 
       /* LAYER 4 (content): printed on the cap; inherits sphere spin; the
@@ -694,12 +685,10 @@ interface PlanetGeometry {
           radial-gradient(circle at 66% 78%, rgba(0, 0, 0, 0.22) 0%, rgba(0, 0, 0, 0) 64%);
         text-shadow: 0 1px 3px rgba(15, 23, 42, 0.55), 0 1px 0 rgba(255, 255, 255, 0.14);
         user-select: none;
-        --v3d-front: 1;
-        opacity: calc(0.06 + 0.94 * var(--v3d-front));
         transform:
           translateZ(calc(var(--v3d-pd, 140px) * var(--v3d-content-z)))
           rotateX(var(--v3d-content-curve))
-          scale(calc(var(--v3d-content-scale) * (0.86 + 0.14 * var(--v3d-front))));
+          scale(var(--v3d-content-scale));
       }
       /* Active planet: glow + brightness emphasis ONLY - never a transform
          (the orbital + self-rotation transforms are owned by the rAF loop),
@@ -986,19 +975,28 @@ interface PlanetGeometry {
               [attr.aria-current]="i === activeIndex() ? 'true' : null"
             >
               <span class="v3d-planet-sphere">
-                <!-- Front cap: the readable face for 0..180deg of the spin. -->
-                <span class="v3d-planet-surface front">
+                <span class="v3d-planet-surface face-0">
                   <span class="v3d-planet-content">
                     <i [class]="value.icon" aria-hidden="true"></i>
                     <span class="v3d-planet-title">{{ value.titleKey | translate }}</span>
                     <span class="v3d-planet-desc">{{ value.descriptionKey | translate }}</span>
                   </span>
                 </span>
-                <!-- Back cap: the SAME bound value (same keys, same data -
-                     no duplicate translations), on the opposite side of the
-                     sphere. aria-hidden because it is a visual duplicate:
-                     screen readers must announce every value only once. -->
-                <span class="v3d-planet-surface back" aria-hidden="true">
+                <span class="v3d-planet-surface face-90" aria-hidden="true">
+                  <span class="v3d-planet-content">
+                    <i [class]="value.icon" aria-hidden="true"></i>
+                    <span class="v3d-planet-title">{{ value.titleKey | translate }}</span>
+                    <span class="v3d-planet-desc">{{ value.descriptionKey | translate }}</span>
+                  </span>
+                </span>
+                <span class="v3d-planet-surface face-180" aria-hidden="true">
+                  <span class="v3d-planet-content">
+                    <i [class]="value.icon" aria-hidden="true"></i>
+                    <span class="v3d-planet-title">{{ value.titleKey | translate }}</span>
+                    <span class="v3d-planet-desc">{{ value.descriptionKey | translate }}</span>
+                  </span>
+                </span>
+                <span class="v3d-planet-surface face-270" aria-hidden="true">
                   <span class="v3d-planet-content">
                     <i [class]="value.icon" aria-hidden="true"></i>
                     <span class="v3d-planet-title">{{ value.titleKey | translate }}</span>
@@ -1117,16 +1115,10 @@ export class Values3dComponent {
   /** Cached self-rotation layers (one per planet) - written by the rAF loop. */
   private spheres: HTMLElement[] = [];
   /**
-   * Cached FRONT content layers (one per planet): the face that is readable
-   * for 0..180deg of the self-rotation. Measured and written per frame.
+   * Cached content layers (one per planet): face-0 is used for measurement;
+   * all four faces share the same content and styling.
    */
   private contents: HTMLElement[] = [];
-  /**
-   * Cached BACK content layers (one per planet): the identical duplicate on
-   * the opposite side of the sphere, readable for 180..360deg. Only the
-   * facing factor is written per frame - never measured twice.
-   */
-  private backContents: HTMLElement[] = [];
   /** Cached Sun content block - measured once, never per frame. */
   private sunContent: HTMLElement | null = null;
   private animationFrame: number | null = null;
@@ -1843,8 +1835,8 @@ export class Values3dComponent {
    * move a body.
    */
   private readContentText(host: HTMLElement): void {
-    const titles = host.querySelectorAll<HTMLElement>('.v3d-planet-surface.front .v3d-planet-title');
-    const descs = host.querySelectorAll<HTMLElement>('.v3d-planet-surface.front .v3d-planet-desc');
+    const titles = host.querySelectorAll<HTMLElement>('.v3d-planet-surface.face-0 .v3d-planet-title');
+    const descs = host.querySelectorAll<HTMLElement>('.v3d-planet-surface.face-0 .v3d-planet-desc');
     for (let i = 0; i < V3D_SLOTS; i++) {
       this.planetTitleText[i] = (titles[i]?.textContent ?? '').trim();
       this.planetDescText[i] = (descs[i]?.textContent ?? '').trim();
@@ -1869,10 +1861,7 @@ export class Values3dComponent {
     // that is measured and sized, the BACK cap only receives its facing
     // factor per frame.
     this.contents = Array.from(
-      host.querySelectorAll<HTMLElement>('.v3d-planet-surface.front > .v3d-planet-content'),
-    );
-    this.backContents = Array.from(
-      host.querySelectorAll<HTMLElement>('.v3d-planet-surface.back > .v3d-planet-content'),
+      host.querySelectorAll<HTMLElement>('.v3d-planet-surface.face-0 > .v3d-planet-content'),
     );
 
     // Text measurement context (one 2D canvas reused for every planet; the
@@ -2051,44 +2040,16 @@ export class Values3dComponent {
       el.style.zIndex = String(g.zIndex);
       el.style.opacity = String(g.opacity);
 
-      // Self-rotation: the SPHERE rotates; BOTH content caps are its physical
-      // children, so they inherit the exact same angle, speed and clock. Each
-      // cap gets its OWN facing factor (0..1) written into --v3d-front, from
-      // which the CSS derives the opacity + depth scale: the front cap uses
-      // cos(angle), the back cap -cos(angle). Between them there is therefore
-      // ALWAYS a readable face: as one approaches the edge-on orientation the
-      // other one comes round, so the content never disappears for a long
-      // period. backface-visibility (CSS) hides the cap that points away, so
-      // both can never be readable at the same time - no duplicated text.
-      // Fade curve: FULLY opaque until the cap is V3D_CONTENT_FADE_START off
-      // axis (so heavily foreshortened text is never shown half-transparent),
-      // then a smooth ramp to the faint floor exactly at the edge-on moment.
+      // Self-rotation: the SPHERE rotates; ALL FOUR content faces are its
+      // physical children, so they inherit the exact same angle, speed and
+      // clock. backface-visibility (CSS) hides each face when it points away,
+      // so at least one face is always facing the camera - no long invisible
+      // period, no duplicated text.
       const sphere = this.spheres[i];
       if (sphere) {
         sphere.style.transform = this.composeSelfRotationTransform(this.selfAngles[i]);
       }
-      const facing = Math.cos(this.selfAngles[i]);
-      const front = this.contents[i];
-      if (front) {
-        front.style.setProperty('--v3d-front', this.faceFactor(facing).toFixed(3));
-      }
-      const back = this.backContents[i];
-      if (back) {
-        back.style.setProperty('--v3d-front', this.faceFactor(-facing).toFixed(3));
-      }
     }
-  }
-
-  /**
-   * Facing factor (0..1) of ONE content cap: 1 while the cap is comfortably
-   * facing the camera (cos >= V3D_CONTENT_FADE_START), then a smoothstep down
-   * to 0 exactly at the edge-on orientation. Both caps use it with opposite
-   * signs, so the hand-over happens in the (zero-width) edge-on instant.
-   */
-  private faceFactor(cosine: number): number {
-    const start = Math.min(0.99, Math.max(0, V3D_CONTENT_FADE_START));
-    const t = Math.min(1, Math.max(0, (cosine - start) / (1 - start)));
-    return t * t * (3 - 2 * t); // smoothstep
   }
 
   private scheduleAutoplay(ms: number): void {
