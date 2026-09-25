@@ -331,8 +331,12 @@ const PLANET_SELF_ROTATION_DEG_PER_SEC = 5;
 /**
   * Content visibility model - each planet carries FOUR identical content
   * faces (0/90/180/270 degrees around the Y axis), so at least one face
-  * is always facing the camera. backface-visibility (CSS) hides each face
-  * when it points away, so the content never disappears for a long period.
+  * is always facing the camera. backface-visibility (CSS) hard-culls each
+  * face when it points away, while the per-face `--v3d-face` factor
+  * (see applyAnimation) adds a narrow soft crossfade around the 45-degree
+  * handover midpoint: the outgoing face fades as the incoming face rises,
+  * so the swap reads as one face turning into the next - never a flash,
+  * pop, gap, or two fully-opaque overlapping faces.
   */
 
 /** Per-planet visual geometry, recomputed every frame from the orbit angle. */
@@ -611,18 +615,19 @@ interface PlanetGeometry {
          the content occupies the sphere surface, exactly like print on a
          globe. It rotates WITH the sphere (child of LAYER 2).
 
-         TWO-SIDED CONTENT: every planet has TWO of these caps (.front and
-         .back), both inside the rotating sphere, both carrying the very same
-         translated icon/title/description (the template renders the same
-         bound value twice - no duplicated data, no new translation keys).
-         Each cap is hidden by backface-visibility as soon as its surface
-         points away from the camera, so exactly ONE cap is readable at any
-         moment: no duplicated text, no mirrored text, no popping. Because a
+         FOUR-FACE CONTENT: every planet has FOUR of these caps
+         (.face-0/.face-90/.face-180/.face-270), all inside the rotating
+         sphere, all carrying the very same translated icon/title/description
+         (the template renders the same bound value four times - no duplicated
+         data, no new translation keys). Each cap is hard-culled by
+         backface-visibility as soon as its surface points away from the
+         camera, and the per-face --v3d-face factor (written per frame by the
+         existing rAF loop) adds a narrow soft crossfade around the handover
+         midpoint, so at least ONE cap is always readable: no duplicated text,
+         no mirrored text, no popping, no all-faces-invisible gap. Because a
          cap at 180deg of sphere rotation is geometrically identical to a cap
          at 0deg (R(180)*R(180) = identity), the face that takes over is
-         exactly as close to the camera and exactly as large as the first -
-         the content therefore stays readable for about two thirds of every
-         revolution instead of one third.
+         exactly as close to the camera and exactly as large as the first.
          The sphere body on the static button is never affected and stays
          fully visible. No overflow:hidden either - it would flatten
          preserve-3d and kill the depth effect; containment is guaranteed
@@ -646,9 +651,9 @@ interface PlanetGeometry {
       .v3d-planet-surface.face-90 { transform: rotateY(90deg); }
       .v3d-planet-surface.face-180 { transform: rotateY(180deg); }
       .v3d-planet-surface.face-270 { transform: rotateY(270deg); }
-      /* In reduced motion the sphere never rotates, so only the front cap is
-         ever presented; the back cap is removed outright (deterministic - it
-         does not rely on backface culling). */
+      /* In reduced motion the sphere never rotates, so only the face-0 cap is
+         ever presented; the other faces are removed outright (deterministic -
+         it does not rely on backface culling). */
       @media (prefers-reduced-motion: reduce) {
         .v3d-planet-surface.face-90,
         .v3d-planet-surface.face-180,
@@ -656,14 +661,20 @@ interface PlanetGeometry {
       }
 
       /* LAYER 4 (content): printed on the cap; inherits sphere spin; the
-         --v3d-front factor fades/shrinks the whole icon+title+desc as one
-         surface group front->back; convex radial mask + circular clip.
-         The larger diameter is used for a comfortable internal area so the
-         icon / wrapping title / full wrapping description sit well inside
-         the disc and never touch the spherical edge. Content stays centered
-         (justify-content: center) so a long description does not push the
-         icon+title toward the top. overflow:hidden only serves the circular
-         clip - it is never used to hide text (no ellipsis / clamp). */
+         per-face --v3d-face factor (0..1, written per frame by the existing
+         rAF loop from the face's angular distance to the camera) fades +
+         slightly scales the whole icon+title+desc as one surface group:
+         the face closest to the camera stays at opacity ~1 / scale ~1,
+         neighbours crossfade narrowly around the handover midpoint, and a
+         faint floor keeps the cycle continuous. Applied PER FACE - never to
+         the whole planet - so one face is always readable. Convex radial
+         mask + circular clip. The larger diameter is used for a comfortable
+         internal area so the icon / wrapping title / full wrapping
+         description sit well inside the disc and never touch the spherical
+         edge. Content stays centered (justify-content: center) so a long
+         description does not push the icon+title toward the top.
+         overflow:hidden only serves the circular clip - it is never used
+         to hide text (no ellipsis / clamp). */
       .v3d-planet-content {
         position: absolute;
         inset: 0;
@@ -685,10 +696,12 @@ interface PlanetGeometry {
           radial-gradient(circle at 66% 78%, rgba(0, 0, 0, 0.22) 0%, rgba(0, 0, 0, 0) 64%);
         text-shadow: 0 1px 3px rgba(15, 23, 42, 0.55), 0 1px 0 rgba(255, 255, 255, 0.14);
         user-select: none;
+        --v3d-face: 1;
+        opacity: calc(0.06 + 0.94 * var(--v3d-face));
         transform:
           translateZ(calc(var(--v3d-pd, 140px) * var(--v3d-content-z)))
           rotateX(var(--v3d-content-curve))
-          scale(var(--v3d-content-scale));
+          scale(calc(var(--v3d-content-scale) * (0.86 + 0.14 * var(--v3d-face))));
       }
       /* Active planet: glow + brightness emphasis ONLY - never a transform
          (the orbital + self-rotation transforms are owned by the rAF loop),
@@ -899,7 +912,7 @@ interface PlanetGeometry {
         .v3d-planet-sphere { transform: none; }
         /* !important overrides any inline value already written by the
            rAF loop before the preference changed - content stays readable. */
-        .v3d-planet-content { opacity: 1 !important; --v3d-front: 1 !important; }
+        .v3d-planet-content { opacity: 1 !important; --v3d-face: 1 !important; }
         .v3d-planet.active { filter: none; }
         .v3d-planet.active::after { box-shadow: none; }
       }
@@ -1115,10 +1128,12 @@ export class Values3dComponent {
   /** Cached self-rotation layers (one per planet) - written by the rAF loop. */
   private spheres: HTMLElement[] = [];
   /**
-   * Cached content layers (one per planet): face-0 is used for measurement;
-   * all four faces share the same content and styling.
+   * Cached FOUR content layers per planet (face-0/90/180/270): face-0 is
+   * used for measurement; all four receive their own per-face `--v3d-face`
+   * factor per frame. All four share the same content and styling.
    */
   private contents: HTMLElement[] = [];
+  private faceContents: HTMLElement[][] = [];
   /** Cached Sun content block - measured once, never per frame. */
   private sunContent: HTMLElement | null = null;
   private animationFrame: number | null = null;
@@ -1830,9 +1845,9 @@ export class Values3dComponent {
   /**
    * Reads the REAL rendered text of every planet (the translated string of
    * the active language) plus the content font family - init/resize only.
-   * Scoped to the FRONT caps: the back cap carries the identical string, so
-   * measuring it twice would be pure waste. Sizes only - nothing here can
-   * move a body.
+   * Scoped to the face-0 caps: every face carries the identical string, so
+   * measuring it four times would be pure waste. Sizes only - nothing here
+   * can move a body.
    */
   private readContentText(host: HTMLElement): void {
     const titles = host.querySelectorAll<HTMLElement>('.v3d-planet-surface.face-0 .v3d-planet-title');
@@ -1857,12 +1872,19 @@ export class Values3dComponent {
 
     this.planets = Array.from(host.querySelectorAll<HTMLElement>('.v3d-planet'));
     this.spheres = Array.from(host.querySelectorAll<HTMLElement>('.v3d-planet-sphere'));
-    // The two content caps are cached separately: the FRONT cap is the one
-    // that is measured and sized, the BACK cap only receives its facing
-    // factor per frame.
+    // The FOUR content faces are cached per planet: face-0 is the one
+    // that is measured and sized, and every face receives its OWN
+    // per-face facing factor (`--v3d-face`) per frame from the existing
+    // rAF loop - no new loop, timer, or signal.
     this.contents = Array.from(
       host.querySelectorAll<HTMLElement>('.v3d-planet-surface.face-0 > .v3d-planet-content'),
     );
+    this.faceContents = this.planets.map((planet) => [
+      planet.querySelector<HTMLElement>('.v3d-planet-surface.face-0 > .v3d-planet-content'),
+      planet.querySelector<HTMLElement>('.v3d-planet-surface.face-90 > .v3d-planet-content'),
+      planet.querySelector<HTMLElement>('.v3d-planet-surface.face-180 > .v3d-planet-content'),
+      planet.querySelector<HTMLElement>('.v3d-planet-surface.face-270 > .v3d-planet-content'),
+    ].filter((el): el is HTMLElement => el !== null));
 
     // Text measurement context (one 2D canvas reused for every planet; the
     // real text is measured with the real font so FR / EN / AR all fit).
@@ -2042,14 +2064,48 @@ export class Values3dComponent {
 
       // Self-rotation: the SPHERE rotates; ALL FOUR content faces are its
       // physical children, so they inherit the exact same angle, speed and
-      // clock. backface-visibility (CSS) hides each face when it points away,
-      // so at least one face is always facing the camera - no long invisible
-      // period, no duplicated text.
+      // clock. backface-visibility (CSS) hard-culls each face when it points
+      // away, while each face gets its OWN facing factor (`--v3d-face`,
+      // 0..1 from its angular distance to the camera): the face closest to
+      // the camera stays at ~1 while neighbours crossfade narrowly around
+      // the handover midpoint - so one face is always readable, never a
+      // whole-planet fade, never all faces invisible.
       const sphere = this.spheres[i];
       if (sphere) {
         sphere.style.transform = this.composeSelfRotationTransform(this.selfAngles[i]);
       }
+      const faces = this.faceContents[i];
+      if (faces) {
+        for (let f = 0; f < faces.length; f++) {
+          const faceEl = faces[f];
+          if (!faceEl) continue;
+          faceEl.style.setProperty(
+            '--v3d-face',
+            this.faceFactor(this.selfAngles[i] + (f * Math.PI) / 2).toFixed(3),
+          );
+        }
+      }
     }
+  }
+
+  /**
+   * Per-FACE facing factor (0..1) from the face's angular distance to the
+   * camera: 1 while the face squarely faces the camera, smoothly crossfading
+   * to 0 past the 45-degree handover midpoint (fully out by 67.5 degrees,
+   * well before backface-visibility culls it at 90). Adjacent faces therefore
+   * hand over as outgoing-fades/incoming-rises - one face is always readable,
+   * never two fully opaque, never all invisible. Never applied to the whole
+   * planet, only per face.
+   */
+  private faceFactor(faceAngle: number): number {
+    const twoPi = Math.PI * 2;
+    let delta = faceAngle % twoPi;
+    if (delta > Math.PI) delta -= twoPi;
+    if (delta < -Math.PI) delta += twoPi;
+    const cosine = Math.cos(delta);
+    const cutoff = Math.cos((67.5 * Math.PI) / 180);
+    const t = Math.min(1, Math.max(0, (cosine - cutoff) / (1 - cutoff)));
+    return t * t * (3 - 2 * t); // smoothstep
   }
 
   private scheduleAutoplay(ms: number): void {
