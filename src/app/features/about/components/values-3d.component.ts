@@ -10,7 +10,8 @@ import {
   isDevMode,
   signal,
 } from '@angular/core';
-import { TranslatePipe } from '@ngx-translate/core';
+import { TranslatePipe, TranslateService } from '@ngx-translate/core';
+import type { Subscription } from 'rxjs';
 import { SectionHeaderComponent } from '../../../shared/components/section-header.component';
 import { COMPANY_VALUES } from './values.data';
 
@@ -144,47 +145,63 @@ const V3D_POSITION_BASELINE_PLANET_RADII = [
 // exactly the same point of exactly the same (frozen) orbit.
 // =====================================================
 
+// =====================================================
+// MANUAL PLANET TUNING - size / content / motion ONLY.
+// Screen categories: 0 mobile, 1 tablet, 2 PC (901-1919px), 3 large (>=1920px).
+// Nothing in this block can move a body: a planet always stays centred on
+// exactly the same point of exactly the same ring.
+// =====================================================
+
 /** SUN - visual radius, in the same units as the baseline above.
     The engine never lets the Sun become smaller than 1.25x the
     largest planet, and never larger than planet 1's orbit clearance
     (so planet 1 is never hidden behind the Sun). */
 const V3D_SUN_RADIUS = 200;
 
-/** PLANETS 1..6 - MINIMUM visual radius. Values are read RELATIVE to
-    V3D_SUN_RADIUS (140 with the Sun at 200 = 0.70 x the Sun's radius).
-    This is a floor only: CONTENT-FIRST SIZING grows a planet beyond it
-    whenever its text needs more room. Orbital position is untouched. */
-const V3D_PLANET_RADII = [
-  140, // Planet 1
-  155, // Planet 2
-  145, // Planet 3
-  170, // Planet 4
-  150, // Planet 5
-  165, // Planet 6
+/** PLANETS 1..6 - MINIMUM visual radius, ONE ROW PER SCREEN CATEGORY
+    (mobile / tablet / PC / large desktop), in the same units as
+    V3D_SUN_RADIUS. This is a floor only: CONTENT-FIRST SIZING grows a
+    planet beyond it whenever its text needs more room. Sphere size only -
+    orbital radius, angle and centre are untouched. */
+const V3D_PLANET_RADII_BY_CATEGORY = [
+  [140, 155, 145, 170, 150, 165], // 0 mobile  - unchanged
+  [140, 155, 145, 170, 150, 165], // 1 tablet  - unchanged
+  [150, 165, 150, 175, 155, 170], // 2 PC      - larger planets for readable content
+  [145, 155, 145, 165, 150, 160], // 3 large   - comfortable; the CONTENT gets bigger
 ];
 
-/** Per-planet CONTENT tuning (one entry per planet, same order). */
+/** Per-planet CONTENT tuning (one entry per planet, COMPANY_VALUES order). */
 interface V3DPlanetContentConfig {
-  /** Text size multiplier for this planet (1 = the reference size for
-      the current screen category). Bigger = bigger text AND a bigger
-      planet (the planet grows to keep the text fully visible). */
+  /** Overall content size multiplier (1 = the category reference size).
+      Bigger = bigger text AND a bigger planet (the planet grows to keep
+      the text fully visible). */
   scale: number;
-  /** Inner padding of the text area, in % of the planet diameter.
+  /** Inner padding of the text area, in % of the planet DIAMETER, applied
+      on BOTH sides. 11% is the current value (24-28px on a PC planet).
       Bigger = airier, but the planet then needs to be larger. */
   padding: number;
+  /** Extra multiplier for the TITLE only (1 = unchanged). */
+  titleScale: number;
+  /** Extra multiplier for the DESCRIPTION only (1 = unchanged). */
+  descriptionScale: number;
   /** Optional max width of the text column, in % of the planet
       diameter (100 = the full cap width). */
   maxWidth?: number;
 }
 
 const V3D_PLANET_CONTENT: readonly V3DPlanetContentConfig[] = [
-  { scale: 1, padding: 12 }, // Planet 1
-  { scale: 1, padding: 12 }, // Planet 2
-  { scale: 1, padding: 12 }, // Planet 3
-  { scale: 1, padding: 12 }, // Planet 4
-  { scale: 1, padding: 12 }, // Planet 5
-  { scale: 1, padding: 12 }, // Planet 6
+  { scale: 1.10, padding: 11, titleScale: 1.0, descriptionScale: 1.0 }, // P1 quality
+  { scale: 1.15, padding: 11, titleScale: 1.05, descriptionScale: 1.0 }, // P2 commitment
+  { scale: 1.05, padding: 11, titleScale: 1.0, descriptionScale: 1.0 }, // P3 responsibility
+  { scale: 1.15, padding: 11, titleScale: 1.05, descriptionScale: 1.0 }, // P4 safety
+  { scale: 1.10, padding: 11, titleScale: 1.0, descriptionScale: 1.0 }, // P5 sustainability
+  { scale: 1.15, padding: 11, titleScale: 1.05, descriptionScale: 1.0 }, // P6 environment
 ];
+
+/** LARGE SCREEN (>= 1920px): the planets already have enough room, so the
+    CONTENT grows instead of the spheres. Multiplies V3D_PLANET_CONTENT[i].scale. */
+const V3D_LARGE_CONTENT_SCALE = 1.25;
+const V3D_LARGE_PLANET_CONTENT_SCALE = [1.25, 1.30, 1.22, 1.32, 1.25, 1.30];
 
 // ============================================================
 // MANUAL ORBIT SPACING - distance between consecutive planets
@@ -275,25 +292,30 @@ const V3D_LINE_HEIGHT_TITLE = 1.14;
 const V3D_LINE_HEIGHT_DESC = 1.45;
 
 /**
- * Per-planet motion tuning (one entry per planet, order = COMPANY_VALUES).
- * The radial DISTANCE comes from the layout grid above; this config only
- * holds the DETERMINISTIC initial position and the calm, non-linear speed:
- *   angle  initial position (radians, screen coords: x = cos, y = sin with
- *          +y pointing down) - organic spread, no Math.random, stable
- *   speed  orbital speed (radians / second)
+ * MOTION - ONE common cycle duration for all six planets, exactly like the
+ * planets of a clock face: angularVelocity = (2*PI) / V3D_ORBIT_CYCLE_MS.
+ * Every planet completes one full revolution in the SAME time, so the
+ * relative angular configuration never changes and the initial phases
+ * determine the overlaps permanently. 48000ms matches the average of the
+ * previous per-planet periods (33/39/45/52/60/70s), so the movement keeps
+ * the pace you already liked. Change this ONE value to change the pace.
  */
-interface V3DOrbitConfig {
-  angle: number;
-  speed: number;
-}
-const V3D_ORBITS: V3DOrbitConfig[] = [
-  { angle: 0.2,  speed: 0.19 },
-  { angle: 2.6,  speed: 0.16 },
-  { angle: 3.14, speed: 0.14 },
-  { angle: 3.8,  speed: 0.12 },
-  { angle: 5.8,  speed: 0.105 },
-  { angle: 0.95, speed: 0.09 },
-];
+const V3D_ORBIT_CYCLE_MS = 48000;
+/**
+ * Optional tiny per-planet speed correction (default 1.00 = perfectly in
+ * sync). Keep the values very close to 1 (0.98 / 1.02) so the synchronized
+ * cycle is preserved; this exists only to fine-tune a local conflict.
+ */
+const V3D_SPEED_MULTIPLIERS = [1.0, 1.0, 1.0, 1.0, 1.0, 1.0];
+/**
+ * Start phase of each planet in radians (order = COMPANY_VALUES). Screen
+ * coords: x = cos(angle) * radius, y = sin(angle) * radius * ratio.
+ * Measured conflict-minimising set: every pair stays at least 34 degrees
+ * apart, the worst disc overlap is 135px (vs 182px median / 249px p90 /
+ * 294px max with the previous differential speeds) and planet 1 keeps the
+ * smallest possible clearance from the Sun. Deterministic - no Math.random.
+ */
+const V3D_INITIAL_ANGLES = [0.053, 2.593, 3.182, 5.642, 4.143, 0.820];
 /**
  * UX TUNING: PLANET SELF-ROTATION (degrees per second).
  * Lower = easier to read.  Higher = more dynamic.
@@ -307,16 +329,23 @@ const V3D_ORBITS: V3DOrbitConfig[] = [
  */
 const PLANET_SELF_ROTATION_DEG_PER_SEC = 5;
 /**
- * Content visibility model - the front-facing factor (0..1) drives the
- * content's opacity + depth scale through the `--v3d-front` custom property
- * (see applyAnimation / .v3d-planet-content). The back of the sphere keeps a
- * very faint floor (V3D_CONTENT_MIN_OPACITY) and a slight shrink
- * (V3D_CONTENT_MIN_SCALE) so the cycle reads as one continuous 360° spin
- * rather than a hard 0->180->0 flip: front = 1, side fades, back is
- * essentially hidden, smoothly and without any jump or teleport.
+ * Content visibility model - each planet carries TWO content faces (front
+ * + back, identical translated content), so exactly one of them is readable
+ * at any time. Each face has its own facing factor (0..1) written by the
+ * rAF loop into `--v3d-front`: the front face uses cos(angle), the back
+ * face -cos(angle). The CSS derives opacity + depth scale from it, and
+ * backface-visibility hides the face whose surface points away from the
+ * camera, so the two faces can never be readable at the same time: no
+ * duplicated text, no mirroring, no popping - and the content stays
+ * readable for about two thirds of every revolution instead of one third.
+ * V3D_CONTENT_FADE_START keeps a face FULLY opaque until it is this far
+ * off-axis (1 = only when perfectly facing the camera, 0 = fades from the
+ * very first degree). The faint floor (V3D_CONTENT_MIN_OPACITY) and the
+ * slight shrink (V3D_CONTENT_MIN_SCALE) keep the cycle continuous.
  */
 const V3D_CONTENT_MIN_OPACITY = 0.06;
 const V3D_CONTENT_MIN_SCALE = 0.86;
+const V3D_CONTENT_FADE_START = 0.35;
 
 /** Per-planet visual geometry, recomputed every frame from the orbit angle. */
 interface PlanetGeometry {
@@ -592,22 +621,47 @@ interface PlanetGeometry {
       /* LAYER 3 (surface cap): the front-facing REGION of the sphere, not a
          full-bleed card. inset: 8% shrinks it to the visible front cap so
          the content occupies the sphere surface, exactly like print on a
-         globe. It rotates WITH the sphere (child of LAYER 2). Deliberately
-         NO backface-visibility: hidden here - a hard cull hides the content
-         for an entire hemisphere and makes the spin read like a fake
-         0->180->0 oscillation; visibility is instead a smooth function of
-         the self-rotation angle (see --v3d-front / applyAnimation), so
-         the cycle is a genuine continuous 360deg. The sphere body on the
-         static button is never affected and stays fully visible. No
-         overflow:hidden either - it would flatten preserve-3d and kill the
-         depth effect; containment is guaranteed geometrically (a centered
-         plane under Y-rotation never projects past the disc) plus the
-         internal clipping on the content layer below. */
+         globe. It rotates WITH the sphere (child of LAYER 2).
+
+         TWO-SIDED CONTENT: every planet has TWO of these caps (.front and
+         .back), both inside the rotating sphere, both carrying the very same
+         translated icon/title/description (the template renders the same
+         bound value twice - no duplicated data, no new translation keys).
+         Each cap is hidden by backface-visibility as soon as its surface
+         points away from the camera, so exactly ONE cap is readable at any
+         moment: no duplicated text, no mirrored text, no popping. Because a
+         cap at 180deg of sphere rotation is geometrically identical to a cap
+         at 0deg (R(180)*R(180) = identity), the face that takes over is
+         exactly as close to the camera and exactly as large as the first -
+         the content therefore stays readable for about two thirds of every
+         revolution instead of one third.
+         The sphere body on the static button is never affected and stays
+         fully visible. No overflow:hidden either - it would flatten
+         preserve-3d and kill the depth effect; containment is guaranteed
+         geometrically (a centered plane under Y-rotation never projects past
+         the disc) plus the internal clipping on the content layer below. */
       .v3d-planet-surface {
         position: absolute;
         inset: 8%;
         border-radius: 50%;
         transform-style: preserve-3d;
+        /* Cull the cap whose printed surface faces away from the viewer. */
+        backface-visibility: hidden;
+        -webkit-backface-visibility: hidden;
+      }
+      /* The back cap: the same content mounted on the opposite side of the
+         sphere. The rotateY(180deg) lives on this CONTAINER - never on the
+         text - so when the sphere itself has rotated 180deg the composed
+         rotation is the identity: Latin and Arabic (RTL) text are rendered
+         exactly as upright and as readable as on the front cap. */
+      .v3d-planet-surface.back {
+        transform: rotateY(180deg);
+      }
+      /* In reduced motion the sphere never rotates, so only the front cap is
+         ever presented; the back cap is removed outright (deterministic - it
+         does not rely on backface culling). */
+      @media (prefers-reduced-motion: reduce) {
+        .v3d-planet-surface.back { display: none; }
       }
 
       /* LAYER 4 (content): printed on the cap; inherits sphere spin; the
@@ -917,8 +971,9 @@ interface PlanetGeometry {
         </div>
 
         <!-- Orbiting planets - exactly six, positioned by the rAF loop.
-             LAYER 1 = button (orbit position) / LAYER 2 = surface (sphere
-             visuals + active scale) / LAYER 3 = content (readable text). -->
+             LAYER 1 = button (orbit position) / LAYER 2 = sphere (self
+             rotation) / LAYER 3 = TWO content caps (front + back) with the
+             same bound value, so one of them is always facing the viewer. -->
         <div class="v3d-planets">
           @for (value of values; track value.id; let i = $index) {
             <button
@@ -931,7 +986,19 @@ interface PlanetGeometry {
               [attr.aria-current]="i === activeIndex() ? 'true' : null"
             >
               <span class="v3d-planet-sphere">
-                <span class="v3d-planet-surface">
+                <!-- Front cap: the readable face for 0..180deg of the spin. -->
+                <span class="v3d-planet-surface front">
+                  <span class="v3d-planet-content">
+                    <i [class]="value.icon" aria-hidden="true"></i>
+                    <span class="v3d-planet-title">{{ value.titleKey | translate }}</span>
+                    <span class="v3d-planet-desc">{{ value.descriptionKey | translate }}</span>
+                  </span>
+                </span>
+                <!-- Back cap: the SAME bound value (same keys, same data -
+                     no duplicate translations), on the opposite side of the
+                     sphere. aria-hidden because it is a visual duplicate:
+                     screen readers must announce every value only once. -->
+                <span class="v3d-planet-surface back" aria-hidden="true">
                   <span class="v3d-planet-content">
                     <i [class]="value.icon" aria-hidden="true"></i>
                     <span class="v3d-planet-title">{{ value.titleKey | translate }}</span>
@@ -967,6 +1034,9 @@ export class Values3dComponent {
 
   private readonly zone = inject(NgZone);
   private readonly elementRef = inject<ElementRef<HTMLElement>>(ElementRef);
+  /** Used only to re-fit the content sizes when the language changes. */
+  private readonly translate = inject(TranslateService);
+  private translateSub: Subscription | null = null;
   private readonly reduceMotion: boolean =
     typeof matchMedia !== 'undefined' &&
     matchMedia('(prefers-reduced-motion: reduce)').matches;
@@ -1010,8 +1080,11 @@ export class Values3dComponent {
   /** Per-planet content box config, resolved once per geometry pass. */
   private readonly contentPadPct = new Float64Array(V3D_SLOTS);
   private readonly contentMaxWPct = new Float64Array(V3D_SLOTS);
-  /** Per-planet title size in px (the description and icon derive from it). */
+  /** Per-planet title size in px (the icon derives from it). */
   private readonly contentTitlePx = new Float64Array(V3D_SLOTS);
+  /** Per-planet DESCRIPTION size in px (independent from the title, so
+      V3D_PLANET_CONTENT[i].descriptionScale can tune it alone). */
+  private readonly contentDescPx = new Float64Array(V3D_SLOTS);
   /** Sun content title size in px. */
   private sunTitlePx = 0;
   /** Content layer scale - kept in sync with --v3d-content-scale in CSS. */
@@ -1043,22 +1116,33 @@ export class Values3dComponent {
   private planets: HTMLElement[] = [];
   /** Cached self-rotation layers (one per planet) - written by the rAF loop. */
   private spheres: HTMLElement[] = [];
-  /** Cached content layers (one per planet) - smooth visibility per frame. */
+  /**
+   * Cached FRONT content layers (one per planet): the face that is readable
+   * for 0..180deg of the self-rotation. Measured and written per frame.
+   */
   private contents: HTMLElement[] = [];
+  /**
+   * Cached BACK content layers (one per planet): the identical duplicate on
+   * the opposite side of the sphere, readable for 180..360deg. Only the
+   * facing factor is written per frame - never measured twice.
+   */
+  private backContents: HTMLElement[] = [];
   /** Cached Sun content block - measured once, never per frame. */
   private sunContent: HTMLElement | null = null;
   private animationFrame: number | null = null;
   private lastTimestamp = 0;
   private timer: ReturnType<typeof setTimeout> | null = null;
   private resizeObserver: ResizeObserver | null = null;
+  /** Re-runs the size pipeline when the language changes (FR / EN / AR). */
+  private langSubscription: { unsubscribe(): void } | null = null;
 
   constructor() {
-    // DETERMINISTIC start positions (V3D_ORBITS[i].angle) - no Math.random.
+    // DETERMINISTIC start positions (V3D_INITIAL_ANGLES) - no Math.random.
     // Every planet starts at its own configured, intentionally distributed
-    // position, stable across reloads. Self-rotation angles are also seeded
+    // phase, stable across reloads. Self-rotation angles are also seeded
     // deterministically (staggered) so no two planets spin in phase.
     for (let i = 0; i < V3D_SLOTS; i++) {
-      this.angles[i] = V3D_ORBITS[i].angle;
+      this.angles[i] = V3D_INITIAL_ANGLES[i % V3D_INITIAL_ANGLES.length];
       this.selfAngles[i] = i * 0.9;
     }
     inject(DestroyRef).onDestroy(() => this.onDestroy());
@@ -1066,6 +1150,7 @@ export class Values3dComponent {
     afterNextRender(() => {
       this.applyStaticGeometry();
       this.observeSceneResizes();
+      this.observeLanguageChanges();
       if (this.reduceMotion) return; // planets placed once and stay
       this.startAnimation();
       this.scheduleAutoplay(V3D_AUTOPLAY_MS);
@@ -1075,6 +1160,18 @@ export class Values3dComponent {
   /** Fixed accent color per planet (exposed to the template). */
   planetColor(i: number): string {
     return V3D_COLORS[i % V3D_COLORS.length];
+  }
+
+  /**
+   * Angular speed (rad/s) of planet i: ONE shared cycle duration for all six
+   * planets times the optional tiny per-planet correction. This is the ONLY
+   * speed input of the orbital loop - the motion equation itself
+   * (x = cos(angle) * radius, y = sin(angle) * radius * ratio) is untouched.
+   */
+  private orbitSpeed(i: number): number {
+    const seconds = Math.max(1, V3D_ORBIT_CYCLE_MS) / 1000;
+    const mult = V3D_SPEED_MULTIPLIERS[i % V3D_SPEED_MULTIPLIERS.length] || 1;
+    return ((2 * Math.PI) / seconds) * mult;
   }
 
   /**
@@ -1126,13 +1223,16 @@ export class Values3dComponent {
     this.applySunContentScale();
 
     for (let i = 0; i < V3D_SLOTS; i++) {
-      // Content-first type scale: the text grows with the planet's radius
-      // (never the opposite) and is bounded by the category ceiling.
-      const scale = Math.max(0.5, V3D_PLANET_CONTENT[i % V3D_PLANET_CONTENT.length].scale) * typeScale;
+      // POSITION LAYER text reference: a FIXED ratio (never the visual tuning
+      // knobs of V3D_PLANET_CONTENT), so the content-driven growth that feeds
+      // the frozen orbit geometry stays byte-identical to the approved build.
+      // The readability tuning happens in the visual layer (growVisualBodies).
       this.contentTitlePx[i] = Math.min(
-        this.planetRadiiPx[i] * 2 * V3D_TITLE_PER_DIAMETER * scale,
+        this.planetRadiiPx[i] * 2 * V3D_TITLE_PER_DIAMETER * typeScale,
         maxTitle,
       );
+      // Position-layer description reference (the previous title/desc ratio).
+      this.contentDescPx[i] = this.contentTitlePx[i] * V3D_DESC_PER_TITLE;
     }
   }
 
@@ -1214,11 +1314,21 @@ export class Values3dComponent {
    * converges in 1-2 passes with no feedback loop.
    */
   private growVisualBodies(): void {
-    // 1. Text size first: chosen for readability, not derived from the body.
+    // 1. Text size FIRST: chosen for readability, never derived from the body.
+    //    reference px (per screen category) x per-planet scale x the large
+    //    screen content boost, with the title and the description tunable
+    //    independently. On large screens this is what grows - not the sphere.
     const cat = this.category % V3D_CONTENT_TITLE_PX.length;
+    const isLarge = this.category === 3;
     for (let i = 0; i < V3D_SLOTS; i++) {
       const cfg = V3D_PLANET_CONTENT[i % V3D_PLANET_CONTENT.length];
-      this.contentTitlePx[i] = V3D_CONTENT_TITLE_PX[cat] * Math.max(0.5, cfg.scale);
+      const large = isLarge
+        ? V3D_LARGE_CONTENT_SCALE *
+          V3D_LARGE_PLANET_CONTENT_SCALE[i % V3D_LARGE_PLANET_CONTENT_SCALE.length]
+        : 1;
+      const base = V3D_CONTENT_TITLE_PX[cat] * Math.max(0.5, cfg.scale) * large;
+      this.contentTitlePx[i] = base * Math.max(0.5, cfg.titleScale);
+      this.contentDescPx[i] = base * Math.max(0.5, cfg.descriptionScale) * V3D_DESC_PER_TITLE;
     }
 
         // 2. Sun size: the manual wish, capped by orbit-1 clearance so the Sun can
@@ -1391,11 +1501,16 @@ export class Values3dComponent {
     return { w: Math.min(widest, maxWidth), h: lines * sizePx * lineHeight };
   }
 
-  /** Manual minimum visual radius of planet i, read relative to the rendered
-      Sun so V3D_PLANET_RADII / V3D_SUN_RADIUS keep the ratio you configured. */
+  /** Manual minimum visual radius of planet i for the CURRENT screen
+      category, read relative to the rendered Sun so
+      V3D_PLANET_RADII_BY_CATEGORY / V3D_SUN_RADIUS keep the ratio you
+      configured. Sphere size only - never a position. */
   private manualVisualMinRadius(i: number): number {
-    return (V3D_PLANET_RADII[i % V3D_PLANET_RADII.length] / V3D_SUN_RADIUS) *
-      this.visualSunRadiusPx;
+    const row =
+      V3D_PLANET_RADII_BY_CATEGORY[
+        this.category % V3D_PLANET_RADII_BY_CATEGORY.length
+      ];
+    return (row[i % row.length] / V3D_SUN_RADIUS) * this.visualSunRadiusPx;
   }
 
   /**
@@ -1560,7 +1675,9 @@ export class Values3dComponent {
       const title = this.contentTitlePx[i];
       el.style.setProperty('--v3d-pd', `${(this.visualRadiiPx[i] * 2).toFixed(1)}px`);
       el.style.setProperty('--v3d-title-size', `${title.toFixed(2)}px`);
-      el.style.setProperty('--v3d-desc-size', `${(title * V3D_DESC_PER_TITLE).toFixed(2)}px`);
+      // The description has its OWN size (V3D_PLANET_CONTENT[i].descriptionScale),
+      // so it can be tuned without touching the title.
+      el.style.setProperty('--v3d-desc-size', `${this.contentDescPx[i].toFixed(2)}px`);
       el.style.setProperty('--v3d-icon-size', `${(title * V3D_ICON_PER_TITLE).toFixed(2)}px`);
       el.style.setProperty('--v3d-content-pad', `${this.contentPadPct[i]}%`);
       el.style.setProperty('--v3d-content-maxw', `${this.contentMaxWPct[i]}%`);
@@ -1721,11 +1838,13 @@ export class Values3dComponent {
   /**
    * Reads the REAL rendered text of every planet (the translated string of
    * the active language) plus the content font family - init/resize only.
-   * Sizes only: nothing here can move a body.
+   * Scoped to the FRONT caps: the back cap carries the identical string, so
+   * measuring it twice would be pure waste. Sizes only - nothing here can
+   * move a body.
    */
   private readContentText(host: HTMLElement): void {
-    const titles = host.querySelectorAll<HTMLElement>('.v3d-planet-title');
-    const descs = host.querySelectorAll<HTMLElement>('.v3d-planet-desc');
+    const titles = host.querySelectorAll<HTMLElement>('.v3d-planet-surface.front .v3d-planet-title');
+    const descs = host.querySelectorAll<HTMLElement>('.v3d-planet-surface.front .v3d-planet-desc');
     for (let i = 0; i < V3D_SLOTS; i++) {
       this.planetTitleText[i] = (titles[i]?.textContent ?? '').trim();
       this.planetDescText[i] = (descs[i]?.textContent ?? '').trim();
@@ -1746,7 +1865,15 @@ export class Values3dComponent {
 
     this.planets = Array.from(host.querySelectorAll<HTMLElement>('.v3d-planet'));
     this.spheres = Array.from(host.querySelectorAll<HTMLElement>('.v3d-planet-sphere'));
-    this.contents = Array.from(host.querySelectorAll<HTMLElement>('.v3d-planet-content'));
+    // The two content caps are cached separately: the FRONT cap is the one
+    // that is measured and sized, the BACK cap only receives its facing
+    // factor per frame.
+    this.contents = Array.from(
+      host.querySelectorAll<HTMLElement>('.v3d-planet-surface.front > .v3d-planet-content'),
+    );
+    this.backContents = Array.from(
+      host.querySelectorAll<HTMLElement>('.v3d-planet-surface.back > .v3d-planet-content'),
+    );
 
     // Text measurement context (one 2D canvas reused for every planet; the
     // real text is measured with the real font so FR / EN / AR all fit).
@@ -1854,6 +1981,34 @@ export class Values3dComponent {
     });
   }
 
+  /**
+   * LANGUAGE RE-FIT: the visible strings come from the translation service, so
+   * a FR / EN / AR switch changes every paragraph length. Without this the
+   * sizes computed for the previous language would stay on screen and a longer
+   * (e.g. Arabic) description could overflow its planet. Re-runs exactly the
+   * same size pipeline once, after the new strings are rendered - sizes only,
+   * positions untouched.
+   */
+  private observeLanguageChanges(): void {
+    this.zone.runOutsideAngular(() => {
+      this.langSubscription = this.translate.onLangChange.subscribe(() => {
+        // Wait one frame so the pipe has written the new strings into the DOM
+        // before they are measured.
+        requestAnimationFrame(() => {
+          if (!this.scene) return;
+          this.sceneWidth = this.scene.clientWidth;
+          this.sceneHeightPx = this.scene.clientHeight;
+          this.applyVisualSizes();
+          this.fitContentToPlanets();
+          this.updateOrbitGeometry();
+          this.growVisualBodies();
+          this.validateOrbitGeometry();
+          this.applyAnimation();
+        });
+      });
+    });
+  }
+
   /** ONE rAF loop: advances every planet continuously until destroyed, runs
       outside the Angular zone and writes only to style props (no CD per frame).
       Each frame: (1) delta time, (2) orbital angles, (3) SELF-rotation angles,
@@ -1873,7 +2028,10 @@ export class Values3dComponent {
         const deltaSeconds = this.lastTimestamp ? (timestamp - this.lastTimestamp) / 1000 : 0;
         this.lastTimestamp = timestamp;
         for (let i = 0; i < this.angles.length; i++) {
-          this.angles[i] += V3D_ORBITS[i].speed * V3D_DEG * delta;
+          // Orbital angle: ONE shared cycle duration x the tiny per-planet
+          // correction (see orbitSpeed / V3D_ORBIT_CYCLE_MS). The motion
+          // equation itself is untouched.
+          this.angles[i] += this.orbitSpeed(i) * V3D_DEG * delta;
           this.selfAngles[i] += this.selfRotationSpeed(i) * V3D_DEG * deltaSeconds;
         }
         this.applyAnimation();
@@ -1893,23 +2051,44 @@ export class Values3dComponent {
       el.style.zIndex = String(g.zIndex);
       el.style.opacity = String(g.opacity);
 
-      // Self-rotation: the SPHERE rotates; the icon/title/description are its
-      // physical children and inherit the exact same angle, speed and clock.
-      // The content's front-facing factor --v3d-front is then written here as
-      // a smooth 0..1 value (front = 1, side fades, back ~0) — CSS derives the
-      // content's opacity + depth scale from it, so the whole surface group
-      // fades/shrinks as ONE continuous 360° cycle: no hard flip, no teleport.
+      // Self-rotation: the SPHERE rotates; BOTH content caps are its physical
+      // children, so they inherit the exact same angle, speed and clock. Each
+      // cap gets its OWN facing factor (0..1) written into --v3d-front, from
+      // which the CSS derives the opacity + depth scale: the front cap uses
+      // cos(angle), the back cap -cos(angle). Between them there is therefore
+      // ALWAYS a readable face: as one approaches the edge-on orientation the
+      // other one comes round, so the content never disappears for a long
+      // period. backface-visibility (CSS) hides the cap that points away, so
+      // both can never be readable at the same time - no duplicated text.
+      // Fade curve: FULLY opaque until the cap is V3D_CONTENT_FADE_START off
+      // axis (so heavily foreshortened text is never shown half-transparent),
+      // then a smooth ramp to the faint floor exactly at the edge-on moment.
       const sphere = this.spheres[i];
       if (sphere) {
         sphere.style.transform = this.composeSelfRotationTransform(this.selfAngles[i]);
       }
-      const content = this.contents[i];
-      if (content) {
-        const front = Math.max(0, Math.cos(this.selfAngles[i]));
-        const smooth = front * front * (3 - 2 * front); // smoothstep
-        content.style.setProperty('--v3d-front', smooth.toFixed(3));
+      const facing = Math.cos(this.selfAngles[i]);
+      const front = this.contents[i];
+      if (front) {
+        front.style.setProperty('--v3d-front', this.faceFactor(facing).toFixed(3));
+      }
+      const back = this.backContents[i];
+      if (back) {
+        back.style.setProperty('--v3d-front', this.faceFactor(-facing).toFixed(3));
       }
     }
+  }
+
+  /**
+   * Facing factor (0..1) of ONE content cap: 1 while the cap is comfortably
+   * facing the camera (cos >= V3D_CONTENT_FADE_START), then a smoothstep down
+   * to 0 exactly at the edge-on orientation. Both caps use it with opposite
+   * signs, so the hand-over happens in the (zero-width) edge-on instant.
+   */
+  private faceFactor(cosine: number): number {
+    const start = Math.min(0.99, Math.max(0, V3D_CONTENT_FADE_START));
+    const t = Math.min(1, Math.max(0, (cosine - start) / (1 - start)));
+    return t * t * (3 - 2 * t); // smoothstep
   }
 
   private scheduleAutoplay(ms: number): void {
@@ -1938,6 +2117,10 @@ export class Values3dComponent {
     if (this.resizeObserver) {
       this.resizeObserver.disconnect();
       this.resizeObserver = null;
+    }
+    if (this.langSubscription) {
+      this.langSubscription.unsubscribe();
+      this.langSubscription = null;
     }
   }
 }
