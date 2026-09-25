@@ -497,53 +497,20 @@ interface PlanetGeometry {
         transform-origin: 50% 50%;
       }
 
-      /* Orbit rings - the classic projected orbit: width = 2R, height =
-         2R * ratio, all six sharing ONE tilt. The radii come from the same
-         variables the JS trajectory uses (written by the radial grid), so
-         ring and path can never disagree. */
+      /* Orbit rings - SINGLE SOURCE OF TRUTH: the visible SVG paths are
+         generated from calculateOrbitPoint(), the exact same function used
+         by the planet trajectory, so the ring and the planet path can never
+         disagree. The radii + ellipse ratio are still written as CSS custom
+         properties for backward compatibility. */
       /* Orbit guide layer - SAME coordinate space as the planets: it covers
          the entire full-width stage (inset: 0 + explicit 100% x 100%) and
-         the six guides are drawn from the radial-grid variables. */
+         the SVG paths are drawn from calculateOrbitPoint(). */
       .v3d-orbits {
         position: absolute;
         inset: 0;
         width: 100%;
         height: 100%;
         pointer-events: none;
-      }
-      .v3d-orbit {
-        position: absolute;
-        left: 50%;
-        top: 50%;
-        transform: translate(-50%, -50%);
-        border: 1px solid rgba(30, 58, 138, 0.16);
-        border-radius: 50%;
-        pointer-events: none;
-      }
-      .v3d-orbit:nth-of-type(2n) { border-style: dashed; }
-      .v3d-orbit.o1 {
-        width: calc(var(--v3d-orbit-rx-1) * 2);
-        height: calc(var(--v3d-orbit-rx-1) * 2 * var(--v3d-orbit-ratio));
-      }
-      .v3d-orbit.o2 {
-        width: calc(var(--v3d-orbit-rx-2) * 2);
-        height: calc(var(--v3d-orbit-rx-2) * 2 * var(--v3d-orbit-ratio));
-      }
-      .v3d-orbit.o3 {
-        width: calc(var(--v3d-orbit-rx-3) * 2);
-        height: calc(var(--v3d-orbit-rx-3) * 2 * var(--v3d-orbit-ratio));
-      }
-      .v3d-orbit.o4 {
-        width: calc(var(--v3d-orbit-rx-4) * 2);
-        height: calc(var(--v3d-orbit-rx-4) * 2 * var(--v3d-orbit-ratio));
-      }
-      .v3d-orbit.o5 {
-        width: calc(var(--v3d-orbit-rx-5) * 2);
-        height: calc(var(--v3d-orbit-rx-5) * 2 * var(--v3d-orbit-ratio));
-      }
-      .v3d-orbit.o6 {
-        width: calc(var(--v3d-orbit-rx-6) * 2);
-        height: calc(var(--v3d-orbit-rx-6) * 2 * var(--v3d-orbit-ratio));
       }
 
       /* Planets - LAYER 1 (orbit wrapper + sphere BODY). Centered at 50/50
@@ -935,12 +902,23 @@ interface PlanetGeometry {
         <div class="v3d-stage">
         <!-- Orbital guide rings (projected tilted XZ circles) - behind everything. -->
         <div class="v3d-orbits" aria-hidden="true">
-          <div class="v3d-orbit o1"></div>
-          <div class="v3d-orbit o2"></div>
-          <div class="v3d-orbit o3"></div>
-          <div class="v3d-orbit o4"></div>
-          <div class="v3d-orbit o5"></div>
-          <div class="v3d-orbit o6"></div>
+          @if (orbitSvgWidth() > 0) {
+            <svg [attr.viewBox]="orbitViewBox"
+                 [style.width.px]="orbitSvgWidth()"
+                 [style.height.px]="orbitSvgHeight()"
+                 fill="none"
+                 stroke="rgba(30, 58, 138, 0.16)"
+                 stroke-width="1"
+                 [style.position]="'absolute'"
+                 [style.left]="'50%'"
+                 [style.top]="'50%'"
+                 [style.transform]="'translate(-50%, -50%)'"
+                 [style.pointer-events]="'none'">
+              @for (path of orbitPaths(); track path.index) {
+                <path [attr.d]="path.d" [attr.stroke-dasharray]="path.dashed ? '6 4' : 'none'"/>
+              }
+            </svg>
+          }
         </div>
 
         <!-- Soft halo shield keeps the sun visually dominant. -->
@@ -1122,6 +1100,21 @@ export class Values3dComponent {
   private ellipseRatio = V3D_ELLIPSE_RATIO;
   /** Current uniform fit scale (design space -> real scene). */
   private currentFit = 1;
+
+  private readonly _orbitPaths = signal<Array<{ readonly index: number; readonly d: string; readonly dashed: boolean }>>([]);
+  private readonly _orbitSvgWidth = signal(0);
+  private readonly _orbitSvgHeight = signal(0);
+
+  readonly orbitPaths = this._orbitPaths.asReadonly();
+  readonly orbitSvgWidth = this._orbitSvgWidth.asReadonly();
+  readonly orbitSvgHeight = this._orbitSvgHeight.asReadonly();
+
+  get orbitViewBox(): string {
+    const w = this._orbitSvgWidth();
+    const h = this._orbitSvgHeight();
+    if (w <= 0 || h <= 0) return '';
+    return `-${w / 2} -${h / 2} ${w} ${h}`;
+  }
 
   private scene: HTMLElement | null = null;
   private planets: HTMLElement[] = [];
@@ -1769,6 +1762,27 @@ export class Values3dComponent {
     );
     this.currentFit = fit;
     this.writeOrbitCssVariables(fit);
+
+    const width = outerR * 2;
+    const height = outerR * 2 * this.ellipseRatio;
+    const paths: Array<{ index: number; d: string; dashed: boolean }> = [];
+    const segments = 128;
+    for (let i = 0; i < V3D_SLOTS; i++) {
+      const points: string[] = [];
+      for (let j = 0; j < segments; j++) {
+        const angle = (j / segments) * Math.PI * 2;
+        const point = this.calculateOrbitPoint(i, angle);
+        points.push(`${point.x.toFixed(2)},${point.y.toFixed(2)}`);
+      }
+      paths.push({
+        index: i,
+        d: `M ${points.join(' L ')} Z`,
+        dashed: i % 2 === 1,
+      });
+    }
+    this._orbitPaths.set(paths);
+    this._orbitSvgWidth.set(width);
+    this._orbitSvgHeight.set(height);
   }
 
   /** Band spacing between planet i and planet i+1: proportional to the two
@@ -1811,17 +1825,34 @@ export class Values3dComponent {
   }
 
   /**
-   * CLASSIC orbital projection (same model as the original component):
+   * SINGLE ORBIT-POINT SOURCE OF TRUTH (planets AND rings).
+   * Parametric projected ellipse shared by the planet trajectory and the
+   * visible orbit rings:
    *   x = cos(angle) * radius
    *   y = sin(angle) * radius * ellipseRatio
+   * Same center (50%/50% = Sun center), same radius (orbitRx), same ratio.
+   * There is NO front-dip / front offset: the path is a pure ellipse, so a
+   * CSS ellipse with the same radius + ratio reproduces it exactly and
+   * distance(planet, ring) stays ~0 for the full 360 degrees.
+   */
+  private calculateOrbitPoint(index: number, angle: number): { x: number; y: number; depth: number } {
+    const radius = this.orbitRx[index];
+    const sin = Math.sin(angle);
+    const x = Math.cos(angle) * radius;
+    const y = sin * radius * this.ellipseRatio;
+    const depth = (sin + 1) / 2; // 0 far (back) -> 1 near (front)
+    return { x, y, depth };
+  }
+
+  /**
+   * CLASSIC orbital projection (same model as the original component):
+   * delegates to calculateOrbitPoint() so planet and ring can never drift.
    * The ring is drawn from the EXACT same radius + ratio (see
    * writeOrbitCssVariables), so the planet can never drift off its ring.
    */
   private calculatePlanetGeometry(index: number, angle: number): PlanetGeometry {
-    const radius = this.orbitRx[index];
-    const x = Math.cos(angle) * radius;
-    const y = Math.sin(angle) * radius * this.ellipseRatio;
-    const depth = (Math.sin(angle) + 1) / 2; // 0 far (back) -> 1 near (front)
+    const point = this.calculateOrbitPoint(index, angle);
+    const { x, y, depth } = point;
     const scale = V3D_MIN_SCALE + depth * (V3D_MAX_SCALE - V3D_MIN_SCALE);
     const opacity = V3D_MIN_OPACITY + depth * (V3D_MAX_OPACITY - V3D_MIN_OPACITY);
     // Far half renders behind the sun (z 200..300), near half in front (300..400).
