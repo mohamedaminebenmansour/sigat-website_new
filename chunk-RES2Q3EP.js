@@ -1,0 +1,1 @@
+var o=[{platform:"facebook",url:"https://www.facebook.com/placeholder-sigat",labelKey:"",icon:"fa-brands fa-facebook-f"},{platform:"linkedin",url:"https://www.linkedin.com/company/placeholder-sigat",labelKey:"",icon:"fa-brands fa-linkedin-in"}];export{o as a};
