@@ -14,6 +14,20 @@ import { TranslatePipe, TranslateService } from '@ngx-translate/core';
 import type { Subscription } from 'rxjs';
 import { SectionHeaderComponent } from '../../../shared/components/section-header.component';
 import { COMPANY_VALUES } from './values.data';
+import {
+  V3D_BAND_GAP_RATIO,
+  V3D_MAX_SCALE,
+  V3D_MIN_SCALE,
+  V3D_ORBIT_PLANE_ANGLE_DEG,
+  V3D_SUN_TO_FIRST_ORBIT_GAP_RATIO,
+  V3D_STAGE_PADDING,
+  Values3dGeometry,
+  bandGap,
+  designHalfExtent,
+  firstOrbitRadius,
+  type OrbitPoint,
+  type OrbitSpace,
+} from './values-3d.geometry';
 
 /* ============================================================
    3D VALUES — MANUAL VISUAL TUNING (TypeScript side)
@@ -47,15 +61,17 @@ import { COMPANY_VALUES } from './values.data';
    grown planet cannot hold the text, that planet's text is scaled
    down by the exact shortfall. Content is NEVER clipped.
 
-   ORBITAL GEOMETRY (single source of truth):
-   the radial grid (updateOrbitGeometry) is THE geometry source: at
-   init and on every ResizeObserver tick it derives the six radii
-   from the MEASURED scene (width AND height) and projects the ONE
-   inclined orbital plane onto the screen (V3D_ORBIT_PLANE_ANGLE_DEG).
-   Traces and planets are BOTH sampled from calculateOrbitPoint() in
-   absolute stage coordinates around the geometry root, so a planet
-   can never drift off its ring or out of the component bounds. The
-   only custom property the engine still publishes is --v3d-fit.
+   ORBITAL GEOMETRY (single source of truth) - values-3d.geometry.ts:
+   the pure Values3dGeometry module owns ALL orbital mathematics: the
+   ONE manual angle (V3D_ORBIT_PLANE_ANGLE_DEG), the centre, the six
+   orbit radii, the projected inclination and the sampled traces.
+   This component only PASSES the measured scene + the resolved body
+   sizes into geometry.compute() and reads positions back through
+   geometry.calculateOrbitPoint() - planets and traces share that one
+   function in absolute stage coordinates around the geometry root,
+   so a planet can never drift off its ring or out of the component
+   bounds. The only custom property the engine still publishes is
+   --v3d-fit.
 
    3D CONTENT (sphere "printed text") controls:
    - PLANET_SELF_ROTATION_DEG_PER_SEC  axial spin (deg/s)
@@ -74,9 +90,6 @@ const V3D_SLOTS = 6;
 /** Autoplay proceeds 0..n-1 then wraps. */
 const V3D_STEP = 1;
 const V3D_DEG = Math.PI / 180;
-/** Near/far visual scale range - smooth and deliberately modest. */
-const V3D_MIN_SCALE = 0.86;
-const V3D_MAX_SCALE = 1.08;
 /** Near/far opacity range (far planets stay clearly readable). */
 const V3D_MIN_OPACITY = 0.78;
 const V3D_MAX_OPACITY = 1;
@@ -113,11 +126,10 @@ const V3D_COLORS = ['#f59e0b', '#2563eb', '#0ea5e9', '#6366f1', '#1d4ed8', '#0f7
      x        = orbitalX
      y        = orbitalY * cos(inclination)
      depth    = orbitalY * sin(inclination)
+    THE FORMULAS + THE ANGLE ITSELF live in values-3d.geometry.ts
+    (Values3dGeometry.compute / calculateOrbitPoint) - pure, DOM-free,
+    the single mathematical source for traces AND planets.
    ============================================================ */
-
-/** SUN -> FIRST ORBIT gap as a fraction of the Sun's logical diameter.
-    Controls ONLY the Sun -> Planet 1 distance. */
-const V3D_SUN_TO_FIRST_ORBIT_GAP_RATIO = 0.28;
 
 // =====================================================
 // VISUAL SIZE CONTROLS
@@ -210,90 +222,12 @@ const V3D_LARGE_CONTENT_SCALE = 1.25;
 const V3D_LARGE_PLANET_CONTENT_SCALE = [1.25, 1.30, 1.22, 1.32, 1.25, 1.30];
 
 // ============================================================
-// MANUAL ORBIT SPACING - distance between consecutive planets
-// (1 -> 2 -> 3 -> 4 -> 5 -> 6). Sun -> Planet 1 is NOT controlled
-// by this value (see V3D_SUN_TO_FIRST_ORBIT_GAP_RATIO above).
-// The band spacing is proportional to the planet radii, so the
-// composition keeps the same rhythm however big the planets get.
-// 2.0 = neighbours never overlap (smaller planets); 1.15 = a mild
-// overlap only while two planets cross; 1.0 = biggest planets.
+// ORBITAL POSITION CONSTANTS (band spacing, stage padding, the
+// ONE manual plane angle V3D_ORBIT_PLANE_ANGLE_DEG, the projected
+// tilt/depth, the height floor and the trace sampling) live in
+// values-3d.geometry.ts - pure, DOM-free, the single source both
+// the traces and the planets derive from.
 // ============================================================
-const V3D_BAND_GAP_RATIO = 1.05;
-
-/** Breathing room (logical px) between the outermost orbit and the edge
-    of the logical design space. */
-const V3D_STAGE_PADDING = 24;
-
-/**
- * ============================================================
- * ORBITAL PLANE INCLINATION
- * ============================================================
- *
- * This is the angle between:
- *
- *   0° = orbital plane and screen plane
- *
- * The orbital plane rotates around the horizontal X axis
- * passing through the exact center of the Sun.
- *
- * IMPORTANT:
- * Change ONLY this variable when manually tuning the
- * inclination of the orbital system.
- *
- * Example values:
- *
- *   0°  = orbit plane is the screen plane
- *   20° = slight inclination
- *   35° = moderate inclination
- *   45° = strong inclination
- *   60° = very strong inclination
- *
- * This value MUST NOT modify planet size, Sun size,
- * orbit radius, spacing or speed.
- *
- * HOW IT IS USED (converted ONCE, see orbitPlaneAngleRad below - never
- * re-converted inside the animation loop):
- *
- *   orbitalX = cos(theta) * radius        orbitalY = sin(theta) * radius
- *   x        = orbitalX
- *   y        = orbitalY * cos(inclination)
- *   depth    = orbitalY * sin(inclination)
- *
- * All six planets sit on circles of this ONE plane, and the visible orbit
- * rings are generated by the very same calculateOrbitPoint(), so rings and
- * trajectories are the same curve by construction.
- *
- * HEIGHT NOTE (not a second knob): a rounder ring needs more height, so on a
- * short (wide) scene the projection is FLATTENED (bounded by
- * V3D_ELLIPSE_RATIO_MIN) instead of scaling the whole composition down: the
- * inclination below is used whenever the scene has the height for it, and
- * sizes (Sun / planets / text) are never touched by this geometry.
- */
-const V3D_ORBIT_PLANE_ANGLE_DEG = 45;
-
-/** The same inclination in radians - computed ONCE, at module load. */
-const orbitPlaneAngleRad = (V3D_ORBIT_PLANE_ANGLE_DEG * Math.PI) / 180;
-/** Screen projection of the inclined plane: the vertical semi-axis of a
-    projected orbit, i.e. radius * cos(inclination). One design unit = one
-    px before the uniform --v3d-fit scale. */
-const V3D_ORBIT_PLANE_TILT = Math.cos(orbitPlaneAngleRad);
-/** Out-of-plane component of the same inclination, i.e. radius *
-    sin(inclination) - it becomes the depth (z-order + near/far scale) of a
-    body. Never an extra tuning value: see calculateOrbitPoint(). */
-const V3D_ORBIT_PLANE_DEPTH = Math.sin(orbitPlaneAngleRad);
-/** Lower bound of the PROJECTED tilt on short (wide) scenes. A flatter tilt
-    uses less height and more width - exactly what a wide laptop scene needs
-    to show the composition as large as possible, so the height fit above can
-    never flatten the projected plane further than this. Raise it (e.g. 0.32)
-    if you prefer rounder rings on short scenes (the composition then renders
-    smaller, because the scene height starts to limit it). */
-const V3D_ELLIPSE_RATIO_MIN = 0.2;
-/** Angular step of the visible orbit trace: every ring is sampled at
-    V3D_TRACE_SEGMENTS points of the SAME calculateOrbitPoint() the planets
-    use (2*PI / 256 = 1.4 deg). One point per ~0.0014 * radius, i.e. a chord
-    that deviates from the exact curve by less than 0.1px even on the widest
-    scene (2560px: 0.33px at 128 points -> 0.08px at 256). Resize-only cost. */
-const V3D_TRACE_SEGMENTS = 256;
 
 // -----------------------------------------------------
 // CONTENT-FIRST TEXT SIZE + CONTENT FIT
@@ -417,18 +351,6 @@ interface PlanetGeometry {
   zIndex: number;
 }
 
-/** Absolute-space geometry of the orbit-trace SVG canvas (design px). */
-interface OrbitSpace {
-  /** viewBox spanning the fitted design extent; its 0,0 IS the geometry root. */
-  readonly viewBox: string;
-  /** 1:1 pixel size of the canvas (identical to the viewBox size). */
-  readonly width: number;
-  readonly height: number;
-  /** Canvas offset inside the stage, so the viewBox maps 1:1 with no scaling. */
-  readonly left: number;
-  readonly top: number;
-}
-
 /**
  * "SIGAT Values Solar System" - company values as a premium orbital system.
  *
@@ -436,9 +358,10 @@ interface OrbitSpace {
  *   SIZES first: applyVisualSizes() resolves the Sun radius and the six
  *   planet radii from the VISUAL SIZE CONTROLS block (manual values, plus the
  *   automatic content-driven growth of fitContentToPlanets()).
- *   POSITIONS second: updateOrbitGeometry() turns those radii into the six
- *   orbit radii + the uniform fit scale (--v3d-fit, the only CSS custom
- *   property still published). The planet position is the CLASSIC
+ *   POSITIONS second: updateOrbitGeometry() feeds those radii + the measured
+ *   scene into Values3dGeometry.compute() (values-3d.geometry.ts), which
+ *   returns the sampled traces + the uniform fit scale (--v3d-fit, the only
+ *   CSS custom property still published). The planet position is the CLASSIC
  *   projected orbit (unchanged):
  *     x = originX + cos(angle) * radius
  *     y = originY + sin(angle) * radius * ellipseRatio
@@ -1095,23 +1018,15 @@ export class Values3dComponent {
   /** Scene height in px (vertical containment of the outer ellipse). */
   private sceneHeightPx = 0;
   /**
-   * Live per-orbit geometry in px, recomputed at init + on every
-   * ResizeObserver tick from V3D_ORBITS and the measured scene/sun/planet
-   * sizes. THE single source of truth: the visible traces are sampled from
-   * it through calculateOrbitPoint(), the same function the planets move
-   * on, so the rings and the planet trajectory can never disagree.
+   * THE ORBITAL GEOMETRY (values-3d.geometry.ts): centre, orbit radii,
+   * projected tilt, depth factor, fit scale AND calculateOrbitPoint() -
+   * the single mathematical source both the traces and the planets read.
+   * Written by updateOrbitGeometry() at init + on every resize: the trace
+   * builder uses the absolute points verbatim, while the planet transform
+   * subtracts the geometry root because the DOM pins every planet at
+   * 50% / 50% of the stage.
    */
-  private readonly orbitRx = new Float64Array(V3D_SLOTS);
-  /**
-   * THE GEOMETRY ROOT of the whole orbital system - the centre of .v3d-scene,
-   * which is exactly where the Sun and the trace canvas are pinned. Written by
-   * updateOrbitGeometry() at init + on every resize, and read by BOTH consumers
-   * of calculateOrbitPoint(): the trace path builder uses the absolute point
-   * verbatim, and the planet transform subtracts this origin because the DOM
-   * pins every planet at 50% / 50% of the stage.
-   */
-  private originX = 0;
-  private originY = 0;
+  private readonly geometry = new Values3dGeometry();
   /**
    * POSITION LAYER - Sun radius that feeds the frozen orbit geometry
    * (baseline values only). Never written to the DOM directly.
@@ -1166,23 +1081,6 @@ export class Values3dComponent {
   private category = 2;
   /** Off-screen 2D context used to measure the real text (FR / EN / AR). */
   private measureCtx: CanvasRenderingContext2D | null = null;
-  /**
-   * Live PROJECTION TILT of the ONE orbital plane = the cos(inclination) that
-   * is actually rendered: V3D_ORBIT_PLANE_TILT, flattened by the short-scene
-   * height fit (never rounded further). Shared by the planet trajectory and by
-   * the visible rings (both sample calculateOrbitPoint()).
-   */
-  private ellipseRatio = V3D_ORBIT_PLANE_TILT;
-  /**
-   * Live OUT-OF-PLANE factor of that very same inclination: the depth axis of
-   * the projected circle. Derived from ellipseRatio (sin = sqrt(1 - cos^2)),
-   * so screenOffsetY^2 + depth^2 = radius^2 - all six planets stay on circles
-   * of ONE common plane even while the short-scene fit flattens the projection.
-   */
-  private orbitDepthFactor = V3D_ORBIT_PLANE_DEPTH;
-  /** Current uniform fit scale (design space -> real scene). */
-  private currentFit = 1;
-
   private readonly _orbitPaths = signal<Array<{ readonly index: number; readonly d: string; readonly dashed: boolean }>>([]);
   /**
    * The trace canvas, in ABSOLUTE design coordinates (one signal, because the
@@ -1315,19 +1213,6 @@ export class Values3dComponent {
   }
 
   /**
-   * Half extent (design px) of the composition with the CURRENT radii:
-   * the outermost ring + the body that rides it. Used to normalize the
-   * manual radii against the measured scene width.
-   */
-  private designHalfExtent(): number {
-    let radius = this.firstOrbitRadius();
-    for (let i = 0; i < V3D_SLOTS - 1; i++) {
-      radius += this.bandGap(i);
-    }
-    return radius + this.planetRadiiPx[V3D_SLOTS - 1] * V3D_MAX_SCALE;
-  }
-
-  /**
    * Scales Sun + planets TOGETHER until the composition's half extent
    * exactly fills the measured scene width. State-less: it always works
    * from the current radii, so it can never drift between two passes.
@@ -1335,7 +1220,7 @@ export class Values3dComponent {
   private normalizeToSceneWidth(): void {
     if (this.sceneWidth <= 0) return;
     const available = this.sceneWidth / 2 - V3D_STAGE_PADDING;
-    const extent = this.designHalfExtent();
+    const extent = designHalfExtent(this.sunRadiusPx, this.planetRadiiPx, this.sceneWidth);
     if (!(extent > 0)) return;
     const normalize = available / extent;
     if (!(normalize > 0) || !isFinite(normalize)) return;
@@ -1354,7 +1239,7 @@ export class Values3dComponent {
   private absorbGrowthIntoSun(): void {
     if (this.sceneWidth <= 0) return;
     const available = this.sceneWidth / 2 - V3D_STAGE_PADDING;
-    const extent = this.designHalfExtent();
+    const extent = designHalfExtent(this.sunRadiusPx, this.planetRadiiPx, this.sceneWidth);
     if (!(extent > available)) return;
     const sunFactor = 1 + 2 * V3D_SUN_TO_FIRST_ORBIT_GAP_RATIO;
     const planetsExtent = extent - this.sunRadiusPx * sunFactor;
@@ -1597,11 +1482,11 @@ export class Values3dComponent {
    * including the depth scale). Size only - the planet is never moved.
    */
   private edgeCapRadius(i: number): number {
-    const rx = this.orbitRx[i];
+    const rx = this.geometry.radii[i];
     const halfW = this.sceneWidth / 2 - rx;
     const halfH =
       (this.sceneHeightPx > 0 ? this.sceneHeightPx / 2 : this.sceneWidth * 0.31) -
-      rx * this.ellipseRatio;
+      rx * this.geometry.ellipseRatio;
     const room = Math.max(0, Math.min(halfW, halfH));
     return room / V3D_MAX_SCALE - 4;
   }
@@ -1617,7 +1502,7 @@ export class Values3dComponent {
   private orbitCapRadius(): number {
     const sunFootprint =
       V3D_SUN_DOMINANCE * V3D_MAX_SCALE * (1 + 2 * V3D_SUN_TO_FIRST_ORBIT_GAP_RATIO);
-    return Math.max(0, (this.orbitRx[0] - 4) / sunFootprint);
+    return Math.max(0, (this.geometry.radii[0] - 4) / sunFootprint);
   }
 
   /**
@@ -1785,124 +1670,29 @@ export class Values3dComponent {
   }
 
   /**
-   * ORBITAL GEOMETRY ENGINE - init + resize ONLY (never per frame).
-   * POSITION ONLY: it turns the visual radii into the six orbit radii and
-   * the uniform fit scale. It never changes a size:
-   *   R1     = sunRadius + 2*sunRadius*SUN_TO_FIRST_ORBIT_GAP_RATIO
-   *            + planetRadius_1 * V3D_MAX_SCALE       (depth headroom)
-   *   gap_i  = V3D_BAND_GAP_RATIO * (R_i + R_i+1) / 2
-   *   R_i+1  = R_i + gap_i
-   * The radii come from ONE source (planetRadiiPx, already grown by the
-   * content fit) and the inclination NEVER touches them: the plane angle only
-   * ORIENTS the common plane (see calculateOrbitPoint). The rings are drawn
-   * from these very values, and the whole design space is uniformly scaled
-   * with --v3d-fit - so guides, Sun and planets always share exactly one
-   * coordinate system around the ONE origin below.
+   * ORBITAL GEOMETRY PASS - init + resize ONLY (never per frame).
+   * Thin component-side wrapper around Values3dGeometry.compute()
+   * (values-3d.geometry.ts): the geometry derives the six orbit radii, the
+   * projected inclination, the uniform fit scale and the sampled traces
+   * from the measured scene, the position-layer body sizes and the ONE
+   * manual plane angle. The component only PUBLISHES the results (the
+   * --v3d-fit property + the two template signals). POSITION ONLY - a size
+   * change never moves a body, and the inclination never touches the
+   * radii: it only ORIENTS the common plane (calculateOrbitPoint).
    */
   private updateOrbitGeometry(): void {
-    const w = this.sceneWidth;
-    const h = this.sceneHeightPx;
-    if (w <= 0) return;
-
-    // ==========================================================
-    // THE ONE ORIGIN of the whole orbital system: the centre of
-    // .v3d-scene - which is exactly where the Sun sits (the template
-    // pins the Sun and every body at 50% / 50% of the stage).
-    // calculateOrbitPoint() works in ABSOLUTE stage coordinates
-    // around this root: the trace canvas maps them 1:1, while the
-    // planet transform subtracts the root again because the DOM
-    // adds the centre exactly once. The Sun needs no orbiting state
-    // at all: it never leaves the origin.
-    // ==========================================================
-    const centerX = w / 2;
-    const centerY = h > 0 ? h / 2 : w * 0.31;
-    this.originX = centerX;
-    this.originY = centerY;
-
-    // Sizes are already resolved (applyVisualSizes + fitContentToPlanets):
-    // here they are only turned into positions, so a size change can never
-    // move a body - it only redraws the ring it travels on.
-    let radius = this.firstOrbitRadius();
-    for (let i = 0; i < V3D_SLOTS; i++) {
-      this.orbitRx[i] = radius;
-      if (i < V3D_SLOTS - 1) {
-        radius += this.bandGap(i);
-      }
-    }
-    const outerR = this.orbitRx[V3D_SLOTS - 1];
-
-    // PROJECTION of the ONE orbital plane (V3D_ORBIT_PLANE_ANGLE_DEG): the
-    // circle of every orbit is projected with cos(inclination) on its vertical
-    // axis. The height budget may only FLATTEN that projection (bounded by
-    // V3D_ELLIPSE_RATIO_MIN), never round it further - so the approved
-    // composition keeps its scale on short scenes and the inclination can
-    // never make the design smaller.
-    const outerBody = this.planetRadiiPx[V3D_SLOTS - 1] * V3D_MAX_SCALE;
-    // Vertical budget: the ring's vertical extent + the body on the outer
-    // band + the stage padding must fit the scene height above/below the
-    // origin, so the projection uses the available height instead of
-    // overflowing it.
-    const halfHScene = centerY - V3D_STAGE_PADDING - outerBody;
-    const heightFitRatio = halfHScene / outerR;
-    this.ellipseRatio = Math.min(
-      V3D_ORBIT_PLANE_TILT,
-      Math.max(V3D_ELLIPSE_RATIO_MIN, heightFitRatio),
+    const result = this.geometry.compute({
+      width: this.sceneWidth,
+      height: this.sceneHeightPx,
+      sunRadius: this.sunRadiusPx,
+      planetRadii: this.planetRadiiPx,
+    });
+    if (!result) return; // scene not measured yet - keep the previous geometry
+    this.writeFitScale(result.fit);
+    this._orbitPaths.set(
+      result.paths.map((path) => ({ ...path, dashed: path.index % 2 === 1 })),
     );
-    // Depth comes from the VERY SAME inclination that is projected (never a
-    // second value): sin(inclination) = sqrt(1 - cos(inclination)^2).
-    this.orbitDepthFactor = Math.sqrt(
-      Math.max(0, 1 - this.ellipseRatio * this.ellipseRatio),
-    );
-
-    // Uniform fit scale: the full design is scaled to fit the real scene on
-    // BOTH axes (width usually binds, the height takes over on short scenes).
-    // Both terms are (available half-extent around the origin) / (design
-    // half-extent); before the height has been measured, only the width binds.
-    const halfW = outerR + outerBody + V3D_STAGE_PADDING;
-    const halfH = outerR * this.ellipseRatio + outerBody + V3D_STAGE_PADDING;
-    const fit = Math.min(centerX / halfW, h > 0 ? centerY / halfH : 1);
-    this.currentFit = fit;
-    this.writeFitScale(fit);
-
-    // Visible rings: SAMPLED from calculateOrbitPoint() - the exact function
-    // the rAF loop uses for the planets - so a ring and its trajectory are the
-    // same curve by construction (same origin, radius, tilt and depth).
-    // calculateOrbitPoint() returns ABSOLUTE stage coordinates, so the canvas
-    // below IS the outer ring's bounding box in that same space: the template
-    // pins it at (left, top) with a 1:1 viewBox and the sampled points land
-    // exactly where the planets actually are - no re-centring, no scaling.
-    const traceHalfW = outerR;
-    const traceHalfH = outerR * this.ellipseRatio;
-    const space: OrbitSpace = {
-      viewBox: `${this.originX - traceHalfW} ${this.originY - traceHalfH} ${traceHalfW * 2} ${traceHalfH * 2}`,
-      width: traceHalfW * 2,
-      height: traceHalfH * 2,
-      left: this.originX - traceHalfW,
-      top: this.originY - traceHalfH,
-    };
-    const paths: Array<{ index: number; d: string; dashed: boolean }> = [];
-    for (let i = 0; i < V3D_SLOTS; i++) {
-      const points: string[] = [];
-      for (let j = 0; j < V3D_TRACE_SEGMENTS; j++) {
-        const angle = (j / V3D_TRACE_SEGMENTS) * Math.PI * 2;
-        const point = this.calculateOrbitPoint(i, angle);
-        points.push(`${point.x.toFixed(2)},${point.y.toFixed(2)}`);
-      }
-      paths.push({
-        index: i,
-        d: `M ${points.join(' L ')} Z`,
-        dashed: i % 2 === 1,
-      });
-    }
-    this._orbitPaths.set(paths);
-    this._orbitSpace.set(space);
-  }
-
-  /** Band spacing between planet i and planet i+1: proportional to the two
-      radii it separates, so bigger planets automatically get more room
-      without ever changing the rhythm of the composition. */
-  private bandGap(i: number): number {
-    return (V3D_BAND_GAP_RATIO * (this.planetRadiiPx[i] + this.planetRadiiPx[i + 1])) / 2;
+    this._orbitSpace.set(result.space);
   }
 
   /** Screen category from the MEASURED scene width: 0 mobile, 1 tablet,
@@ -1912,16 +1702,6 @@ export class Values3dComponent {
     if (sceneWidth <= 900) return 1;
     if (sceneWidth <= 1919) return 2;
     return 3;
-  }
-
-  /** First-orbit radius: Sun EDGE + gap + PLANET 1 EDGE headroom. */
-  private firstOrbitRadius(): number {
-    if (this.sunRadiusPx <= 0) return 0.2 * this.sceneWidth;
-    return (
-      this.sunRadiusPx +
-      this.sunRadiusPx * 2 * V3D_SUN_TO_FIRST_ORBIT_GAP_RATIO +
-      this.planetRadiiPx[0] * V3D_MAX_SCALE
-    );
   }
 
   /** Writes the uniform fit scale into --v3d-fit, the one custom property
@@ -1934,52 +1714,16 @@ export class Values3dComponent {
   }
 
   /**
-   * SINGLE ORBIT-POINT SOURCE OF TRUTH (planets AND rings).
-   *
-   * ONE orbital plane for all six planets (V3D_ORBIT_PLANE_ANGLE_DEG).
-   * `angle` is the planet's angle INSIDE that plane and `radius` its orbit
-   * radius in the plane, which the inclination never changes:
-   *
-   *   1. orbital-plane coordinates - the real circle the planet travels
-   *        orbitalX = cos(angle) * radius
-   *        orbitalY = sin(angle) * radius
-   *   2. the plane rotated around the horizontal X axis through the origin,
-   *      then lifted into ABSOLUTE stage coordinates around the geometry root
-   *      (the trace canvas maps them 1:1; the planet transform subtracts the
-   *      root again because the DOM pins every body at 50% / 50%)
-   *        x        = originX + orbitalX
-   *        y        = originY + orbitalY * cos(inclination)
-   *        depth    = orbitalY * sin(inclination)
-   *   3. the depth normalised to 0 (far / back) .. 1 (near / front) for the
-   *      existing z-band, near/far scale and opacity model
-   *
-   * The comparison is against the SAME origin for everything (the .v3d-scene
-   * centre = the Sun centre: the DOM adds it exactly once for the bodies,
-   * the trace canvas maps it 1:1), the SAME radius
-   * (orbitRx) and the SAME inclination (this.ellipseRatio /
-   * this.orbitDepthFactor). There is NO front-dip, no front offset and no
-   * per-half special case: the front/back relationship comes ONLY from the
-   * inclination of the plane, so distance(planet, ring) stays ~0 for the
-   * full 360 degrees.
+   * SINGLE ORBIT-POINT SOURCE OF TRUTH (planets AND traces) - the named
+   * entry point of this component. The mathematics lives in exactly ONE
+   * place: Values3dGeometry.calculateOrbitPoint() (values-3d.geometry.ts),
+   * which compute() uses to sample the visible traces and which every
+   * planet frame reads here - so a planet, its ring, its depth and its
+   * screen position can never disagree: same origin, same radius, same
+   * inclination, no front-dip, no per-half special case.
    */
-  private calculateOrbitPoint(index: number, angle: number): { x: number; y: number; depth: number } {
-    const radius = this.orbitRx[index];
-    const cos = Math.cos(angle);
-    const sin = Math.sin(angle);
-    // 1. the orbital plane itself: a circle of this radius around the origin.
-    const orbitalX = cos * radius;
-    const orbitalY = sin * radius;
-    // 2. that plane rotated around the horizontal X axis through the origin.
-    //    Its out-of-plane component is orbitalY * sin(inclination), which is
-    //    consumed by the depth below (never an extra tuning value).
-    const x = this.originX + orbitalX;
-    const y = this.originY + orbitalY * this.ellipseRatio; // = orbitalY * cos(inclination)
-    // 3. depth of the existing z-order / scale / opacity model, 0..1:
-    //    planeDepth / radius = sin(angle) * sin(inclination), so the mapping is
-    //    independent of the orbit size (and stays finite even before the scene
-    //    has been measured).
-    const depth = (sin * this.orbitDepthFactor + 1) / 2;
-    return { x, y, depth };
+  private calculateOrbitPoint(index: number, angle: number): OrbitPoint {
+    return this.geometry.calculateOrbitPoint(index, angle);
   }
 
   /**
@@ -2004,7 +1748,7 @@ export class Values3dComponent {
       of the stage, so the DOM adds the geometry root back - subtract it here
       and the rendered offset is exactly the one the traces are drawn from. */
   private composeOrbitTransform(g: PlanetGeometry): string {
-    return `translate3d(${(g.x - this.originX).toFixed(2)}px, ${(g.y - this.originY).toFixed(2)}px, 0) translate(-50%, -50%) scale(${g.scale.toFixed(4)})`;
+    return `translate3d(${(g.x - this.geometry.originX).toFixed(2)}px, ${(g.y - this.geometry.originY).toFixed(2)}px, 0) translate(-50%, -50%) scale(${g.scale.toFixed(4)})`;
   }
 
   /** B. SELF-ROTATION transform - the planet spinning around its own local
@@ -2092,12 +1836,12 @@ export class Values3dComponent {
    */
   private validateOrbitGeometry(): void {
     if (this.sceneWidth <= 0 || !isDevMode()) return;
-    const fit = this.currentFit;
+    const fit = this.geometry.fit;
     const rendered = (r: number) => (r * 2 * fit).toFixed(0);
     const maxPlanetR = Math.max(...Array.from(this.visualRadiiPx));
 
     console.info(
-      `[values-3d] Sizes: scene ${this.sceneWidth.toFixed(0)}x${this.sceneHeightPx.toFixed(0)}px, fit ${fit.toFixed(2)}, tilt ${this.ellipseRatio.toFixed(2)}, orbits ${Array.from(this.orbitRx, (r) => (r * fit).toFixed(0)).join('/')}px (position layer - locked), sun Ø${rendered(this.visualSunRadiusPx)}px (text ${(this.sunTitlePx * fit).toFixed(1)}px), planets Ø${Array.from(this.visualRadiiPx, (r) => rendered(r)).join('/')}px, titles ${Array.from(this.contentTitlePx, (t) => (t * fit).toFixed(1)).join('/')}px`,
+      `[values-3d] Sizes: scene ${this.sceneWidth.toFixed(0)}x${this.sceneHeightPx.toFixed(0)}px, fit ${fit.toFixed(2)}, tilt ${this.geometry.ellipseRatio.toFixed(2)}, orbits ${Array.from(this.geometry.radii, (r) => (r * fit).toFixed(0)).join('/')}px (position layer - locked), sun Ø${rendered(this.visualSunRadiusPx)}px (text ${(this.sunTitlePx * fit).toFixed(1)}px), planets Ø${Array.from(this.visualRadiiPx, (r) => rendered(r)).join('/')}px, titles ${Array.from(this.contentTitlePx, (t) => (t * fit).toFixed(1)).join('/')}px`,
     );
 
     // 1. Sun dominance (visual / depth-scaled: the Sun wins at the worst angle).
@@ -2117,7 +1861,7 @@ export class Values3dComponent {
       }
       if (i < V3D_SLOTS - 1) {
         const overlap =
-          (this.visualRadiiPx[i] + this.visualRadiiPx[i + 1] - this.bandGap(i)) * fit;
+          (this.visualRadiiPx[i] + this.visualRadiiPx[i + 1] - bandGap(i, this.planetRadiiPx)) * fit;
         if (overlap > 0) {
           console.info(
             `[values-3d] Planets ${i + 1}-${i + 2} may overlap by ${overlap.toFixed(0)}px while crossing (V3D_BAND_GAP_RATIO ${V3D_BAND_GAP_RATIO}).`,
@@ -2127,9 +1871,20 @@ export class Values3dComponent {
     }
 
     // 3. First orbit matches the Sun -> Planet 1 design formula.
-    const expectedR1 = this.firstOrbitRadius();
-    if (Math.abs(this.orbitRx[0] - expectedR1) > 0.5) {
+    const expectedR1 = firstOrbitRadius(this.sunRadiusPx, this.planetRadiiPx, this.sceneWidth);
+    if (Math.abs(this.geometry.radii[0] - expectedR1) > 0.5) {
       console.warn('[values-3d] First orbit does not match the Sun -> Planet 1 design.');
+    }
+
+    // 4. The ONE manual plane angle (values-3d.geometry.ts): report when the
+    //    scene height caps the requested inclination. At that viewport the
+    //    projection is FLATTENED instead of anything shrinking, so sizes and
+    //    radii stay constant at every angle - angles rounder than the cap
+    //    simply render the same there (portrait/tall viewports show them).
+    if (this.geometry.cappedByHeight) {
+      console.info(
+        `[values-3d] Plane angle ${V3D_ORBIT_PLANE_ANGLE_DEG}° is capped by the scene height: the projection renders at ${this.geometry.effectiveAngleDeg.toFixed(1)}° here. Angles shallower than this viewport's height limit look identical here by design (sizes and radii stay constant).`,
+      );
     }
   }
 
