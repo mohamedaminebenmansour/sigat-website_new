@@ -87,7 +87,7 @@
  * is guaranteed by the single uniform fit scale in compute(): the angle is
  * never used to shrink or grow anything.
  */
-export const V3D_ORBIT_PLANE_ANGLE_DEG = 45;
+export const V3D_ORBIT_PLANE_ANGLE_DEG = 32;
 
 /** The same angle in RADIANS - derived ONCE from the knob above. This is the
     value the shared calculateOrbitPoint() takes, so changing
@@ -148,6 +148,50 @@ export const V3D_TRACE_SAMPLES = 256;
  */
 export const V3D_SUN_OFFSET_X = 0;
 export const V3D_SUN_OFFSET_Y = 0;
+
+/**
+ * ============================================================
+ * SCENE BOUNDS - THE COMPLETE BOUNDING BOX OF THE DRAWN SYSTEM
+ * ============================================================
+ * compute() turns the DRAWN composition into ONE bounding box and fits it
+ * inside the measured scene with ONE uniform scale. Everything a body can
+ * reach during a FULL revolution is inside that box:
+ *   - every orbit's projected extent   (R_i , R_i * cos(plane angle)),
+ *   - PLUS that orbit's body radius (the DRAWN / visual radius),
+ *   - PLUS the Sun's full visual radius AND its halo,
+ *   - PLUS the glow allowance below,
+ * so the Sun and all six planets stay inside the scene at EVERY frame.
+ *
+ * Nothing here changes a size, a radius, a distance or a speed: the box only
+ * decides how much the WHOLE composition is scaled down when the scene is too
+ * small for it (ratios always preserved; no body shrinks on its own).
+ */
+
+/** The Sun's visible HALO radius factor. The CSS is
+ *      .v3d-sun-halo { width: calc(var(--v3d-sun) * 1.6) }
+ *  and --v3d-sun is the Sun's DIAMETER, so the halo RADIUS is 1.6 x the Sun's
+ *  radius. The box must contain it, otherwise the halo is clipped. */
+export const V3D_SUN_HALO_FACTOR = 1.6;
+
+/** GLOW ALLOWANCE (design px) added around the whole composition so a body's
+ *  box-shadow / halo can never be clipped by the scene edge.
+ *
+ *  Sized for the LARGEST glow in the component - the Sun's pulse peak
+ *      @keyframes v3d-sun-pulse 50% { box-shadow: 0 0 132px ... }
+ *  (the resting glow is 0 0 96px and the planet hover glow is
+ *   0 14px 36px + 3px spread, both inside this budget).
+ *
+ *  TRADE-OFF (the ONLY knob that trades composition size for glow):
+ *    larger  -> more of the soft glow is guaranteed inside the scene and the
+ *               whole system renders proportionally smaller;
+ *    smaller -> the system renders larger; the faintest glow tail may fade at
+ *               the edge.
+ *  The value is SCALE-INDEPENDENT (a box-shadow keeps its px size under the
+ *  stage transform), so it costs proportionally more on a small scene (a
+ *  phone) than on a large one. To make it responsive, replace its use in
+ *  compute() with a per-screen-category lookup.
+ *  The effective margin is max(stagePadding(w), this value). */
+export const V3D_GLOW_MARGIN_PX = 132;
 
 /**
  * ============================================================
@@ -526,8 +570,6 @@ export class Values3dGeometry {
         radius += bandGap(i, planetRadii, spacingScale);
       }
     }
-    const outerR = this.radii[n - 1];
-
     // ORIENTATION of the ONE orbital plane: the circle of every orbit is
     // projected with cos(V3D_ORBIT_PLANE_ANGLE_DEG) on the screen's vertical
     // axis and with sin(...) on the depth axis. Both come from the SAME
@@ -538,25 +580,62 @@ export class Values3dGeometry {
     this.ellipseRatio = V3D_ORBIT_PLANE_TILT;
     this.depthFactor = V3D_ORBIT_PLANE_DEPTH;
 
-    // Uniform fit scale: the full design is scaled to fit the real scene on
-    // BOTH axes (width usually binds, the height takes over on short scenes).
-    // Both terms are (available half-extent around the origin) / (design
-    // half-extent); before the height has been measured, only the width binds.
-    // This ONE scale is what keeps the composition inside the scene - the
-    // plane angle is never used to shrink anything.
-    const outerBody = planetRadii[n - 1] * V3D_MAX_SCALE;
-    const pad = stagePadding(w);
-    const halfW = outerR + outerBody + pad;
-    const halfH = outerR * this.ellipseRatio + outerBody + pad;
+    // ==========================================================
+    // THE COMPLETE BOUNDING BOX OF THE DRAWN SYSTEM + THE ONE FIT SCALE
+    // ==========================================================
+    // A body of orbit i at angle theta is centred at
+    //   ( centerX + R_i*cos(theta) , centerY + R_i*cos(planeAngle)*sin(theta) )
+    // i.e. its centre rides the ellipse of semi-axes (R_i , R_i*cos(angle)).
+    // The DISC of that body therefore sweeps that ellipse expanded by the
+    // body's DRAWN radius r_i, so the deepest reach of the whole orbit is
+    //   max|x| = R_i + r_i            max|y| = R_i*cos(angle) + r_i
+    // (attained at theta = 0 deg for X and theta = 90 deg for Y).
+    // MAX over EVERY orbit - never just the outermost - and the DRAWN (visual)
+    // radii, because those are what is painted: the position radii can be up
+    // to V3D_PLANET_VISUAL_HEADROOM smaller than the rendered sphere. The
+    // orbit radii R_i themselves still come from the POSITION inputs only, so
+    // every locked distance stays byte-identical.
+    const drawnRadii = input.visualPlanetRadii ?? planetRadii;
+    const drawnBody = (i: number) => drawnRadii[i] * V3D_MAX_SCALE; // depth-scaled
+    let halfW = 0;
+    let halfH = 0;
+    for (let i = 0; i < n; i++) {
+      halfW = Math.max(halfW, this.radii[i] + drawnBody(i));
+      halfH = Math.max(halfH, this.radii[i] * this.ellipseRatio + drawnBody(i));
+    }
+    // The Sun sits ON the origin, so it adds its own reach: its full visual
+    // radius AND its halo (the box must hold both, or the halo is clipped).
+    const drawnSunRadius = input.visualSunRadius ?? input.sunRadius;
+    const sunExtent = Math.max(drawnSunRadius, drawnSunRadius * V3D_SUN_HALO_FACTOR);
+    halfW = Math.max(halfW, sunExtent);
+    halfH = Math.max(halfH, sunExtent);
+
+    // SAFETY MARGIN: the glow allowance - never smaller than the historical
+    // stage padding - so no box-shadow / halo reaches the scene edge.
+    const margin = Math.max(stagePadding(w), V3D_GLOW_MARGIN_PX);
+    halfW += margin;
+    halfH += margin;
+
     // Real room left around the origin on each side. With the optional offset
-    // at 0 (the shipped value) roomX is exactly w / 2 and roomY exactly h / 2,
-    // i.e. the historical fit - the general form only makes sure that moving
-    // the origin can never clip the composition, it can only scale it down.
+    // at 0 (the shipped value) roomX is exactly w / 2 and roomY exactly h / 2.
+    // The ONE uniform scale - derived from BOTH the measured width AND height
+    // - shrinks the COMPLETE composition (Sun, halo, planets, traces, glows)
+    // so the bounding box always fits the REAL scene rectangle. Ratios are
+    // preserved: no body is ever shrunk on its own.
     const roomX = Math.min(this.centerX, w - this.centerX);
     const roomY = h > 0 ? Math.min(this.centerY, h - this.centerY) : halfH;
     const fit = Math.min(roomX / halfW, roomY / halfH);
     this.fit = fit;
 
+    // THE VISIBLE ORBIT TRACES: each one is SAMPLED from the very same
+    // calculateOrbitPoint() the planets move on (0 .. 2*PI, V3D_TRACE_SAMPLES
+    // points), so a trace and the planet that rides it are the same curve by
+    // construction - same origin, same radius, same ONE plane angle. Static
+    // geometry: rebuilt here only (init / resize / language), never per frame.
+    const traces: OrbitTrace[] = [];
+    for (let i = 0; i < n; i++) {
+      traces.push({ index: i, d: this.sampleTracePath(i) });
+    }
     // THE COMPOSITION ASPECT (halfW / halfH): a ratio of the frozen radii and
     // of the ONE plane angle, so it is independent of every size knob and of
     // the scene. The component publishes it, and the scene is then given
@@ -564,7 +643,7 @@ export class Values3dGeometry {
     // wide, short viewport the system fills the whole WIDTH instead of being
     // shrunk by the height, while tall viewports simply keep centring it.
     const aspect = halfH > 0 ? halfW / halfH : 1;
-    return { fit, traces: [], aspect };
+    return { fit, traces, aspect, box: { halfW, halfH } };
   }
 
   /**
@@ -654,6 +733,13 @@ export interface OrbitGeometryInput {
       (V3D_SPACING_SCALE_BY_CATEGORY) - the SAME value the component's
       normalization uses, so both see one identical composition. */
   readonly spacingScale?: number;
+  /** DRAWN (visual) Sun radius in design px. Used for the BOUNDING BOX only;
+      the orbit radii still come from `sunRadius` (position layer), so every
+      locked distance stays byte-identical. Defaults to `sunRadius`. */
+  readonly visualSunRadius?: number;
+  /** DRAWN (visual) planet radii in design px. BOUNDING BOX only, same rule
+      as `visualSunRadius` above. Defaults to `planetRadii`. */
+  readonly visualPlanetRadii?: ArrayLike<number>;
 }
 
 /** What a geometry pass produces for the component. */
@@ -666,4 +752,9 @@ export interface OrbitGeometryResult {
   /** halfW / halfH of the design box: the aspect ratio the scene needs so the
       composition can use the full available width without being clipped. */
   readonly aspect: number;
+  /** THE COMPLETE BOUNDING BOX of the DRAWN system: half-extents in design
+      px around the ONE origin, glow margin included. `fit` is exactly the
+      scale that fits this box into the measured scene; the component's dev
+      containment audit re-checks it. */
+  readonly box: { readonly halfW: number; readonly halfH: number };
 }

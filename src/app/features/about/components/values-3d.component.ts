@@ -18,8 +18,11 @@ import {
   V3D_BAND_VISUAL_GAP_RATIO,
   V3D_MAX_SCALE,
   V3D_MIN_SCALE,
+  V3D_ORBIT_PLANE_ANGLE_DEG,
+  V3D_ORBIT_PLANE_TILT,
   V3D_PLANET_VISUAL_HEADROOM,
   V3D_SUN_DOMINANCE,
+  V3D_SUN_HALO_FACTOR,
   V3D_SUN_OFFSET_X,
   V3D_SUN_OFFSET_Y,
   V3D_SUN_TO_FIRST_PLANET_GAP,
@@ -30,6 +33,7 @@ import {
   designHalfExtent,
   stagePadding,
   sunClearanceFactor,
+  type OrbitTrace,
 } from './values-3d.geometry';
 
 /* ============================================================
@@ -101,21 +105,10 @@ const V3D_SLOTS = 6;
 const V3D_STEP = 1;
 const V3D_DEG = Math.PI / 180;
 
-/**
- * Orbital-plane angle.
- *
- * This controls the inclination of the common 3D plane
- * containing the Sun center and all planet centers.
- *
- * IMPORTANT:
- * Change ONLY this value when testing the orbital-plane inclination.
- *
- * Example:
- * 0   = one extreme
- * 45  = medium inclination
- * 90  = the other extreme
- */
-const V3D_ORBIT_PLANE_ANGLE_DEG = 45;
+/* NOTE: the orbital-plane angle is NOT defined here any more. It is the ONE
+   knob V3D_ORBIT_PLANE_ANGLE_DEG in values-3d.geometry.ts (imported above), so
+   the component's distance checks (spacingTilt) and the geometry's scene
+   bounds can never disagree about the plane. */
 /** Near/far opacity range (far planets stay clearly readable). */
 const V3D_MIN_OPACITY = 0.78;
 const V3D_MAX_OPACITY = 1;
@@ -471,55 +464,82 @@ interface PlanetGeometry {
          layout. Every size variable below has a safe fallback for the
          very first paint, before the engine runs.
          ============================================================ */
-      .v3d-section {
-        /* Navbar height + header block + bottom gap (all responsive below). */
-        --v3d-header-offset: 6rem;
-        --v3d-header-block: 7.5rem;
-        --v3d-bottom-gap: 4rem;
-        /* Edge safety: small responsive margin so the outermost orbit/planet
-           never touches the browser edge on the FULL-WIDTH orbital stage.
-           Tune this single variable to adjust the horizontal breathing room.
-           Kept deliberately small (1.5vw) so the radial grid receives the
-           maximum real width to distribute across the six orbits. */
-        --v3d-edge-padding: clamp(0.6rem, 1.5vw, 1.5rem);
-        /* Body sizes. The orbital system is authored in ONE design space and
-           uniformly scaled to fit the real scene (.v3d-stage / --v3d-fit).
-           The TS engine writes the real values at init/resize: --v3d-sun on
-           .v3d-scene and --v3d-pd (that planet's diameter) + the text sizes
-           on each planet, from the VISUAL SIZE CONTROLS block. The values
-           below are the pre-JS fallbacks for the very first paint. */
-        --v3d-sun: 240px;
-        --v3d-pd: 140px;
-        /* Content depth (translateZ fraction of the body diameter), cap-relative
-           scale, and convex "bowed" curvature (rotateX) - subtle to stay readable.
-           --v3d-content-scale = 1 keeps the printed text exactly at the size the
-           engine computed for the planet (it is NOT used to shrink text). */
-        --v3d-content-z: 0.35;
-        --v3d-content-scale: 1;
-        --v3d-content-curve: 6deg;
-        position: relative;
-        background: linear-gradient(180deg, #ffffff 0%, #f4f7fc 100%);
-        overflow: hidden;
-        width: 100%;
-        /* ONE VIEWPORT IS THE FLOOR, NOT THE LIMIT: the scene keeps its own
-           aspect ratio (below), so on a wide and short viewport the section
-           grows past one screen to let the composition use the full WIDTH.
-           Nothing is hard-coded - the scene is measured, and tall viewports
-           keep the original one-screen centred look. */
-        min-height: calc(100vh - var(--v3d-header-offset));
-        min-height: calc(100dvh - var(--v3d-header-offset));
-        display: flex;
-        flex-direction: column;
-        align-items: center;
-        justify-content: center;
-        padding-inline: 1.25rem;
-        padding-block: 1rem 1.5rem;
-        margin-bottom: var(--v3d-bottom-gap);
-      }
-      @media (max-width: 767px) {
-        .v3d-section { --v3d-header-offset: 5rem; }
-      }
-      .v3d-header { width: 100%; }
+              .v3d-section {
+         /* Real fixed navbar height (header.component.ts: h-20 md:h-24). */
+         --v3d-navbar: 5rem;
+         --v3d-bottom-gap: 0.5rem;
+         --v3d-edge-padding: clamp(0.5rem, 1.2vw, 1.25rem);
+         --v3d-sun: 240px;
+         --v3d-pd: 140px;
+         --v3d-content-z: 0.35;
+         --v3d-content-scale: 1;
+         --v3d-content-curve: 6deg;
+         position: relative;
+         background: linear-gradient(180deg, #ffffff 0%, #f4f7fc 100%);
+         overflow: hidden;
+         width: 100%;
+         /* Natural height: the page scrolls (Section A intro + Section B scene).
+            The two sections below own their own heights independently. */
+         display: block;
+         padding-inline: 1rem;
+         margin-bottom: 0;
+         box-sizing: border-box;
+       }
+       /* The fixed navbar is taller from 768px (Tailwind md:h-24). */
+       @media (min-width: 768px) {
+         .v3d-section { --v3d-navbar: 6rem; }
+       }
+
+       /* ============================================================
+          SECTION A - INTRODUCTION (own natural height; never fixed).
+          Title + subtitle come from the shared SectionHeaderComponent and
+          the paragraph from the i18n files - nothing is hardcoded here.
+          ============================================================ */
+       .v3d-intro {
+         width: 100%;
+         display: flex;
+         flex-direction: column;
+         align-items: center;
+         text-align: center;
+         /* Clear the fixed navbar, then breathe (height stays natural). */
+         padding-top: var(--v3d-navbar);
+         padding-bottom: clamp(1rem, 2vw + 0.5rem, 2rem);
+       }
+       /* Instance-scoped tightening of the shared header - the same pattern
+          already used by values.component.ts. */
+       .v3d-intro ::ng-deep app-section-header > div {
+         margin-bottom: 1.75rem;
+       }
+       .v3d-intro-text {
+         margin: 0;
+         max-width: 46rem;
+         font-size: 1rem;
+         line-height: 1.75;
+         color: #475569;
+         overflow-wrap: break-word;
+       }
+       @media (min-width: 1024px) {
+         .v3d-intro-text { font-size: 1.0625rem; }
+       }
+
+       /* ============================================================
+          SECTION B - SOLAR SYSTEM (own controlled height, independent
+          from the introduction). One viewport tall; its top band reserves
+          the real navbar height, so the scene can NEVER sit underneath the
+          fixed header. The engine's uniform fit still guarantees that all
+          seven bodies stay inside the measured .v3d-scene box.
+          ============================================================ */
+       .v3d-scene-section {
+         box-sizing: border-box;
+         width: 100%;
+         height: 100vh;   /* fallback for older engines */
+         height: 100dvh;
+         padding-top: var(--v3d-navbar);
+         padding-bottom: var(--v3d-bottom-gap);
+         display: flex;
+         align-items: center;
+         justify-content: center;
+       }
 
       /* Scene - the MEASURED coordinate system. Everything inside it lives
          on .v3d-stage, which is authored in a fixed LOGICAL design space
@@ -545,22 +565,18 @@ interface PlanetGeometry {
            anchoring of the shipped composition. */
         --v3d-offset-x: 0px;
         --v3d-offset-y: 0px;
-        /* COMPOSITION ASPECT (halfW / halfH of the design box, published by the
-           engine at init/resize). The scene is given exactly the height the
-           composition needs for its measured width, so the system fills the
-           available WIDTH instead of being shrunk by a short viewport. The
-           fallback covers the very first paint. */
-        --v3d-scene-aspect: 1.6;
-        aspect-ratio: var(--v3d-scene-aspect);
+        /* THE REAL SCENE BOX - measured, never derived from the composition.
+           It fills the Section B content area: the width minus the edge
+           padding, the FULL available height. So the bounding box / fit can
+           never depend on the box they define - compute() converges in ONE
+           pass and fit always matches this measured rectangle. (The old
+           --v3d-scene-aspect feedback loop is gone.) */
+        width: calc(100% - (2 * var(--v3d-edge-padding)));
+        max-width: 100%;
+        height: 100%;
         container-type: inline-size;
         position: relative;
         margin-inline: auto;
-        width: calc(100% - (2 * var(--v3d-edge-padding)));
-        max-width: none;
-        /* The height comes from the aspect ratio above; the scene never grows
-           or shrinks as a flex item, and the section keeps at least one
-           viewport of height (extra space is centred around the header). */
-        flex: 0 0 auto;
       }
       /* The design-space surface: the Sun, the planets and the dots are
          children of this ONE element and are scaled TOGETHER, so every
@@ -572,9 +588,20 @@ interface PlanetGeometry {
         transform-origin: 50% 50%;
       }
 
-      /* STEP 1: orbit traces are intentionally NOT drawn. The planet
-         movement below is the single source of truth; traces will be
-         recreated from it in STEP 2. */
+      /* Orbit traces: projected paths sampled from the exact same trajectory
+         the planets move on (calculateOrbitPoint / geometry.radii / the ONE
+         plane angle), so a trace and its planet are the same curve. Rendered
+         behind the planets, non-interactive, constant screen-pixel weight. */
+      .v3d-orbit-traces {
+        position: absolute;
+        left: 0;
+        top: 0;
+        width: 100%;
+        height: 100%;
+        overflow: visible;
+        pointer-events: none;
+        z-index: 1;
+      }
 
       /* Planets - LAYER 1 (orbit wrapper + sphere BODY). Centered at 50/50
          like the Sun itself; the rAF loop writes ONLY this element's
@@ -928,16 +955,8 @@ interface PlanetGeometry {
          The design-space fit scale and the logical body sizes are written
          by the TS geometry engine on every resize; only the section
          layout variables remain responsive here. */
-      @media (max-width: 900px) {
-        .v3d-section {
-          --v3d-header-block: 7rem;
-        }
-      }
       @media (max-width: 560px) {
-        .v3d-section {
-          --v3d-header-block: 6.5rem;
-          --v3d-bottom-gap: 3rem;
-        }
+        .v3d-section { --v3d-bottom-gap: 3rem; }
       }
 
       /* ================= Reduced motion =================
@@ -958,20 +977,37 @@ interface PlanetGeometry {
   ],
   template: `
     <section class="v3d-section">
-      <div class="v3d-header py-4 sm:py-6">
+      <div class="v3d-intro">
         <app-section-header
           [title]="'values_title' | translate"
           [subtitle]="'values_subtitle' | translate"
         />
+        <p class="v3d-intro-text">{{ 'values_intro' | translate }}</p>
       </div>
 
-      <div class="v3d-scene">
+      <!-- Section B - the solar system owns its own height, independent
+           from the introduction above (.v3d-scene-section). -->
+      <div class="v3d-scene-section">
+        <div class="v3d-scene">
         <!-- The whole orbital system lives on ONE design-space surface that
              is uniformly scaled to fit the real scene (--v3d-fit): the Sun
              and every planet share this single coordinate system, whose
              origin is the Sun's centre (centerX / centerY). -->
         <div class="v3d-stage">
-        <!-- STEP 1: no orbit traces are drawn. -->
+        <!-- Orbit traces are sampled from the exact same trajectory the planets
+             move on (calculateOrbitPoint / geometry.radii / the ONE plane angle),
+             so a trace can never disagree with the planet that rides it. -->
+        @if (traces().length > 0) {
+          <svg class="v3d-orbit-traces" aria-hidden="true">
+            @for (trace of traces(); track trace.index) {
+              <path [attr.d]="trace.d"
+                    fill="none"
+                    stroke="rgba(148, 163, 184, 0.35)"
+                    stroke-width="1.5"
+                    vector-effect="non-scaling-stroke" />
+            }
+          </svg>
+        }
 
         <!-- Soft halo shield keeps the sun visually dominant. -->
         <div class="v3d-sun-halo" aria-hidden="true"></div>
@@ -1052,6 +1088,7 @@ interface PlanetGeometry {
         </div>
         </div>
       </div>
+      </div>
     </section>
   `,
 })
@@ -1094,7 +1131,14 @@ export class Values3dComponent {
    * at init + on every resize; the planet transform subtracts that origin
    * because the DOM pins every planet at 50% / 50% of the stage.
    */
-  private readonly geometry = new Values3dGeometry();
+   private readonly geometry = new Values3dGeometry();
+  /** The bounding box (design px) compute() last fitted - dev audit only. */
+  private lastBox = { halfW: 0, halfH: 0 };
+  /** Reactive orbit traces - sampled from the SAME calculateOrbitPoint() the
+      planets move on, so a trace and its planet are the same curve. Updated
+      at init/resize only. */
+  private readonly tracesSig = signal<readonly OrbitTrace[]>([]);
+  readonly traces = this.tracesSig.asReadonly();
   /**
    * POSITION LAYER - Sun radius that feeds the frozen orbit geometry
    * (baseline values only). Never written to the DOM directly.
@@ -1641,7 +1685,9 @@ export class Values3dComponent {
    * Geometry/orientation only - never a size, speed or content knob.
    */
   private spacingTilt(): number {
-    return Math.cos((V3D_ORBIT_PLANE_ANGLE_DEG * Math.PI) / 180);
+    // ONE angle source: the geometry's V3D_ORBIT_PLANE_TILT (= cos of the ONE
+    // V3D_ORBIT_PLANE_ANGLE_DEG). Never a second copy of the knob.
+    return V3D_ORBIT_PLANE_TILT;
   }
 
   /**
@@ -1699,31 +1745,11 @@ export class Values3dComponent {
     return out;
   }
 
-  /**
-   * Largest a planet may grow at its FROZEN orbit position without ever
-   * being clipped by the scene edge (checked at the worst orbital angle).
-   * STEP-2 containment uses the 45° projection (same angle as the
-   * movement): halfH subtracts rx * spacingTilt() so the outermost body
-   * stays inside on short viewports. The geometry's uniform fit then
-   * shrinks the whole composition instead of clipping anything.
-   */
-  private edgeCapRadius(i: number): number {
-    // The room is MEASURED in the scene (screen px) and converted into the
-    // DESIGN space through the live fit scale, because the orbit radii and the
-    // visual radii both live in design px. Comparing those design px with the
-    // raw scene px (as the previous version did) made the cap ~1/fit too
-    // strict, so as soon as the composition was scaled down the cap collapsed
-    // and every planet fell back to its baseline radius - the reason the
-    // planets used to look like tiny dots while the Sun kept its size.
-    const fit = this.geometry.fit > 0 ? this.geometry.fit : 1;
-    const rx = this.geometry.radii[i];
-    const halfSceneH =
-      this.sceneHeightPx > 0 ? this.sceneHeightPx / 2 : this.sceneWidth * 0.31;
-    const halfW = this.sceneWidth / 2 / fit - rx;
-    const halfH = halfSceneH / fit - rx * this.spacingTilt();
-    const room = Math.max(0, Math.min(halfW, halfH));
-    return room / V3D_MAX_SCALE - 4;
-  }
+  /* NOTE: edgeCapRadius() has been REMOVED. It used to shrink an individual
+     planet to keep it off the scene edge, which is exactly what must not be
+     done: the single uniform fit scale now guarantees that the COMPLETE drawn
+     composition stays inside the scene, so a body is never resized on its own
+     to avoid clipping (values-3d.geometry.ts compute() bounding box). */
 
   /**
    * STEP-2 orbit-1 affordability cap (rendered sizes): largest ANY planet
@@ -1756,23 +1782,29 @@ export class Values3dComponent {
   }
 
   /**
-   * Rendered-size ceiling of planet i (design px) - the ONE place the three
-   * distance invariants of this step meet, so they can never drift apart:
-   *   - scene edge (containment)                  -> edgeCapRadius(),
+   * Rendered-size ceiling of planet i (design px) - the ONE place the two
+   * remaining distance invariants of this step meet, so they can never drift
+   * apart:
    *   - what orbit 1 can afford (projection/gap)  -> orbitCapRadius(),
    *   - the rendered/position budget that firstOrbitRadius() sized R1 with
    *     (V3D_PLANET_VISUAL_HEADROOM x the position radius), which is what
    *     makes the Sun -> Planet 1 clearance a guarantee for the DRAWN body.
+   * SCENE-EDGE CONTAINMENT IS NOT A SIZE CAP ANY MORE: it is owned by the ONE
+   * uniform fit scale (see the bounding box in values-3d.geometry.ts), so a
+   * planet is never shrunk on its own to avoid clipping.
    * Never below the position baseline (a planet always renders at least its
    * design anchor). Size only - this never moves a body.
    */
   private planetVisualCap(i: number): number {
+    // CONTAINMENT IS OWNED BY THE ONE UNIFORM FIT SCALE - never by shrinking a
+    // single planet: compute() fits the WHOLE drawn composition (Sun, halo,
+    // every orbit, every drawn body, glow margin) inside the measured scene.
+    // The drawn size is therefore limited only by its own rendered/position
+    // budget and by what orbit 1 can afford at the projection (Sun dominance).
+    // The old per-planet scene-edge cap is gone on purpose.
     const baseline = this.planetRadiiPx[i];
     const budget = V3D_PLANET_VISUAL_HEADROOM * baseline;
-    return Math.max(
-      baseline,
-      Math.min(this.edgeCapRadius(i), this.orbitCapRadius(), budget),
-    );
+    return Math.max(baseline, Math.min(this.orbitCapRadius(), budget));
   }
 
   /**
@@ -1957,7 +1989,7 @@ export class Values3dComponent {
    * unchanged) in calculateOrbitPoint() below. No traces are drawn in
    * STEP 1/2; result.traces is ignored until STEP 3.
    */
-  private updateOrbitGeometry(): void {
+  private updateOrbitGeometry(drawBounds = false): void {
     const result = this.geometry.compute({
       width: this.sceneWidth,
       height: this.sceneHeightPx,
@@ -1966,13 +1998,21 @@ export class Values3dComponent {
       // Responsive spacing dial (same value the normalization used) - the
       // SIX radii and the containment follow it together.
       spacingScale: this.spacingScale(),
+      // PASS 2 ONLY: hand over the DRAWN radii so the ONE uniform fit is
+      // derived from what is ACTUALLY PAINTED - Sun + halo + every orbit +
+      // every drawn body + the glow margin. The orbit radii above still come
+      // from the POSITION inputs, so no locked distance can move.
+      ...(drawBounds
+        ? {
+            visualSunRadius: this.visualSunRadiusPx,
+            visualPlanetRadii: this.visualRadiiPx,
+          }
+        : {}),
     });
     if (!result) return; // scene not measured yet - keep the previous geometry
     this.writeFitScale(result.fit);
-    this.writeGeometryAspect(result.aspect);
-    // STEP 1/2: intentionally no orbit traces. The planet movement
-    // (calculateOrbitPoint below) is the single source of truth;
-    // STEP 3 will sample traces from these same radii.
+    if (!drawBounds) this.tracesSig.set(result.traces); // radii are pass-1 only
+    this.lastBox = result.box;
   }
 
   /** Screen category from the MEASURED scene width: 0 mobile, 1 tablet,
@@ -2022,22 +2062,11 @@ export class Values3dComponent {
     this.scene.style.setProperty('--v3d-offset-y', `${V3D_SUN_OFFSET_Y}px`);
   }
 
-  /**
-   * Publishes the COMPOSITION ASPECT (halfW / halfH of the design box, from
-   * Values3dGeometry.compute()) so the scene can be GIVEN the height this very
-   * composition needs for its measured width: on a wide, short viewport the
-   * system then fills the whole width instead of being shrunk by the height,
-   * while a tall viewport keeps centring it (the section's one-viewport
-   * min-height stays the floor). No fixed size anywhere - the container is
-   * measured, only its proportion is published.
-   * The ratio comes from the frozen radii and the ONE plane angle, so it
-   * settles after the first pass and the ResizeObserver then early-returns.
-   * Init + resize ONLY.
-   */
-  private writeGeometryAspect(aspect: number): void {
-    if (!this.scene || !(aspect > 0) || !isFinite(aspect)) return;
-    this.scene.style.setProperty('--v3d-scene-aspect', aspect.toFixed(4));
-  }
+  /* NOTE: --v3d-scene-aspect is GONE. The scene height is no longer derived
+     from the composition: .v3d-scene is given the REAL Section-B box by CSS
+     (edge-padded width x the full available height), so the bounding box / fit
+     can never depend on the box they define. compute() thus converges in ONE
+     pass and the fit always matches the measured scene rectangle. */
 
   /** Writes the uniform fit scale into --v3d-fit, the one custom property
       the engine still publishes (.v3d-stage consumes it to scale the whole
@@ -2107,8 +2136,8 @@ export class Values3dComponent {
   private applyStaticGeometry(): void {
     const host = this.elementRef.nativeElement;
     this.scene = host.querySelector<HTMLElement>('.v3d-scene');
-    this.sceneWidth = this.scene ? this.scene.clientWidth : 0;
-    this.sceneHeightPx = this.scene ? this.scene.clientHeight : 0;
+    this.sceneWidth = this.scene ? this.scene.getBoundingClientRect().width : 0;
+    this.sceneHeightPx = this.scene ? this.scene.getBoundingClientRect().height : 0;
 
     this.planets = Array.from(host.querySelectorAll<HTMLElement>('.v3d-planet'));
     this.spheres = Array.from(host.querySelectorAll<HTMLElement>('.v3d-planet-sphere'));
@@ -2146,8 +2175,17 @@ export class Values3dComponent {
     // positions.
     this.applyVisualSizes();
     this.fitContentToPlanets();
+    // PASS 1: the FROZEN orbit radii (position layer) + a provisional fit, so
+    // the visual pass below has the radii it needs for its size caps.
     this.updateOrbitGeometry();
+    // The content-first VISUAL pass: the DRAWN sizes - what is actually painted.
     this.growVisualBodies();
+    // PASS 2: re-derive the ONE uniform fit from the DRAWN composition. The
+    // bounding box now holds the Sun + its halo + EVERY orbit + EVERY drawn
+    // body + the glow margin, so containment is proven against what is painted.
+    // The orbit radii are re-derived from the unchanged position inputs, so no
+    // body moves and no locked distance changes.
+    this.updateOrbitGeometry(true);
     this.validateOrbitGeometry();
     this.applyAnimation();
   }
@@ -2450,6 +2488,12 @@ export class Values3dComponent {
     //    FRONT of the Sun must not cover more than ~50% of the Sun's readable
     //    content zone, and the Sun's real text block must stay readable.
     this.validateSunContentOverlap();
+
+    // 7. THE CONTAINMENT GUARANTEE ITSELF, checked against the SAME bounding
+    //    box compute() fitted: every orbit + its drawn (depth-scaled) body and
+    //    the Sun + its halo must stay inside the measured scene rectangle at
+    //    the WORST orbital angle (theta = 0 deg for X, 90 deg for Y).
+    this.validateSceneContainment();
   }
 
   /**
@@ -2459,13 +2503,58 @@ export class Values3dComponent {
    * resize, orientation change, breakpoint change, one-viewport section
    * growth) - not width only.
    */
+  /**
+   * DEV-TIME CONTAINMENT AUDIT (init / resize only; isDevMode(), zero
+   * production cost). Proves, from the SAME bounding box compute() fitted and
+   * the SAME orbit radii and plane angle the movement reads every frame, that
+   * the DRAWN system stays inside the measured scene at EVERY frame of the
+   * revolution: for every orbit the worst projected centre (theta = 0 deg on
+   * X, 90 deg on Y) plus that orbit's drawn, depth-scaled body radius must fit
+   * the scene once the ONE fit scale is applied - and so must the Sun with its
+   * full halo. Observes only: positions, radii and speeds are untouched.
+   */
+  private validateSceneContainment(): void {
+    if (!isDevMode()) return;
+    const fit = this.geometry.fit;
+    const w = this.sceneWidth;
+    const h = this.sceneHeightPx;
+    if (!(fit > 0) || !(w > 0) || !(h > 0)) return;
+    let worstX = 0;
+    let worstY = 0;
+    for (let i = 0; i < this.geometry.radii.length; i++) {
+      const orbit = this.geometry.radii[i] * fit;
+      const body = this.visualRadiiPx[i] * V3D_MAX_SCALE * fit;
+      worstX = Math.max(worstX, orbit + body);
+      worstY = Math.max(worstY, orbit * V3D_ORBIT_PLANE_TILT + body);
+    }
+    // The Sun adds its own reach (full visual radius AND its halo).
+    const sun =
+      Math.max(
+        this.visualSunRadiusPx,
+        this.visualSunRadiusPx * V3D_SUN_HALO_FACTOR,
+      ) * fit;
+    const reachX = Math.max(worstX, sun);
+    const reachY = Math.max(worstY, sun);
+    const overX = reachX - w / 2;
+    const overY = reachY - h / 2;
+    const ok = overX <= 0.5 && overY <= 0.5;
+    const line =
+      `[values-3d] Contained: box ${this.lastBox.halfW.toFixed(0)}x${this.lastBox.halfH.toFixed(0)} (design px) ` +
+      `-> fit ${fit.toFixed(3)} | worst drawn reach ${reachX.toFixed(1)}x${reachY.toFixed(1)}px ` +
+      `in scene ${w.toFixed(0)}x${h.toFixed(0)} (half ${(w / 2).toFixed(1)}x${(h / 2).toFixed(1)}) ` +
+      `-> ${ok ? 'OK' : 'FAIL'} (overflow ${overX.toFixed(1)}x${overY.toFixed(1)}px)`;
+    if (ok) console.info(line);
+    else console.warn(line);
+  }
+
   private observeSceneResizes(): void {
     if (typeof ResizeObserver === 'undefined' || !this.scene) return;
     const scene = this.scene;
     this.zone.runOutsideAngular(() => {
       this.resizeObserver = new ResizeObserver(() => {
-        const width = scene.clientWidth;
-        const height = scene.clientHeight;
+        const rect = scene.getBoundingClientRect();
+        const width = rect.width;
+        const height = rect.height;
         if (width === this.sceneWidth && height === this.sceneHeightPx) return;
         this.sceneWidth = width;
         this.sceneHeightPx = height;
@@ -2474,8 +2563,9 @@ export class Values3dComponent {
         // resize ticks only - never inside a frame.
         this.applyVisualSizes();
         this.fitContentToPlanets();
-        this.updateOrbitGeometry();
-        this.growVisualBodies();
+        this.updateOrbitGeometry();      // pass 1: frozen radii (position)
+        this.growVisualBodies();         // the DRAWN sizes
+        this.updateOrbitGeometry(true);  // pass 2: fit from the DRAWN box
         this.validateOrbitGeometry();
         this.applyAnimation();
       });
@@ -2498,12 +2588,14 @@ export class Values3dComponent {
         // before they are measured.
         requestAnimationFrame(() => {
           if (!this.scene) return;
-          this.sceneWidth = this.scene.clientWidth;
-          this.sceneHeightPx = this.scene.clientHeight;
+          const rect = this.scene.getBoundingClientRect();
+          this.sceneWidth = rect.width;
+          this.sceneHeightPx = rect.height;
           this.applyVisualSizes();
           this.fitContentToPlanets();
-          this.updateOrbitGeometry();
-          this.growVisualBodies();
+          this.updateOrbitGeometry();      // pass 1: frozen radii (position)
+          this.growVisualBodies();         // the DRAWN sizes
+          this.updateOrbitGeometry(true);  // pass 2: fit from the DRAWN box
           this.validateOrbitGeometry();
           this.applyAnimation();
         });
