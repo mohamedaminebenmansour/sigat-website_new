@@ -18,8 +18,6 @@ import {
   V3D_BAND_VISUAL_GAP_RATIO,
   V3D_MAX_SCALE,
   V3D_MIN_SCALE,
-  V3D_ORBIT_PLANE_ANGLE_DEG,
-  V3D_ORBIT_PLANE_TILT,
   V3D_PLANET_VISUAL_HEADROOM,
   V3D_SUN_DOMINANCE,
   V3D_SUN_HALO_FACTOR,
@@ -30,9 +28,13 @@ import {
   V3D_SPACING_MIN_SCALE,
   V3D_SPACING_SCALE_BY_CATEGORY,
   Values3dGeometry,
+  angleDegThatFits,
   designHalfExtent,
+  projectedHeightPx,
+  radOf,
   stagePadding,
   sunClearanceFactor,
+  tiltOf,
   type OrbitTrace,
 } from './values-3d.geometry';
 
@@ -43,7 +45,7 @@ import {
 
    1. POSITION (locked) — where a body is on screen:
       orbit angles + speeds (V3D_ORBITS), the ONE inclined orbital plane
-      (V3D_ORBIT_PLANE_ANGLE_DEG: the common plane rotates around the
+      (V3D_ORBIT_PLANE_ANGLE_LADDER_DEG: the common plane rotates around the
       horizontal X axis through the centre, so the screen position AND the
       depth of every planet come from the same circle), the z-band, the
       self-rotation and the autoplay. NOTHING in the
@@ -73,15 +75,15 @@ import {
    ORBITAL GEOMETRY (single source of truth) - values-3d.geometry.ts:
    the pure Values3dGeometry module owns the ONE origin
    (centerX / centerY = the exact centre of the Sun), the ONE plane angle
-   (V3D_ORBIT_PLANE_ANGLE_DEG, imported below - never a local copy), the
-   six orbit radii and the uniform fit scale. The movement in
-   calculateOrbitPoint() reads that very same angle through the imported
-   V3D_ORBIT_PLANE_TILT / V3D_ORBIT_PLANE_DEPTH: the planet orbital
-   movement is the ONLY trajectory, in absolute stage coordinates around
-   that one origin, so a planet can never drift out of the component
-   bounds. The engine publishes exactly one custom property - --v3d-fit
-   (the uniform stage zoom); the scene box itself is real CSS (measured,
-   never derived from the composition).
+   (V3D_ORBIT_PLANE_ANGLE_LADDER_DEG, resolved ONCE per pass by
+   angleDegThatFits() - never a local copy), the six orbit radii and the
+   uniform fit scale. The movement in calculateOrbitPoint() and the whole
+   geometry pass read that very same inclination, so the planet trajectory
+   is the ONLY trajectory, in absolute stage coordinates around that one
+   origin, and a planet can never drift out of the component bounds. The
+   engine publishes exactly one custom property - --v3d-fit (the uniform
+   stage zoom); the scene box itself is real CSS (measured, never derived
+   from the composition).
 
    ORBIT TRACES - sampled from the same calculateOrbitPoint() the planets
    move on (values-3d.geometry.ts compute()), so a trace can never
@@ -107,9 +109,11 @@ const V3D_STEP = 1;
 const V3D_DEG = Math.PI / 180;
 
 /* NOTE: the orbital-plane angle is NOT defined here any more. It is the ONE
-   knob V3D_ORBIT_PLANE_ANGLE_DEG in values-3d.geometry.ts (imported above), so
-   the component's distance checks (spacingTilt) and the geometry's scene
-   bounds can never disagree about the plane. */
+   knob V3D_ORBIT_PLANE_ANGLE_LADDER_DEG in values-3d.geometry.ts, resolved
+   per pass by angleDegThatFits() (the smallest entry whose complete
+   projected system fits the available height), so the component's distance
+   checks (spacingTilt) and the geometry's scene bounds can never disagree
+   about the plane. */
 /** Near/far opacity range (far planets stay clearly readable). */
 const V3D_MIN_OPACITY = 0.78;
 const V3D_MAX_OPACITY = 1;
@@ -135,12 +139,12 @@ const V3D_COLORS = ['#f59e0b', '#2563eb', '#0ea5e9', '#6366f1', '#1d4ed8', '#0f7
      R1      = ( sunRadius * (1 + 2*V3D_SUN_TO_FIRST_PLANET_GAP)
                 * V3D_SUN_VISUAL_HEADROOM
                 + planetRadius_1 * V3D_MAX_SCALE * V3D_PLANET_VISUAL_HEADROOM )
-                / V3D_ORBIT_PLANE_TILT   (holds at EVERY orbital angle)
+                / tilt (cos of the ONE inclination)  (holds at EVERY angle)
      gap_i   = spacingScale * (1 + V3D_BAND_VISUAL_GAP_RATIO)
                * V3D_PLANET_VISUAL_HEADROOM * (p_i + p_i+1)
      R_i+1   = R_i + gap_i                       (rendered-size radii)
-     tilt    = cos(V3D_ORBIT_PLANE_ANGLE_DEG)   (exactly the ONE knob)
-     depth   = sin(V3D_ORBIT_PLANE_ANGLE_DEG)   (the SAME angle)
+     tilt    = cos(angle of the CURRENT category)  (the ONE knob)
+     depth   = sin(angle of the CURRENT category)  (the SAME angle)
      fit     = ONE uniform scale that makes the whole composition fit
                the measured scene on BOTH axes (containment, nothing else)
 
@@ -148,8 +152,8 @@ const V3D_COLORS = ['#f59e0b', '#2563eb', '#0ea5e9', '#6366f1', '#1d4ed8', '#0f7
    block (plus the content-driven growth). STEP 2 changes ONLY these
    geometric distances (R1 + the five band gaps); the plane angle,
    speeds, self-rotation and animation are untouched. Movement is ONE
-   inclined orbital plane (the ONE V3D_ORBIT_PLANE_ANGLE_DEG of
-   values-3d.geometry.ts) rotating
+   inclined orbital plane (the ONE inclination of the current pass, resolved
+   from V3D_ORBIT_PLANE_ANGLE_LADDER_DEG in values-3d.geometry.ts) rotating
    around the horizontal X axis through the ONE origin (centerX /
    centerY = the Sun centre):
      orbitalX = cos(theta) * R        orbitalY = sin(theta) * R
@@ -253,7 +257,8 @@ const V3D_LARGE_PLANET_CONTENT_SCALE = [1.25, 1.30, 1.22, 1.32, 1.25, 1.30];
 
 // ============================================================
 // ORBITAL POSITION CONSTANTS (band spacing, stage padding, the ONE
-// manual plane angle V3D_ORBIT_PLANE_ANGLE_DEG, its projected
+// inclination ladder V3D_ORBIT_PLANE_ANGLE_LADDER_DEG and the resolver
+// that picks the angle this pass, its projected
 // tilt/depth, the trace sampling step and the uniform fit scale) live
 // in values-3d.geometry.ts - pure, DOM-free, the single source the
 // planet movement AND the orbit traces derive from.
@@ -1205,6 +1210,17 @@ export class Values3dComponent {
   private readonly planetDescText: string[] = ['', '', '', '', '', ''];
   /** Screen category of the current pass (0 mobile ... 3 large desktop). */
   private category = 2;
+  /** cos(inclination) of the CURRENT pass - the ONE resolved tilt. It is
+      decided ONCE per pass by angleDegThatFits() (the smallest ladder entry
+      whose complete projected system fits the available height) and stored
+      here BEFORE any radius is derived, so the normalization, the orbit
+      geometry, the traces and the movement can never use different planes. */
+  private planeTilt = tiltOf(55);
+  /** The inclination (degrees) behind `planeTilt`, for the dev audits. */
+  private planeAngleDeg = 55;
+  /** Scene height this pass' composition needs at that inclination - the
+      same estimate that chose it, kept for the dev audit. */
+  private planeNeedPx = 0;
   /** Off-screen 2D context used to measure the real text (FR / EN / AR). */
   private measureCtx: CanvasRenderingContext2D | null = null;
 
@@ -1304,6 +1320,30 @@ export class Values3dComponent {
       this.planetRadiiPx[i] = this.manualRadiiPx[i];
     }
 
+    // THE ONE INCLINATION OF THIS PASS: the smallest ladder entry whose
+    // COMPLETE projected system fits the scene height available in the
+    // viewport (viewport - navbar - bottom margin). Resolved here - after the
+    // frozen baselines are restored, so the test always sees them, and BEFORE
+    // the normalization - which makes it exact and stateless: the whole
+    // design is normalized to the WIDTH, so the height it needs depends only
+    // on these radii and the candidate angle, never on the measured height
+    // (no feedback loop) and never on a previous pass.
+    this.planeAngleDeg = angleDegThatFits(
+      this.sceneWidth,
+      this.availableSceneHeightPx(),
+      this.sunRadiusPx,
+      this.planetRadiiPx,
+      this.spacingScale(),
+    );
+    this.planeTilt = tiltOf(this.planeAngleDeg);
+    this.planeNeedPx = projectedHeightPx(
+      this.sceneWidth,
+      this.planeAngleDeg,
+      this.sunRadiusPx,
+      this.planetRadiiPx,
+      this.spacingScale(),
+    );
+
     // SCENE NORMALIZATION: the manual radii are RELATIVE weights, so Sun and
     // planets are scaled TOGETHER until the design exactly fills the measured
     // scene width. The composition then always uses the full available width
@@ -1346,6 +1386,7 @@ export class Values3dComponent {
       this.sunRadiusPx,
       this.planetRadiiPx,
       this.spacingScale(),
+      this.planeTilt,
       this.sceneWidth,
     );
     if (!(extent > 0)) return;
@@ -1370,12 +1411,13 @@ export class Values3dComponent {
       this.sunRadiusPx,
       this.planetRadiiPx,
       this.spacingScale(),
+      this.planeTilt,
       this.sceneWidth,
     );
     if (!(extent > available)) return;
     // The Sun's own share of R1 - ONE expression, shared with the geometry
     // (sunClearanceFactor mirrors firstOrbitRadius()'s Sun term exactly).
-    const sunFactor = sunClearanceFactor();
+    const sunFactor = sunClearanceFactor(this.planeTilt);
     const planetsExtent = extent - this.sunRadiusPx * sunFactor;
     if (planetsExtent >= available) return; // planets alone fill the scene
     const wantedSun = (available - planetsExtent) / sunFactor;
@@ -1697,15 +1739,16 @@ export class Values3dComponent {
 
   /**
    * Plane projection used for DISTANCE checks only: the COS of the ONE
-   * V3D_ORBIT_PLANE_ANGLE_DEG (imported from values-3d.geometry.ts) - the
+   * inclination of the current pass (resolved from the geometry's
+   * V3D_ORBIT_PLANE_ANGLE_LADDER_DEG) - the
    * semi-axis of a projected orbit (screen Y), while the movement's
    * calculateOrbitPoint() below remains the runtime source of truth.
    * Geometry/orientation only - never a size, speed or content knob.
    */
   private spacingTilt(): number {
-    // ONE angle source: the geometry's V3D_ORBIT_PLANE_TILT (= cos of the ONE
-    // V3D_ORBIT_PLANE_ANGLE_DEG). Never a second copy of the knob.
-    return V3D_ORBIT_PLANE_TILT;
+    // The ONE inclination of the current pass, resolved once from the screen
+    // category (see applyVisualSizes). Never a second copy of the knob.
+    return this.planeTilt;
   }
 
   /**
@@ -2003,7 +2046,7 @@ export class Values3dComponent {
    *     + p_next + visual gap, x spacingScale for mobile / tablet /
    *     desktop / large). Geometric distances, never CSS margins; one
    *   common origin; containment (fit) has priority over spacing.
-   * Movement projects those radii with the ONE V3D_ORBIT_PLANE_ANGLE_DEG
+   * Movement projects those radii with the ONE inclination of the current pass
    * in calculateOrbitPoint() below, and the orbit traces are sampled from
    * that same function (pass 1 writes them; pass 2 only refreshes fit).
    */
@@ -2013,6 +2056,10 @@ export class Values3dComponent {
       height: this.sceneHeightPx,
       sunRadius: this.sunRadiusPx,
       planetRadii: this.planetRadiiPx,
+      // THE inclination of this pass (radians) - the same value spacingTilt()
+      // used for every distance check, so the radii, the projection, the
+      // traces and the bounding box can never describe different planes.
+      planeAngleRad: radOf(this.planeAngleDeg),
       // Responsive spacing dial (same value the normalization used) - the
       // SIX radii and the containment follow it together.
       spacingScale: this.spacingScale(),
@@ -2057,6 +2104,25 @@ export class Values3dComponent {
   private writeNeededHeight(aspect: number): void {
     if (!this.section || !(this.sceneWidth > 0) || !(aspect > 0)) return;
     this.section.style.setProperty('--v3d-needed-h', `${Math.ceil(this.sceneWidth / aspect)}px`);
+  }
+
+  /**
+   * Scene height the composition may occupy, read from the REAL layout:
+   * the viewport height minus Section B's own reserved bands (its
+   * `padding-top` = the actual navbar height, `padding-bottom` = the bottom
+   * margin). Both come from the live computed style, so neither value is
+   * assumed. It is deliberately NOT derived from the section's own height
+   * (which the engine can grow), so the inclination test can never feed back
+   * into the height it is measuring.
+   */
+  private availableSceneHeightPx(): number {
+    const section = this.section;
+    const viewport = typeof window !== 'undefined' ? window.innerHeight : 0;
+    if (!section || !(viewport > 0)) return viewport;
+    const style = getComputedStyle(section);
+    const reserved =
+      (parseFloat(style.paddingTop) || 0) + (parseFloat(style.paddingBottom) || 0);
+    return Math.max(0, viewport - reserved);
   }
 
   /** Screen category from the MEASURED scene width: 0 mobile, 1 tablet,
@@ -2339,11 +2405,11 @@ export class Values3dComponent {
       `[values-3d] Sun content overlap: worst ${zonePct}% of the readable content zone ` +
       `${worstCase}, penetration ${penetrationPct}% of the Sun radius, ` +
       `Sun text block ${textHx > 0 ? `${textPct}% covered` : 'not measured'} - ` +
-      `plane ${V3D_ORBIT_PLANE_ANGLE_DEG}°, fit ${this.geometry.fit.toFixed(2)}, ` +
+      `plane ${this.planeAngleDeg}°, fit ${this.geometry.fit.toFixed(2)}, ` +
       `front/back from depth ${flat.length === 0 ? 'OK' : `BROKEN (planet ${flat.join(', ')})`}.`;
     if (worstZone > 0.5) {
       console.warn(
-        `${summary} REQUIREMENT < 50%: LOWER V3D_ORBIT_PLANE_ANGLE_DEG (a smaller angle keeps the planets farther from the Sun on screen) - never change a radius or a size.`,
+        `${summary} REQUIREMENT < 50%: LOWER the inclination (V3D_ORBIT_PLANE_ANGLE_LADDER_DEG - a smaller angle keeps the planets farther from the Sun on screen) - never change a radius or a size.`,
       );
     } else {
       console.info(summary);
@@ -2478,7 +2544,7 @@ export class Values3dComponent {
     const maxPlanetR = Math.max(...Array.from(this.visualRadiiPx));
 
     console.info(
-      `[values-3d] Sizes: scene ${this.sceneWidth.toFixed(0)}x${this.sceneHeightPx.toFixed(0)}px, fit ${fit.toFixed(2)}, plane ${V3D_ORBIT_PLANE_ANGLE_DEG}° (STEP-2 tilt ${this.spacingTilt().toFixed(2)}), orbits ${Array.from(this.geometry.radii, (r) => (r * fit).toFixed(0)).join('/')}px (position layer - locked), sun Ø${rendered(this.visualSunRadiusPx)}px (text ${(this.sunTitlePx * fit).toFixed(1)}px), planets Ø${Array.from(this.visualRadiiPx, (r) => rendered(r)).join('/')}px, titles ${Array.from(this.contentTitlePx, (t) => (t * fit).toFixed(1)).join('/')}px`,
+      `[values-3d] Sizes: scene ${this.sceneWidth.toFixed(0)}x${this.sceneHeightPx.toFixed(0)}px, fit ${fit.toFixed(2)}, plane ${this.planeAngleDeg}° (tilt ${this.spacingTilt().toFixed(2)}, needs ~${this.planeNeedPx.toFixed(0)}px of the ${this.availableSceneHeightPx().toFixed(0)}px available), orbits ${Array.from(this.geometry.radii, (r) => (r * fit).toFixed(0)).join('/')}px (position layer - locked), sun Ø${rendered(this.visualSunRadiusPx)}px (text ${(this.sunTitlePx * fit).toFixed(1)}px), planets Ø${Array.from(this.visualRadiiPx, (r) => rendered(r)).join('/')}px, titles ${Array.from(this.contentTitlePx, (t) => (t * fit).toFixed(1)).join('/')}px`,
     );
 
     // 1. Sun dominance (visual / depth-scaled: the Sun wins at the worst angle).
@@ -2572,7 +2638,7 @@ export class Values3dComponent {
       const orbit = this.geometry.radii[i] * fit;
       const body = this.visualRadiiPx[i] * V3D_MAX_SCALE * fit;
       worstX = Math.max(worstX, orbit + body);
-      worstY = Math.max(worstY, orbit * V3D_ORBIT_PLANE_TILT + body);
+      worstY = Math.max(worstY, orbit * this.planeTilt + body);
     }
     // The Sun adds its own reach (full visual radius AND its halo).
     const sun =

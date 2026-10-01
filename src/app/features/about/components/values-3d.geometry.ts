@@ -3,9 +3,10 @@
  * MASTER ANGLE - INCLINATION OF THE COMMON ORBITAL PLANE
  * ============================================================
  *
- * Change V3D_ORBIT_PLANE_ANGLE_DEG to change the common orbital-plane
- * inclination: how the six planet trajectories are projected onto the
- * screen.
+ * Change V3D_ORBIT_PLANE_ANGLE_LADDER_DEG to change the common orbital-plane
+ * inclination (one small set of candidate angles, of which the SMALLEST
+ * that fits the available height is resolved per geometry pass):
+ * how the six planet trajectories are projected onto the screen.
  *
  * This value changes:
  *   - projected planet Y positions
@@ -48,20 +49,39 @@
  *                 collapses to a horizontal line (no ellipse left to read).
  *   55       -> the cinematic oblique in between (see below).
  *
- * WHY 55 (measured with the headless sweep, never guessed):
+ * WHY 55 on mobile/tablet and 61 on desktop (measured, never guessed):
  * the projected rings must read as clear ELLIPSES with real front/back
- * travel, and the whole system must still fit its scene:
+ * travel, and the whole system must fit its scene:
  *     32 -> ellipse 1.18:1 - almost circular, i.e. the top-down look, and
  *           the near-circular box is tall, so desktop was HEIGHT-bound and
  *           wasted the width (73.6% at 1920x1080).
  *     55 -> ellipse 1.74:1 - unmistakably oblique yet far from a line, and
  *           the shallower box lets the WIDTH become the binding axis.
+ *     61 -> ellipse 2.06:1 - the SMALLEST inclination that makes the desktop
+ *           section fit its viewport; still clearly oblique, not a line.
  *     65 -> ellipse 2.37:1 - flatter, but cos(alpha) shrinks every radius
  *           (R1 = .../cos(alpha)) so the bodies lose ~9% of their size for
  *           a look that starts reading as a flat diagram.
- * Measured at 55 across 320/360/390/430/768/834/1024/1280/1440/1920 and
- * FR / EN / AR: the rings read 1.743:1 (measured on the rendered SVG), the
- * worst planet-vs-planet disc overlap over a full revolution is 0px, and no
+ *
+ * WHY DESKTOP NEEDS 61 (measured heights, available = viewport - navbar of
+ * 80/96px - bottom margin of 8/48px):
+ *     1024x768   available 664  needed 664  -> 55 fits (exactly)
+ *     1280x800   available 696  needed 743  -> 55 overflows by  47px
+ *     1440x900   available 796  needed 837  -> 55 overflows by  41px
+ *     1920x1080  available 976  needed 1119 -> 55 overflows by 143px
+ *     320..834   available >= needed at 55 (overflow 0 at every size)
+ * At 61 deg every one of those cells needs less than its available height
+ * (verified with the headless sweep: overflow 0px at all 30 cells).
+ * THE COST IS MATHEMATICAL, NOT COSMETIC: the composition is normalized to
+ * the WIDTH and R1 = .../cos(alpha), so the body size and the required
+ * height scale with the SAME factor. Flattening the plane enough to fit
+ * therefore costs ~9% of body size - and ONLY on the viewports that
+ * actually need it: 1280 / 1440 / 1920. Everything up to and including
+ * 1024x768 keeps 55 deg and its exact approved size.
+ * Measured across 320/360/390/430/768/834/1024/1280/1440/1920 and
+ * FR / EN / AR: the rings read 1.743:1 on mobile/tablet (55 deg) and
+ * 2.06:1 on desktop (61 deg) on the rendered SVG, the worst
+ * planet-vs-planet disc overlap over a full revolution is 0px, and no
  * planet ever reaches the Sun's readable content zone (0.0% covered,
  * penetration 0% - comfortably inside the "<= 5% of the Sun" requirement,
  * because firstOrbitRadius() divides by cos(alpha) and therefore holds the
@@ -77,8 +97,8 @@
  *        ANGLE
  *          |
  *          v
- *   orbital plane       V3D_ORBIT_PLANE_TILT  = cos(angle)  -> screen Y
- *                       V3D_ORBIT_PLANE_DEPTH = sin(angle)  -> depth
+ *   orbital plane       tilt = cos(angle)   -> screen Y   (per pass)
+ *                       depth = sin(angle) -> depth      (the SAME angle)
  *          |
  *          v
  *   calculateOrbitPoint()  <- the SINGLE mathematical source of truth
@@ -95,27 +115,151 @@
  * is guaranteed by the single uniform fit scale in compute(): the angle is
  * never used to shrink or grow anything.
  */
-export const V3D_ORBIT_PLANE_ANGLE_DEG = 55;
+/**
+ * ─── THE ONE INCLINATION KNOB ─────────────────────────────────────────────
+ *
+ * The solar system is projected with ONE common orbital plane, inclined by
+ * this angle between the orbital plane and the screen plane. The ladder is
+ * ordered from the most cinematic (flattest look, biggest bodies) to the
+ * most projected-down; the engine always uses the SMALLEST entry whose
+ * complete projected system fits the available scene height
+ * (angleDegThatFits), so a viewport that already fits keeps its approved
+ * size and only the too-short ones are flattened.
+ *
+ *     55 -> ellipse 1.74:1   the cinematic oblique (mobile / tablet)
+ *     61 -> ellipse 2.06:1   desktop, where the 55 deg box is too tall
+ *     66 -> ellipse 2.47:1   last resort for very short / very wide windows
+ *
+ * WHY the ladder exists - the measured heights that make 55 deg too tall on
+ * a desktop viewport - is documented in the header above.
+ */
+export const V3D_ORBIT_PLANE_ANGLE_LADDER_DEG = [55, 61, 66];
 
-/** The same angle in RADIANS - derived ONCE from the knob above. This is the
-    value the shared calculateOrbitPoint() takes, so changing
-    V3D_ORBIT_PLANE_ANGLE_DEG changes, in one go and with no other edit:
-      - the planet screen Y          (y = centerY + orbitalY * cos(angle)),
-      - the planet depth + layering  (depth = orbitalY * sin(angle)),
-      - the projected orbit traces   (sampled from the SAME function). */
-export const V3D_ORBIT_PLANE_ANGLE_RAD = (V3D_ORBIT_PLANE_ANGLE_DEG * Math.PI) / 180;
+/** Angle in radians. */
+export function radOf(angleDeg: number): number {
+  return (angleDeg * Math.PI) / 180;
+}
 
-/** Screen projection of the inclined plane: the vertical semi-axis of a
-    projected orbit, i.e. radius * cos(angle). One design unit = one px
-    before the uniform --v3d-fit scale. It is EXACTLY cos of the knob above:
-    there is no viewport-dependent flattening any more. */
-export const V3D_ORBIT_PLANE_TILT = Math.cos(V3D_ORBIT_PLANE_ANGLE_RAD);
+/** Screen projection of the inclined plane (the ellipse's vertical
+    semi-axis, i.e. radius * cos(angle)) - the ONE tilt handed to the
+    radii, the fit, the bounds and the component's distance checks. */
+export function tiltOf(angleDeg: number): number {
+  return Math.cos(radOf(angleDeg));
+}
 
-/** Out-of-plane component of the very same inclination, i.e. radius *
-    sin(angle) - it becomes the depth (front/back z-order, near/far scale and
-    opacity) of a body. Never a second tuning value: see
-    calculateOrbitPoint(). */
-export const V3D_ORBIT_PLANE_DEPTH = Math.sin(V3D_ORBIT_PLANE_ANGLE_RAD);
+/** Out-of-plane component of that very same inclination (radius *
+    sin(angle)) - it becomes the depth (front/back z-order, near/far scale
+    and opacity) of a body. Never a second tuning value. */
+export function depthOf(angleDeg: number): number {
+  return Math.sin(radOf(angleDeg));
+}
+
+/**
+ * THE SMALLEST INCLINATION WHOSE COMPLETE SYSTEM FITS `availableHeight`.
+ *
+ * The test is exact and scale-invariant: the whole design is normalized to
+ * the scene WIDTH, so the needed height is
+ *     neededHeight = sceneWidth * (paddedHalfH / paddedHalfW)
+ * which depends only on the frozen radii and the candidate angle - never on
+ * the normalization factor and never on the measured height (so it is
+ * evaluated from the frozen baselines, BEFORE the normalization: stateless,
+ * with no feedback loop and no dependence on a previous pass).
+ *
+ * The box mirrors compute() exactly - same radii, same per-planet DRAWN
+ * cap (the orbit-1 affordability cap and the rendered/position budget the
+ * component applies), same Sun + halo reach, same scene-fill padding - so
+ * the test answers precisely "does THIS inclination fit", not a guess.
+ *
+ * @param sceneWidth      measured scene width in px
+ * @param availableHeight scene height the composition may occupy in px
+ *                        (viewport - navbar - bottom margin)
+ * @param sunRadius       position-layer Sun radius (design px)
+ * @param planetRadii     position-layer planet radii (design px)
+ * @param spacingScale    the responsive spacing dial of the current category
+ * @returns the ladder entry to use; the last one if none is short enough
+ */
+export function angleDegThatFits(
+  sceneWidth: number,
+  availableHeight: number,
+  sunRadius: number,
+  planetRadii: ArrayLike<number>,
+  spacingScale = 1,
+): number {
+  const ladder = V3D_ORBIT_PLANE_ANGLE_LADDER_DEG;
+  if (!(sceneWidth > 0) || !(availableHeight > 0)) return ladder[0];
+  for (const deg of ladder) {
+    const box = projectedBoxFor(sceneWidth, tiltOf(deg), sunRadius, planetRadii, spacingScale);
+    // Scale-invariant: the design is normalized to the WIDTH, so the height
+    // the composition needs is sceneWidth * (halfH / halfW).
+    if (sceneWidth * (box.halfH / box.halfW) <= availableHeight) return deg;
+  }
+  return ladder[ladder.length - 1];
+}
+
+/** The scene height this composition would need at `angleDeg`, for a scene
+    `sceneWidth` px wide - the exact model compute() uses. Exported so the
+    component's dev audit can explain the inclination it picked. */
+export function projectedHeightPx(
+  sceneWidth: number,
+  angleDeg: number,
+  sunRadius: number,
+  planetRadii: ArrayLike<number>,
+  spacingScale = 1,
+): number {
+  const box = projectedBoxFor(sceneWidth, tiltOf(angleDeg), sunRadius, planetRadii, spacingScale);
+  return sceneWidth * (box.halfH / box.halfW);
+}
+
+/** The PADDED bounding box (design px, un-normalized) this composition would
+    produce at the given tilt - the same model compute() uses, so the
+    inclination test and the real fit can never disagree. */
+function projectedBoxFor(
+  sceneWidth: number,
+  tilt: number,
+  sunRadius: number,
+  planetRadii: ArrayLike<number>,
+  spacingScale: number,
+): { halfW: number; halfH: number } {
+  // ── the six orbit radii, exactly as compute() lays them out
+  const radii: number[] = [];
+  let radius = firstOrbitRadius(sunRadius, planetRadii, tilt);
+  for (let i = 0; i < planetRadii.length; i++) {
+    radii.push(radius);
+    if (i < planetRadii.length - 1) radius += bandGap(i, planetRadii, spacingScale);
+  }
+
+  // ── the DRAWN body every planet is capped at (planetVisualCap): the
+  //    orbit-1 affordability cap, limited by the rendered/position budget.
+  const orbitCap = Math.max(
+    0,
+    (radii[0] * tilt) /
+      (V3D_MAX_SCALE * (V3D_SUN_DOMINANCE * (1 + 2 * V3D_SUN_TO_FIRST_PLANET_GAP) + 1)) -
+      4,
+  );
+  const body = (i: number) =>
+    Math.max(planetRadii[i], Math.min(orbitCap, V3D_PLANET_VISUAL_HEADROOM * planetRadii[i])) *
+    V3D_MAX_SCALE;
+
+  let coreW = 0;
+  let coreH = 0;
+  for (let i = 0; i < radii.length; i++) {
+    coreW = Math.max(coreW, radii[i] + body(i));
+    coreH = Math.max(coreH, radii[i] * tilt + body(i));
+  }
+  // The Sun sits on the origin: its visual radius AND its halo.
+  const sunCap = Math.max(
+    0,
+    (radii[0] * tilt) / (1 + 2 * V3D_SUN_TO_FIRST_PLANET_GAP + 1 / V3D_SUN_DOMINANCE),
+  );
+  const sunVis = Math.max(sunRadius, Math.min(V3D_SUN_VISUAL_HEADROOM * sunRadius, sunCap));
+  const sunExtent = Math.max(sunVis, sunVis * V3D_SUN_HALO_FACTOR);
+  coreW = Math.max(coreW, sunExtent);
+  coreH = Math.max(coreH, sunExtent);
+
+  const pad = (core: number) =>
+    Math.max(stagePadding(sceneWidth), core * (1 / V3D_SCENE_FILL_RATIO - 1));
+  return { halfW: coreW + pad(coreW), halfH: coreH + pad(coreH) };
+}
 
 /** Angular step of the visible orbit trace: every trace is sampled at
     V3D_TRACE_SAMPLES points of the SAME calculateOrbitPoint() the planets
@@ -345,22 +489,27 @@ export const V3D_SUN_DOMINANCE = 1.25;
 
     WHY / TILT: the screen distance of a planet at angle theta is
     R * sqrt(cos^2(theta) + tilt^2 * sin^2(theta)), minimal at the vertical
-    extremes (R * cos(plane angle)). Dividing by V3D_ORBIT_PLANE_TILT makes
+    extremes (R * cos(plane angle)). Dividing by that per-pass tilt makes
     the configured gap hold at EVERY orbital angle - in front, behind and at
     the side - using the ONE plane angle (no second angle exists).
 
     `fallbackWidth` only guards the pre-measurement state (sunRadius = 0):
-    the historical behaviour was 0.2 * sceneWidth. */
+    the historical behaviour was 0.2 * sceneWidth.
+
+    `tilt` is cos(angle) of the ONE inclination resolved for the current
+    pass (tiltOf(angleDegThatFits(...))) - passed in, never recomputed here,
+    so the radii and the movement can never use different planes. */
 export function firstOrbitRadius(
   sunRadius: number,
   planetRadii: ArrayLike<number>,
+  tilt: number,
   fallbackWidth = 0,
 ): number {
   if (sunRadius <= 0) return 0.2 * fallbackWidth;
   return (
     ( sunRadius * (1 + 2 * V3D_SUN_TO_FIRST_PLANET_GAP) * V3D_SUN_VISUAL_HEADROOM +
       planetRadii[0] * V3D_MAX_SCALE * V3D_PLANET_VISUAL_HEADROOM ) /
-    V3D_ORBIT_PLANE_TILT
+    tilt
   );
 }
 
@@ -395,9 +544,10 @@ export function designHalfExtent(
   sunRadius: number,
   planetRadii: ArrayLike<number>,
   spacingScale = 1,
+  tilt = 1,
   fallbackWidth = 0,
 ): number {
-  let radius = firstOrbitRadius(sunRadius, planetRadii, fallbackWidth);
+  let radius = firstOrbitRadius(sunRadius, planetRadii, tilt, fallbackWidth);
   for (let i = 0; i < planetRadii.length - 1; i++) {
     radius += bandGap(i, planetRadii, spacingScale);
   }
@@ -407,11 +557,8 @@ export function designHalfExtent(
 /** The Sun's own contribution to R1, in POSITION units - the exact mirror of
     the Sun term inside firstOrbitRadius(), so absorbGrowthIntoSun() can peel
     it out of the design extent WITHOUT a second copy of the formula. */
-export function sunClearanceFactor(): number {
-  return (
-    ((1 + 2 * V3D_SUN_TO_FIRST_PLANET_GAP) * V3D_SUN_VISUAL_HEADROOM) /
-    V3D_ORBIT_PLANE_TILT
-  );
+export function sunClearanceFactor(tilt: number): number {
+  return ((1 + 2 * V3D_SUN_TO_FIRST_PLANET_GAP) * V3D_SUN_VISUAL_HEADROOM) / tilt;
 }
 
 /** Largest RENDERED planet radius that orbit 1 can afford, projection- and
@@ -420,17 +567,17 @@ export function sunClearanceFactor(): number {
     together with the dominance floor visSun >= DOMINANCE * visPlanet.
     Single source for the component's planet cap - it can never disagree
     with firstOrbitRadius(). */
-export function maxPlanetRadiusForOrbit(r1: number): number {
+export function maxPlanetRadiusForOrbit(r1: number, tilt: number): number {
   const denominator =
     V3D_MAX_SCALE * (V3D_SUN_DOMINANCE * (1 + 2 * V3D_SUN_TO_FIRST_PLANET_GAP) + 1);
-  return Math.max(0, (r1 * V3D_ORBIT_PLANE_TILT) / denominator - 4);
+  return Math.max(0, (r1 * tilt) / denominator - 4);
 }
 
 /** Largest RENDERED Sun radius that orbit 1 can afford (same derivation,
     solved for the Sun). Single source for the component's Sun wish cap. */
-export function maxSunRadiusForOrbit(r1: number): number {
+export function maxSunRadiusForOrbit(r1: number, tilt: number): number {
   const denominator = 1 + 2 * V3D_SUN_TO_FIRST_PLANET_GAP + 1 / V3D_SUN_DOMINANCE;
-  return Math.max(0, (r1 * V3D_ORBIT_PLANE_TILT) / denominator);
+  return Math.max(0, (r1 * tilt) / denominator);
 }
 
 /**
@@ -499,11 +646,11 @@ export interface OrbitProjection {
  *
  *   R1     = ( sun * (1 + 2*V3D_SUN_TO_FIRST_PLANET_GAP) * SUN_HEADROOM
  *            + planetRadius_1 * V3D_MAX_SCALE * PLANET_HEADROOM )
- *            / V3D_ORBIT_PLANE_TILT        (holds at EVERY orbital angle)
+ *            / tilt (cos of the pass inclination)  (holds at EVERY angle)
  *   gap_i  = spacingScale * (1 + V3D_BAND_VISUAL_GAP_RATIO)
  *            * PLANET_HEADROOM * (radius_i + radius_i+1)
  *   R_i+1  = R_i + gap_i
- *   angle  = V3D_ORBIT_PLANE_ANGLE_RAD              (exactly the knob)
+ *   angle  = input.planeAngleRad                   (the resolved knob)
  *   tilt   = cos(angle)   (screen Y - never flattened by the viewport)
  *   depth  = sin(angle)   (the SAME angle, never a second value)
  *   fit    = ONE uniform scale fitting the composition on BOTH axes
@@ -527,21 +674,23 @@ export class Values3dGeometry {
   radii: Float64Array = new Float64Array(0);
 
   /** PROJECTION of the ONE orbital plane on the screen's vertical axis:
-      cos(V3D_ORBIT_PLANE_ANGLE_DEG), i.e. exactly the knob - never
-      flattened, clamped or scaled by the viewport. */
-  ellipseRatio = V3D_ORBIT_PLANE_TILT;
+      cos(planeAngleRad) of the CURRENT pass - i.e. exactly the inclination
+      resolved for the current screen category, never flattened, clamped or
+      scaled by the viewport. Re-assigned on every compute(). */
+  ellipseRatio = tiltOf(V3D_ORBIT_PLANE_ANGLE_LADDER_DEG[0]);
 
   /** OUT-OF-PLANE factor of that very same inclination (the depth axis):
-      sin(angle). With a circle of radius R, screenOffsetY^2 + depth^2 = R^2,
-      so all six planets stay on circles of ONE common plane. */
-  depthFactor = V3D_ORBIT_PLANE_DEPTH;
+      sin(planeAngleRad). With a circle of radius R,
+      screenOffsetY^2 + depth^2 = R^2, so all six planets stay on circles of
+      ONE common plane. Re-assigned on every compute(). */
+  depthFactor = depthOf(V3D_ORBIT_PLANE_ANGLE_LADDER_DEG[0]);
 
-  /** THE ONE manual angle in radians - the value handed to the shared
-      calculateOrbitPoint(). Read by the planet movement every frame AND by
-      the trace sampling in compute(), so both always describe the same
-      orbit: changing the knob above changes the planet Y, the depth and the
-      projected traces together, and nothing else. */
-  readonly planeAngleRad = V3D_ORBIT_PLANE_ANGLE_RAD;
+  /** THE ONE inclination in radians used by THIS geometry pass - the value
+      handed to the shared calculateOrbitPoint() (planet movement every frame
+      AND the trace sampling), to the orbit radii and to the bounding box.
+      Set from `input.planeAngleRad` in compute(), so all of them describe
+      the same plane at all times. */
+  planeAngleRad = radOf(V3D_ORBIT_PLANE_ANGLE_LADDER_DEG[0]);
 
   /** Current uniform fit scale (design space -> real scene). */
   fit = 1;
@@ -573,6 +722,15 @@ export class Values3dGeometry {
     this.centerX = w / 2 + V3D_SUN_OFFSET_X;
     this.centerY = (h > 0 ? h / 2 : w * 0.31) + V3D_SUN_OFFSET_Y;
 
+    // THE ONE INCLINATION OF THIS PASS: read from the input (the component
+    // resolves it once per geometry pass from the screen category), then
+    // reused for EVERYTHING below - the orbit radii, the projection, the
+    // traces and the bounding box - so a planet and its ring can never end
+    // up on different planes.
+    this.planeAngleRad = input.planeAngleRad;
+    this.ellipseRatio = Math.cos(this.planeAngleRad);
+    this.depthFactor = Math.sin(this.planeAngleRad);
+
     // Sizes are already resolved by the component (applyVisualSizes +
     // fitContentToPlanets): here they are only turned into positions, so a
     // size change can never move a body - it only redraws the ring it
@@ -581,22 +739,16 @@ export class Values3dGeometry {
     const spacingScale = input.spacingScale ?? 1;
     const n = planetRadii.length;
     if (this.radii.length !== n) this.radii = new Float64Array(n);
-    let radius = firstOrbitRadius(input.sunRadius, planetRadii, w);
+    let radius = firstOrbitRadius(input.sunRadius, planetRadii, this.ellipseRatio, w);
     for (let i = 0; i < n; i++) {
       this.radii[i] = radius;
       if (i < n - 1) {
         radius += bandGap(i, planetRadii, spacingScale);
       }
     }
-    // ORIENTATION of the ONE orbital plane: the circle of every orbit is
-    // projected with cos(V3D_ORBIT_PLANE_ANGLE_DEG) on the screen's vertical
-    // axis and with sin(...) on the depth axis. Both come from the SAME
-    // manual angle and nothing else - no height budget, no viewport-dependent
-    // flattening, no second inclination. The angle never touches a radius, a
-    // size or a speed: it only ORIENTS the common plane (see
-    // calculateOrbitPoint()).
-    this.ellipseRatio = V3D_ORBIT_PLANE_TILT;
-    this.depthFactor = V3D_ORBIT_PLANE_DEPTH;
+    // ORIENTATION: already applied above (ellipseRatio / depthFactor from
+    // input.planeAngleRad) BEFORE the radii were laid out, so R1, the band
+    // steps, the traces and the bounding box below all share that ONE plane.
 
     // ==========================================================
     // THE COMPLETE BOUNDING BOX OF THE DRAWN SYSTEM + THE ONE FIT SCALE
@@ -753,6 +905,12 @@ export interface OrbitGeometryInput {
   readonly sunRadius: number;
   /** Position-layer planet radii (design px, already resolved). */
   readonly planetRadii: ArrayLike<number>;
+  /** THE inclination of this pass, in RADIANS - resolved ONCE by the
+      component from the current pass (V3D_ORBIT_PLANE_ANGLE_LADDER_DEG ->
+      angleDegThatFits() -> radOf(this.planeAngleDeg)).
+      compute() applies it to the orbit radii, the projection, the traces and
+      the bounding box, so every consumer of the plane is guaranteed to agree. */
+  readonly planeAngleRad: number;
   /** Responsive spacing scale of the CURRENT screen category
       (V3D_SPACING_SCALE_BY_CATEGORY) - the SAME value the component's
       normalization uses, so both see one identical composition. */
