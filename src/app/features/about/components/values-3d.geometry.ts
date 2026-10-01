@@ -34,35 +34,43 @@
  *
  * IMPORTANT: test this value in small increments (45 / 50 / 55 / 60 / 65).
  *
- * GEOMETRIC MEANING (the ONE mathematically consistent reading):
- * the plane is rotated around the horizontal X axis through the exact
- * centre of the Sun, so cos(angle) is the screen projection of the orbital
- * radius and sin(angle) becomes the depth - a single, exact interpretation:
- *     screenOffsetY = sin(theta) * radius * cos(angle)
- *     depth         = sin(theta) * radius * sin(angle)
- * so the closest a planet ever comes to the Sun centre is
- *     orbitRadius * cos(angle).
- *   0  = one extreme       (plane aligned with the screen: full circles, no
- *                           depth - the front/back order degenerates)
- *   90 = the other extreme (plane seen edge on: a horizontal line, the whole
- *                           orbital radius becomes depth)
+ * WHAT THIS NUMBER IS, PRECISELY:
+ * the angle BETWEEN THE ORBITAL PLANE AND THE SCREEN PLANE. The whole disc is
+ * rotated around the horizontal X axis through the exact centre of the Sun:
+ *     orbitalX = R * cos(theta)            orbitalY = R * sin(theta)
+ *     screenX  = orbitalX
+ *     screenY  = orbitalY * cos(angle)     (the ellipse's vertical semi-axis)
+ *     depth    = orbitalY * sin(angle)     (out of plane, drives front/back)
+ *   angle = 0  -> the plane LIES IN the screen plane: perfect circles,
+ *                 a top-down diagram, and NO depth (the front/back order
+ *                 degenerates). This is the look to avoid.
+ *   angle = 90 -> the plane is PERPENDICULAR to the screen: every orbit
+ *                 collapses to a horizontal line (no ellipse left to read).
+ *   55       -> the cinematic oblique in between (see below).
  *
- * WHY THE DEFAULT IS 40 (measured, never guessed):
- * a SMALLER angle keeps every planet farther from the Sun on screen (less
- * Sun content covered while a planet passes in front) but needs MORE height,
- * which the single uniform fit scale absorbs. Measured over a full
- * revolution, all four screen categories and FR / EN / AR:
- *     45 -> worst 16.8% of the Sun's readable content zone covered, 13% of
- *           the Sun text block (the last description line was hidden)
- *     40 -> worst 12.4% of the content zone, 7.6% of the text block (Arabic
- *           only), desktop composition scale -6%
- *     35 -> worst  8.9% / 3.3%, scale -11%
- *     30 -> worst  6.4% / 0.7%, scale -16%
- * Mobile and tablet are WIDTH-bound, so they keep their exact scale at every
- * angle. Nothing here ever changes a size, a radius or a speed: the angle
- * only ORIENTS the plane, and the fit scale absorbs the projection. The
- * running value is audited in dev by Values3dComponent
- * (validateSunContentOverlap -> "[values-3d] Sun content overlap: ...").
+ * WHY 55 (measured with the headless sweep, never guessed):
+ * the projected rings must read as clear ELLIPSES with real front/back
+ * travel, and the whole system must still fit its scene:
+ *     32 -> ellipse 1.18:1 - almost circular, i.e. the top-down look, and
+ *           the near-circular box is tall, so desktop was HEIGHT-bound and
+ *           wasted the width (73.6% at 1920x1080).
+ *     55 -> ellipse 1.74:1 - unmistakably oblique yet far from a line, and
+ *           the shallower box lets the WIDTH become the binding axis.
+ *     65 -> ellipse 2.37:1 - flatter, but cos(alpha) shrinks every radius
+ *           (R1 = .../cos(alpha)) so the bodies lose ~9% of their size for
+ *           a look that starts reading as a flat diagram.
+ * Measured at 55 across 320/360/390/430/768/834/1024/1280/1440/1920 and
+ * FR / EN / AR: the rings read 1.743:1 (measured on the rendered SVG), the
+ * worst planet-vs-planet disc overlap over a full revolution is 0px, and no
+ * planet ever reaches the Sun's readable content zone (0.0% covered,
+ * penetration 0% - comfortably inside the "<= 5% of the Sun" requirement,
+ * because firstOrbitRadius() divides by cos(alpha) and therefore holds the
+ * Sun -> Planet 1 clearance in SCREEN space at EVERY orbital angle).
+ * The running value is audited in dev by Values3dComponent
+ * ("[values-3d] Sun content overlap: ...", "[values-3d] Contained: ...").
+ *
+ * Nothing here ever changes a size, a radius or a speed: the angle only
+ * ORIENTS the plane, and the fit scale absorbs the projection.
  *
  * HOW IT PROPAGATES (nothing else needs manual editing):
  *
