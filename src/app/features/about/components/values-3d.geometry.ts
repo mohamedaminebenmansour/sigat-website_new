@@ -87,7 +87,7 @@
  * is guaranteed by the single uniform fit scale in compute(): the angle is
  * never used to shrink or grow anything.
  */
-export const V3D_ORBIT_PLANE_ANGLE_DEG = 40;
+export const V3D_ORBIT_PLANE_ANGLE_DEG = 45;
 
 /** The same angle in RADIANS - derived ONCE from the knob above. This is the
     value the shared calculateOrbitPoint() takes, so changing
@@ -557,15 +557,6 @@ export class Values3dGeometry {
     const fit = Math.min(roomX / halfW, roomY / halfH);
     this.fit = fit;
 
-    // THE VISIBLE ORBIT TRACES: each one is SAMPLED from the very same
-    // calculateOrbitPoint() the planets move on (0 .. 2*PI, V3D_TRACE_SAMPLES
-    // points), so a trace and the planet that rides it are the same curve by
-    // construction - same origin, same radius, same ONE plane angle. Static
-    // geometry: rebuilt here only (init / resize / language), never per frame.
-    const traces: OrbitTrace[] = [];
-    for (let i = 0; i < n; i++) {
-      traces.push({ index: i, d: this.sampleTracePath(i) });
-    }
     // THE COMPOSITION ASPECT (halfW / halfH): a ratio of the frozen radii and
     // of the ONE plane angle, so it is independent of every size knob and of
     // the scene. The component publishes it, and the scene is then given
@@ -573,7 +564,7 @@ export class Values3dGeometry {
     // wide, short viewport the system fills the whole WIDTH instead of being
     // shrunk by the height, while tall viewports simply keep centring it.
     const aspect = halfH > 0 ? halfW / halfH : 1;
-    return { fit, traces, aspect };
+    return { fit, traces: [], aspect };
   }
 
   /**
