@@ -72,20 +72,21 @@ import {
 
    ORBITAL GEOMETRY (single source of truth) - values-3d.geometry.ts:
    the pure Values3dGeometry module owns the ONE origin
-   (centerX / centerY = the exact centre of the Sun), the six orbit
-   radii, and the uniform fit scale. STEP 1 movement uses the local
-   V3D_ORBIT_PLANE_ANGLE_DEG below (45°) with calculateOrbitPoint() in
-   this component: the planet orbital movement is the ONLY trajectory,
-   in absolute stage coordinates around that one origin, so a planet can
-   never drift out of the component bounds. The engine publishes exactly
-   two custom properties: --v3d-fit (the uniform stage zoom) and
-   --v3d-scene-aspect (the composition's own width / height ratio).
+   (centerX / centerY = the exact centre of the Sun), the ONE plane angle
+   (V3D_ORBIT_PLANE_ANGLE_DEG, imported below - never a local copy), the
+   six orbit radii and the uniform fit scale. The movement in
+   calculateOrbitPoint() reads that very same angle through the imported
+   V3D_ORBIT_PLANE_TILT / V3D_ORBIT_PLANE_DEPTH: the planet orbital
+   movement is the ONLY trajectory, in absolute stage coordinates around
+   that one origin, so a planet can never drift out of the component
+   bounds. The engine publishes exactly one custom property - --v3d-fit
+   (the uniform stage zoom); the scene box itself is real CSS (measured,
+   never derived from the composition).
 
-   ORBIT TRACES - STEP 1 left no visible traces by design. STEP 2 does not
-   recreate them: it only changes orbital radii. A radius change flows
-   through geometry.radii[] into calculateOrbitPoint() below, so planet
-   trajectory + front/back depth + responsive containment follow it, and
-   STEP 3 traces sampled from the same function will follow as well.
+   ORBIT TRACES - sampled from the same calculateOrbitPoint() the planets
+   move on (values-3d.geometry.ts compute()), so a trace can never
+   disagree with the trajectory. A radius change flows through
+   geometry.radii[] into the movement, the depth and the traces together.
 
    3D CONTENT (sphere "printed text") controls:
    - PLANET_SELF_ROTATION_DEG_PER_SEC  axial spin (deg/s)
@@ -145,9 +146,10 @@ const V3D_COLORS = ['#f59e0b', '#2563eb', '#0ea5e9', '#6366f1', '#1d4ed8', '#0f7
 
    The radii above are the VISUAL radii of the VISUAL SIZE CONTROLS
    block (plus the content-driven growth). STEP 2 changes ONLY these
-   geometric distances (R1 + the five band gaps); the 45° plane angle,
+   geometric distances (R1 + the five band gaps); the plane angle,
    speeds, self-rotation and animation are untouched. Movement is ONE
-   inclined orbital plane (V3D_ORBIT_PLANE_ANGLE_DEG = 45°) rotating
+   inclined orbital plane (the ONE V3D_ORBIT_PLANE_ANGLE_DEG of
+   values-3d.geometry.ts) rotating
    around the horizontal X axis through the ONE origin (centerX /
    centerY = the Sun centre):
      orbitalX = cos(theta) * R        orbitalY = sin(theta) * R
@@ -413,9 +415,8 @@ interface PlanetGeometry {
  *   POSITIONS second: updateOrbitGeometry() feeds those radii + the measured
  *   scene into Values3dGeometry.compute() (values-3d.geometry.ts), which
  *   returns the uniform fit scale (--v3d-fit) + the composition aspect
- *   (--v3d-scene-aspect, published so the scene is given the height this
- *   composition needs for its measured width) + the six sampled orbit traces
- *   for the ONE origin
+ *   (informational - the scene box is real CSS, never derived from it) +
+ *   the six sampled orbit traces for the ONE origin
  *   (centerX / centerY = the Sun), the six radii and the projection of the ONE
  *   plane angle. The planet position is the single projected orbit:
  *     x      = centerX + cos(theta) * radius
@@ -1417,7 +1418,7 @@ export class Values3dComponent {
     //    the Sun can never swallow planet 1's path (position is frozen).
     //    The rendered Sun may never exceed (a) the rendered/position budget
     //    the STEP-2 FIRST ORBIT was sized with and (b) what orbit 1 can
-    //    afford by itself at the 45° projection - both are DISTANCE
+    //    afford by itself at the plane projection - both are DISTANCE
     //    invariants, so Sun -> Planet 1 keeps holding whatever the size
     //    knobs say. Content/typography/speeds/angle/animation untouched.
     const sunWishCap = Math.min(
@@ -1678,8 +1679,8 @@ export class Values3dComponent {
   }
 
   /**
-   * STEP-2 plane projection used for DISTANCE checks only.
-   * cos(45°) of the UNCHANGED V3D_ORBIT_PLANE_ANGLE_DEG: the vertical
+   * Plane projection used for DISTANCE checks only: the COS of the ONE
+   * V3D_ORBIT_PLANE_ANGLE_DEG (imported from values-3d.geometry.ts) - the
    * semi-axis of a projected orbit (screen Y), while the movement's
    * calculateOrbitPoint() below remains the runtime source of truth.
    * Geometry/orientation only - never a size, speed or content knob.
@@ -1754,8 +1755,8 @@ export class Values3dComponent {
   /**
    * STEP-2 orbit-1 affordability cap (rendered sizes): largest ANY planet
    * may render while orbit 1 can still afford the Sun -> planet-1 gap at
-   * the 45° projection:
-   *   - projection + gap: TILT45 * R1 >= visSun * (1 + 2*GAP)
+   * the plane projection:
+   *   - projection + gap: spacingTilt() * R1 >= visSun * (1 + 2*GAP)
    *                                    + V3D_MAX_SCALE * visPlanet
    *   - dominance:        visSun >= V3D_SUN_DOMINANCE * visPlanet.
    * Same inequalities as firstOrbitRadius(); size gives way, position
@@ -1771,7 +1772,7 @@ export class Values3dComponent {
 
   /**
    * STEP-2 Sun wish cap (rendered size): largest the Sun may render while
-   * orbit 1 can still afford it at the 45° projection - same derivation
+   * orbit 1 can still afford it at the plane projection - same derivation
    * solved for the Sun. Keeps the Sun dominant without swallowing
    * planet 1's path in front / behind / at the side.
    */
@@ -1985,9 +1986,9 @@ export class Values3dComponent {
    *     + p_next + visual gap, x spacingScale for mobile / tablet /
    *     desktop / large). Geometric distances, never CSS margins; one
    *   common origin; containment (fit) has priority over spacing.
-   * Movement projects those radii with V3D_ORBIT_PLANE_ANGLE_DEG (45°,
-   * unchanged) in calculateOrbitPoint() below. No traces are drawn in
-   * STEP 1/2; result.traces is ignored until STEP 3.
+   * Movement projects those radii with the ONE V3D_ORBIT_PLANE_ANGLE_DEG
+   * in calculateOrbitPoint() below, and the orbit traces are sampled from
+   * that same function (pass 1 writes them; pass 2 only refreshes fit).
    */
   private updateOrbitGeometry(drawBounds = false): void {
     const result = this.geometry.compute({

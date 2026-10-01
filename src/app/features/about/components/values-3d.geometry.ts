@@ -32,7 +32,7 @@
  *   - orbital speed
  *   - orbital radius
  *
- * IMPORTANT: test this value in small increments (30 / 35 / 40 / 45 / 50).
+ * IMPORTANT: test this value in small increments (45 / 50 / 55 / 60 / 65).
  *
  * GEOMETRIC MEANING (the ONE mathematically consistent reading):
  * the plane is rotated around the horizontal X axis through the exact
@@ -87,7 +87,7 @@
  * is guaranteed by the single uniform fit scale in compute(): the angle is
  * never used to shrink or grow anything.
  */
-export const V3D_ORBIT_PLANE_ANGLE_DEG = 32;
+export const V3D_ORBIT_PLANE_ANGLE_DEG = 55;
 
 /** The same angle in RADIANS - derived ONCE from the knob above. This is the
     value the shared calculateOrbitPoint() takes, so changing
@@ -159,7 +159,7 @@ export const V3D_SUN_OFFSET_Y = 0;
  *   - every orbit's projected extent   (R_i , R_i * cos(plane angle)),
  *   - PLUS that orbit's body radius (the DRAWN / visual radius),
  *   - PLUS the Sun's full visual radius AND its halo,
- *   - PLUS the glow allowance below,
+ *   - PLUS the scene-fill padding below (V3D_SCENE_FILL_RATIO),
  * so the Sun and all six planets stay inside the scene at EVERY frame.
  *
  * Nothing here changes a size, a radius, a distance or a speed: the box only
@@ -173,25 +173,35 @@ export const V3D_SUN_OFFSET_Y = 0;
  *  radius. The box must contain it, otherwise the halo is clipped. */
 export const V3D_SUN_HALO_FACTOR = 1.6;
 
-/** GLOW ALLOWANCE (design px) added around the whole composition so a body's
- *  box-shadow / halo can never be clipped by the scene edge.
+/** SCENE FILL (dimensionless) - how much of the measured scene the PADDED
+ *  bounding box may occupy on the binding axis. Each axis is padded from its
+ *  own core extent by exactly `core * (1 / ratio - 1)`, so by construction
+ *      core / (core + margin) = V3D_SCENE_FILL_RATIO
+ *  i.e. with 0.92 the drawn system claims 92% of the scene and 8% stays
+ *  breathing room (still floored by stagePadding(w) on narrow scenes).
  *
- *  Sized for the LARGEST glow in the component - the Sun's pulse peak
- *      @keyframes v3d-sun-pulse 50% { box-shadow: 0 0 132px ... }
- *  (the resting glow is 0 0 96px and the planet hover glow is
- *   0 14px 36px + 3px spread, both inside this budget).
+ *  WHY A RATIO AND NOT A FIXED PX (the previous V3D_GLOW_MARGIN_PX = 132):
+ *  a FIXED px allowance costs proportionally more on a small scene and
+ *  almost nothing on a large one - exactly backwards. Measured, 132px was
+ *  37% of a 360px phone's half-width but only 14% of a 1920px desktop's:
+ *  the phone rendered a tiny system with big empty side margins while the
+ *  desktop had none. As a RATIO the padding scales with the composition, so
+ *  the rendered share of the scene stays in a tight band at every
+ *  breakpoint (audited by the headless sweep: containment + width usage at
+ *  320 / 375 / 414 / 560 / 768 / 834 / 1024 / 1280 / 1440 / 1920).
  *
- *  TRADE-OFF (the ONLY knob that trades composition size for glow):
- *    larger  -> more of the soft glow is guaranteed inside the scene and the
- *               whole system renders proportionally smaller;
- *    smaller -> the system renders larger; the faintest glow tail may fade at
- *               the edge.
- *  The value is SCALE-INDEPENDENT (a box-shadow keeps its px size under the
- *  stage transform), so it costs proportionally more on a small scene (a
- *  phone) than on a large one. To make it responsive, replace its use in
- *  compute() with a per-screen-category lookup.
- *  The effective margin is max(stagePadding(w), this value). */
-export const V3D_GLOW_MARGIN_PX = 132;
+ *  GLOW TRADE-OFF (the knob that trades composition size for glow room):
+ *    larger ratio  -> less padding -> the system renders bigger, and the
+ *                     faintest box-shadow tails may fade at the scene edge;
+ *    smaller ratio -> more padding -> smaller system, more glow room.
+ *  The Sun's pulse glow lives at the CENTRE (far from the box edge), so the
+ *  only glow measured against this margin is the outer planet's hover glow,
+ *  which the stagePadding floor covers on phones and the 8% covers on
+ *  tablets / desktops.
+ *
+ *  Unitless. Used per axis in compute():
+ *      margin = max(stagePadding(w), core * (1 / V3D_SCENE_FILL_RATIO - 1)). */
+export const V3D_SCENE_FILL_RATIO = 0.92;
 
 /**
  * ============================================================
@@ -610,11 +620,17 @@ export class Values3dGeometry {
     halfW = Math.max(halfW, sunExtent);
     halfH = Math.max(halfH, sunExtent);
 
-    // SAFETY MARGIN: the glow allowance - never smaller than the historical
-    // stage padding - so no box-shadow / halo reaches the scene edge.
-    const margin = Math.max(stagePadding(w), V3D_GLOW_MARGIN_PX);
-    halfW += margin;
-    halfH += margin;
+    // SCENE FILL: pad EACH axis from its own core extent, so the padded box
+    // keeps the constant core ratio (V3D_SCENE_FILL_RATIO) on both axes and
+    // the composition claims exactly that share of the scene on whichever
+    // axis binds. Floored by the stage padding so the edges can never touch,
+    // whatever the scene width.
+    const padAxis = (core: number): number =>
+      Math.max(stagePadding(w), core * (1 / V3D_SCENE_FILL_RATIO - 1));
+    const coreW = halfW;
+    const coreH = halfH;
+    halfW += padAxis(coreW);
+    halfH += padAxis(coreH);
 
     // Real room left around the origin on each side. With the optional offset
     // at 0 (the shipped value) roomX is exactly w / 2 and roomY exactly h / 2.
@@ -753,7 +769,7 @@ export interface OrbitGeometryResult {
       composition can use the full available width without being clipped. */
   readonly aspect: number;
   /** THE COMPLETE BOUNDING BOX of the DRAWN system: half-extents in design
-      px around the ONE origin, glow margin included. `fit` is exactly the
+      px around the ONE origin, scene-fill padding included. `fit` is exactly the
       scale that fits this box into the measured scene; the component's dev
       containment audit re-checks it. */
   readonly box: { readonly halfW: number; readonly halfH: number };
