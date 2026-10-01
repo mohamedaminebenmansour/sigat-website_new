@@ -149,20 +149,89 @@ export const V3D_TRACE_SAMPLES = 256;
 export const V3D_SUN_OFFSET_X = 0;
 export const V3D_SUN_OFFSET_Y = 0;
 
-/** SUN -> FIRST ORBIT gap as a fraction of the Sun's logical diameter.
-    Controls ONLY the Sun -> Planet 1 distance. */
-export const V3D_SUN_TO_FIRST_ORBIT_GAP_RATIO = 0.28;
+/**
+ * ============================================================
+ * ORBITAL SPACING - GEOMETRIC DISTANCES, NOT CSS MARGINS
+ * ============================================================
+ * Everything below lives in the SAME design space as the orbit radii and is
+ * measured from the ONE origin (the Sun centre) on the SAME orbital plane.
+ * These are geometric distances: the planets move in 3D, so separation can
+ * only come from the orbital radii themselves - never from CSS margins.
+ *
+ * SUN -> FIRST PLANET (must never visually merge, at ANY orbital angle:
+ * in front, behind or at the side). Implemented by firstOrbitRadius(),
+ * which also accounts for the projection (R * cos(plane angle)) and for the
+ * difference between the position layer and the RENDERED body sizes.
+ *
+ * NEIGHBOUR BANDS 1 -> 2 -> 3 -> 4 -> 5 -> 6: each radial step is
+ *     R(i+1) = R(i) + spacingScale * (1 + V3D_BAND_VISUAL_GAP_RATIO)
+ *                           * V3D_PLANET_VISUAL_HEADROOM * (p_i + p_i+1)
+ * i.e. the step accounts for BOTH rendered bodies plus a visual gap, times
+ * the responsive spacing scale. Sun -> Planet 1 is NOT controlled by the
+ * band values, and the band values do not control the Sun.
+ *
+ * RESPONSIVE: V3D_SPACING_SCALE_BY_CATEGORY is the single degradation dial
+ * (compact on phones, larger on desktops). Because the whole design is
+ * re-normalized to the measured scene, gaps AND bodies always scale
+ * together - there is no per-breakpoint geometry.
+ * ============================================================ */
 
-// ============================================================
-// MANUAL ORBIT SPACING - distance between consecutive planets
-// (1 -> 2 -> 3 -> 4 -> 5 -> 6). Sun -> Planet 1 is NOT controlled
-// by this value (see V3D_SUN_TO_FIRST_ORBIT_GAP_RATIO above).
-// The band spacing is proportional to the planet radii, so the
-// composition keeps the same rhythm however big the planets get.
-// 2.0 = neighbours never overlap (smaller planets); 1.15 = a mild
-// overlap only while two planets cross; 1.0 = biggest planets.
-// ============================================================
-export const V3D_BAND_GAP_RATIO = 1.05;
+/**
+ * Minimum visual gap between the Sun's outer edge
+ * and the first planet's orbital path/body.
+ *
+ * Unit: FRACTION OF THE SUN'S DIAMETER (0.28 = 28% of the Sun's diameter
+ * of clear space between the Sun's edge and planet 1's depth-scaled disc).
+ *
+ * Increase this value to move the first orbit farther from the Sun.
+ *
+ * This controls DISTANCE only.
+ * It does not change Sun or planet size.
+ */
+export const V3D_SUN_TO_FIRST_PLANET_GAP = 0.28;
+
+/** Extra clear space between consecutive bands, as a fraction of
+    (p_i + p_i+1). `bandGap(i) = spacingScale * (1 + ratio) * HEADROOM *
+    (p_i + p_i+1)`, so `ratio = 0` still separates the two rendered bodies
+    edge-to-edge and this value adds the professional breathing room on top.
+    This controls DISTANCE only. */
+export const V3D_BAND_VISUAL_GAP_RATIO = 0.1;
+
+/** Responsive spacing scale, one entry per screen category (0 mobile /
+    1 tablet / 2 PC / 3 large desktop) - THE degradation dial (#8):
+    1.0 = full literal separation (bodies never touch even when aligned),
+    ~0.29 = exactly the historical band separation, lower = below it.
+    Shipped values are the MEASURED balance (readability comes first): the
+    spacing audit showed that a bigger scale eats the width budget and
+    shrinks the spheres, which the content-fit then answers by shrinking the
+    text - so these sit at the point where every category keeps readable
+    bodies AND the bands still improve (roughly 1.0x (mobile/tablet) to
+    1.6x (large desktop) the historical separation). Raise toward 1 for
+    maximum separation (smaller planets); lower if the content audit warns.
+    Clamped to [V3D_SPACING_MIN_SCALE, 1] inside bandGap(), so this table
+    can never produce an illegal value. */
+export const V3D_SPACING_SCALE_BY_CATEGORY = [0.3, 0.3, 0.4, 0.45];
+
+/** Hard floor of the responsive spacing scale (see above). */
+export const V3D_SPACING_MIN_SCALE = 0.4;
+
+/** RENDERED-vs-POSITION size budget of the Sun: the geometry consumes the
+    smaller position-layer radii, while the Sun renders up to this factor
+    bigger (V3D_SUN_RADIUS wish). Sizing the first orbit for this budget
+    turns the Sun -> Planet 1 clearance into a guarantee for the RENDERED
+    body. Enforced in Values3dComponent.growVisualBodies(). */
+export const V3D_SUN_VISUAL_HEADROOM = 1.6;
+
+/** Same budget for the planets. IMPORTANT (spacing audit): the value must
+    stay BELOW the point where the global orbit cap (maxPlanetRadiusForOrbit)
+    becomes the smallest ceiling, otherwise every planet clamps to the SAME
+    radius and the configured per-planet size relationship is lost (the six
+    values must keep their ratios). At 1.6 the per-planet budget binds first
+    (measured rendered/position was ~1.66 at STEP 1 - the few percent over
+    the budget are simply trimmed). Enforced in
+    Values3dComponent.growVisualBodies() so the guarantee used by
+    firstOrbitRadius() cannot drift. */
+export const V3D_PLANET_VISUAL_HEADROOM = 1.6;
 
 /** Safe edge margin between the composition and the boundary of the design
     space, expressed as a FRACTION of the measured scene width (the design is
@@ -192,10 +261,34 @@ export function stagePadding(sceneWidth: number): number {
 export const V3D_MIN_SCALE = 0.86;
 export const V3D_MAX_SCALE = 1.08;
 
-/** First-orbit radius: Sun EDGE + gap + PLANET 1 EDGE headroom.
-    `fallbackWidth` only guards the pre-measurement state (before the sizes
-    pass has resolved a Sun radius): the historical behaviour was
-    0.2 * sceneWidth. */
+/** INVARIANT: the Sun must stay at least this factor bigger than the largest
+    planet (rendered sizes, depth-scaled at the worst orbital angle). Used by
+    the geometry helpers below AND by the component's size caps - exported
+    from ONE place so the two can never disagree. */
+export const V3D_SUN_DOMINANCE = 1.25;
+
+/** FIRST ORBIT RADIUS - the ONE Sun -> Planet 1 distance formula. Lives here
+    so the geometry, the component's rendered-size caps and the dev validator
+    can never disagree about what R1 means:
+
+        R1 = ( sun * (1 + 2*GAP) * SUN_HEADROOM
+             + planet1 * V3D_MAX_SCALE * PLANET_HEADROOM ) / TILT
+
+    WHY THE HEADROOMS: this function consumes the POSITION-layer radii (the
+    small design anchor the content fit grows from), while the body that is
+    RENDERED may be up to the headroom factor bigger (the visual size knobs).
+    Sizing R1 for that budget makes the clearance hold for the rendered
+    bodies - and growVisualBodies() enforces the same headrooms as caps, so
+    the guarantee cannot drift.
+
+    WHY / TILT: the screen distance of a planet at angle theta is
+    R * sqrt(cos^2(theta) + tilt^2 * sin^2(theta)), minimal at the vertical
+    extremes (R * cos(plane angle)). Dividing by V3D_ORBIT_PLANE_TILT makes
+    the configured gap hold at EVERY orbital angle - in front, behind and at
+    the side - using the ONE plane angle (no second angle exists).
+
+    `fallbackWidth` only guards the pre-measurement state (sunRadius = 0):
+    the historical behaviour was 0.2 * sceneWidth. */
 export function firstOrbitRadius(
   sunRadius: number,
   planetRadii: ArrayLike<number>,
@@ -203,32 +296,79 @@ export function firstOrbitRadius(
 ): number {
   if (sunRadius <= 0) return 0.2 * fallbackWidth;
   return (
-    sunRadius +
-    sunRadius * 2 * V3D_SUN_TO_FIRST_ORBIT_GAP_RATIO +
-    planetRadii[0] * V3D_MAX_SCALE
+    ( sunRadius * (1 + 2 * V3D_SUN_TO_FIRST_PLANET_GAP) * V3D_SUN_VISUAL_HEADROOM +
+      planetRadii[0] * V3D_MAX_SCALE * V3D_PLANET_VISUAL_HEADROOM ) /
+    V3D_ORBIT_PLANE_TILT
   );
 }
 
-/** Band spacing between planet i and planet i+1: proportional to the two
-    radii it separates, so bigger planets automatically get more room
-    without ever changing the rhythm of the composition. */
-export function bandGap(index: number, planetRadii: ArrayLike<number>): number {
-  return (V3D_BAND_GAP_RATIO * (planetRadii[index] + planetRadii[index + 1])) / 2;
+/** RADIAL STEP between orbit i and orbit i+1 - the rendered-size form of
+        R(next) >= R(current) + p_current + p_next + visual gap
+    Both bodies it separates are accounted for (x HEADROOM so the step
+    covers the RENDERED radii), the visual gap is added on top, and the
+    responsive spacing scale (default 1 = full separation) shrinks all of it
+    together on viewports that cannot afford the full spacing - geometric
+    distance in design px, never a CSS margin. */
+export function bandGap(
+  index: number,
+  planetRadii: ArrayLike<number>,
+  spacingScale = 1,
+): number {
+  const scale = Math.min(1, Math.max(V3D_SPACING_MIN_SCALE, spacingScale));
+  return (
+    scale *
+    (1 + V3D_BAND_VISUAL_GAP_RATIO) *
+    V3D_PLANET_VISUAL_HEADROOM *
+    (planetRadii[index] + planetRadii[index + 1])
+  );
 }
 
 /** Half extent (design px) of the composition with the GIVEN radii:
     the outermost ring + the body that rides it. Used to normalize the
-    manual radii against the measured scene width. */
+    manual radii against the measured scene width. `spacingScale` is the
+    responsive spacing dial of the CURRENT screen category and must be the
+    same value the geometry pass uses, so the normalization and compute()
+    see one identical composition. */
 export function designHalfExtent(
   sunRadius: number,
   planetRadii: ArrayLike<number>,
+  spacingScale = 1,
   fallbackWidth = 0,
 ): number {
   let radius = firstOrbitRadius(sunRadius, planetRadii, fallbackWidth);
   for (let i = 0; i < planetRadii.length - 1; i++) {
-    radius += bandGap(i, planetRadii);
+    radius += bandGap(i, planetRadii, spacingScale);
   }
   return radius + planetRadii[planetRadii.length - 1] * V3D_MAX_SCALE;
+}
+
+/** The Sun's own contribution to R1, in POSITION units - the exact mirror of
+    the Sun term inside firstOrbitRadius(), so absorbGrowthIntoSun() can peel
+    it out of the design extent WITHOUT a second copy of the formula. */
+export function sunClearanceFactor(): number {
+  return (
+    ((1 + 2 * V3D_SUN_TO_FIRST_PLANET_GAP) * V3D_SUN_VISUAL_HEADROOM) /
+    V3D_ORBIT_PLANE_TILT
+  );
+}
+
+/** Largest RENDERED planet radius that orbit 1 can afford, projection- and
+    gap-aware: derived from
+        TILT * R1 >= visSun * (1 + 2*GAP) + V3D_MAX_SCALE * visPlanet
+    together with the dominance floor visSun >= DOMINANCE * visPlanet.
+    Single source for the component's planet cap - it can never disagree
+    with firstOrbitRadius(). */
+export function maxPlanetRadiusForOrbit(r1: number): number {
+  const denominator =
+    V3D_MAX_SCALE * (V3D_SUN_DOMINANCE * (1 + 2 * V3D_SUN_TO_FIRST_PLANET_GAP) + 1);
+  return Math.max(0, (r1 * V3D_ORBIT_PLANE_TILT) / denominator - 4);
+}
+
+/** Largest RENDERED Sun radius that orbit 1 can afford (same derivation,
+    solved for the Sun). Single source for the component's Sun wish cap. */
+export function maxSunRadiusForOrbit(r1: number): number {
+  const denominator = 1 + 2 * V3D_SUN_TO_FIRST_PLANET_GAP + 1 / V3D_SUN_DOMINANCE;
+  return Math.max(0, (r1 * V3D_ORBIT_PLANE_TILT) / denominator);
 }
 
 /**
@@ -293,11 +433,13 @@ export interface OrbitProjection {
  * (centerX / centerY), the six orbit radii, the projection of the ONE
  * orbital plane (its cos / sin), the uniform fit scale AND the six projected
  * orbit traces. It is called on init + resize ONLY (never per frame) and
- * reproduces the approved position model verbatim:
+ * reproduces the approved position model with the spacing rules of STEP 2:
  *
- *   R1     = sunRadius + 2*sunRadius*SUN_TO_FIRST_ORBIT_GAP_RATIO
- *            + planetRadius_1 * V3D_MAX_SCALE        (depth headroom)
- *   gap_i  = V3D_BAND_GAP_RATIO * (radius_i + radius_i+1) / 2
+ *   R1     = ( sun * (1 + 2*V3D_SUN_TO_FIRST_PLANET_GAP) * SUN_HEADROOM
+ *            + planetRadius_1 * V3D_MAX_SCALE * PLANET_HEADROOM )
+ *            / V3D_ORBIT_PLANE_TILT        (holds at EVERY orbital angle)
+ *   gap_i  = spacingScale * (1 + V3D_BAND_VISUAL_GAP_RATIO)
+ *            * PLANET_HEADROOM * (radius_i + radius_i+1)
  *   R_i+1  = R_i + gap_i
  *   angle  = V3D_ORBIT_PLANE_ANGLE_RAD              (exactly the knob)
  *   tilt   = cos(angle)   (screen Y - never flattened by the viewport)
@@ -374,13 +516,14 @@ export class Values3dGeometry {
     // size change can never move a body - it only redraws the ring it
     // travels on.
     const planetRadii = input.planetRadii;
+    const spacingScale = input.spacingScale ?? 1;
     const n = planetRadii.length;
     if (this.radii.length !== n) this.radii = new Float64Array(n);
     let radius = firstOrbitRadius(input.sunRadius, planetRadii, w);
     for (let i = 0; i < n; i++) {
       this.radii[i] = radius;
       if (i < n - 1) {
-        radius += bandGap(i, planetRadii);
+        radius += bandGap(i, planetRadii, spacingScale);
       }
     }
     const outerR = this.radii[n - 1];
@@ -516,6 +659,10 @@ export interface OrbitGeometryInput {
   readonly sunRadius: number;
   /** Position-layer planet radii (design px, already resolved). */
   readonly planetRadii: ArrayLike<number>;
+  /** Responsive spacing scale of the CURRENT screen category
+      (V3D_SPACING_SCALE_BY_CATEGORY) - the SAME value the component's
+      normalization uses, so both see one identical composition. */
+  readonly spacingScale?: number;
 }
 
 /** What a geometry pass produces for the component. */
