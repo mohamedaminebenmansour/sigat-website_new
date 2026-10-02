@@ -18,6 +18,7 @@ import {
   V3D_BAND_VISUAL_GAP_RATIO,
   V3D_MAX_SCALE,
   V3D_MIN_SCALE,
+  V3D_PLANET_DRAWN_HEADROOM,
   V3D_PLANET_VISUAL_HEADROOM,
   V3D_SUN_DOMINANCE,
   V3D_SUN_HALO_FACTOR,
@@ -30,6 +31,8 @@ import {
   Values3dGeometry,
   angleDegThatFits,
   designHalfExtent,
+  maxSunRadiusForOrbitWithPlanet,
+  planetGapCapForOrbit,
   projectedHeightPx,
   radOf,
   stagePadding,
@@ -214,12 +217,22 @@ const V3D_SUN_RADIUS = 200;
     (mobile / tablet / PC / large desktop), in the same units as
     V3D_SUN_RADIUS. This is a floor only: CONTENT-FIRST SIZING grows a
     planet beyond it whenever its text needs more room. Sphere size only -
-    orbital radius, angle and centre are untouched. */
+    orbital radius, angle and centre are untouched.
+
+    THE ROW IS NOW PROPORTIONAL TO THE FROZEN POSITION BASELINE
+    (V3D_POSITION_BASELINE_PLANET_RADII x V3D_PLANET_DRAWN_HEADROOM x
+    V3D_SUN_RADIUS / V3D_POSITION_BASELINE_SUN_RADIUS), i.e. it simply asks
+    for each planet's full DRAWN budget instead of an arbitrary hand-tuned
+    weight. That matters: the row is uniformly trimmed by `rowFactor` when a
+    geometric cap binds, so a row that is proportional to the baselines keeps
+    the approved size RELATIONSHIPS exactly, while a hand-tuned row is dragged
+    down by whichever planet happens to be capped hardest. The geometric caps
+    (orbit clearance + Sun dominance) now decide the final per-planet size. */
 const V3D_PLANET_RADII_BY_CATEGORY = [
-  [140, 155, 145, 170, 150, 165], // 0 mobile  - unchanged
-  [140, 155, 145, 170, 150, 165], // 1 tablet  - unchanged
-  [150, 165, 150, 175, 155, 170], // 2 PC      - larger planets for readable content
-  [145, 155, 145, 165, 150, 160], // 3 large   - comfortable; the CONTENT gets bigger
+  [200, 212, 228, 187, 209, 197], // 0 mobile  - full drawn budget
+  [200, 212, 228, 187, 209, 197], // 1 tablet  - full drawn budget
+  [200, 212, 228, 187, 209, 197], // 2 PC      - full drawn budget
+  [200, 212, 228, 187, 209, 197], // 3 large   - full drawn budget
 ];
 
 /** Per-planet CONTENT tuning (one entry per planet, COMPANY_VALUES order). */
@@ -1494,15 +1507,21 @@ export class Values3dComponent {
     this.applySunContentScale();
 
     // 2b. The configured per-planet sizes (V3D_PLANET_RADII_BY_CATEGORY) are a
-    //     DESIGN INTENT that must survive the caps: when a cap binds, EVERY
-    //     planet is scaled by the SAME factor instead of each one being clamped
-    //     to the same radius (which would erase the relationship and make the
-    //     six spheres identical). One factor = all the configured size ratios
-    //     stay exactly as configured. Computed HERE (right after the Sun size
-    //     is known) because a wish IS a ratio of the Sun, and clamped to
-    //     [0.1, 1] so it can only ever trim an over-large wish, never enlarge.
+    //     DESIGN INTENT that must survive the caps: when a cap binds, the
+    //     FLEXIBLE planets are scaled by the SAME factor instead of each one
+    //     being clamped to the same radius (which would erase the
+    //     relationship and make the six spheres identical). One factor = all
+    //     the configured size ratios stay exactly as configured. Computed HERE
+    //     (right after the Sun size is known) because a wish IS a ratio of the
+    //     Sun, and clamped to [0.1, 1] so it can only ever trim an over-large
+    //     wish, never enlarge.
+    //     PLANET 1 AND THE OUTERMOST PLANET ARE EXCLUDED: their ceilings are
+    //     ABSOLUTE geometric distances (the Sun clearance on orbit 1 and the
+    //     drawn bounding box), not ratio limits. Including them would drag the
+    //     whole row down to the smallest of the two and shrink the planets that
+    //     have real room to grow.
     let rowFactor = 1;
-    for (let i = 0; i < V3D_SLOTS; i++) {
+    for (let i = 1; i < V3D_SLOTS - 1; i++) {
       const wish = this.manualVisualMinRadius(i);
       const cap = this.planetVisualCap(i);
       if (wish > 0) rowFactor = Math.min(rowFactor, cap / wish);
@@ -1638,30 +1657,33 @@ export class Values3dComponent {
 
     let need = 0;
     for (let i = 0; i < V3D_SLOTS; i++) {
-      const title = this.wrapBlock(this.planetTitleText[i], titleFont, boxWidth, V3D_LINE_HEIGHT_TITLE);
-      const desc = this.wrapBlock(this.planetDescText[i], descFont, boxWidth, V3D_LINE_HEIGHT_DESC);
-      const blockWidth = Math.max(title.w, desc.w);
-      const blockHeight = iconPx + title.h + desc.h + 2 * gap;
-      if (blockWidth > 0 && blockHeight > 0) {
-        need = Math.max(need, (Math.hypot(blockWidth, blockHeight) / 2) * V3D_CONTENT_FIT_SAFETY);
-      }
+      const title = this.wrapLines(this.planetTitleText[i], titleFont, boxWidth);
+      const desc = this.wrapLines(this.planetDescText[i], descFont, boxWidth);
+      if (title.length === 0 || desc.length === 0) continue;
+      const reach = this.stackedReach(
+        [
+          // The icon is a single square-ish box centred on its own line.
+          { height: iconPx, widths: [iconPx] },
+          {
+            height: title.length * this.sunTitlePx * V3D_LINE_HEIGHT_TITLE,
+            widths: title,
+          },
+          {
+            height: desc.length * this.sunTitlePx * V3D_DESC_PER_TITLE * V3D_LINE_HEIGHT_DESC,
+            widths: desc,
+          },
+        ],
+        gap,
+      );
+      if (reach > 0) need = Math.max(need, reach * V3D_CONTENT_FIT_SAFETY);
     }
 
     // Exact check of the block actually laid out in the DOM (the visible
     // value), so a real layout is always at least as strong as the estimate.
     const content = this.sunContent;
     if (content && content.children.length > 0) {
-      let blockWidth = 0;
-      let blockHeight = 0;
-      for (let k = 0; k < content.children.length; k++) {
-        const el = content.children[k] as HTMLElement;
-        blockHeight += el.offsetHeight;
-        blockWidth = Math.max(blockWidth, this.contentLineWidth(el, boxWidth));
-      }
-      blockHeight += gap * (content.children.length - 1);
-      if (blockWidth > 0 && blockHeight > 0) {
-        need = Math.max(need, (Math.hypot(blockWidth, blockHeight) / 2) * V3D_CONTENT_FIT_SAFETY);
-      }
+      const reach = this.blockFootprint(content.children, gap, boxWidth);
+      if (reach > 0) need = Math.max(need, reach * V3D_CONTENT_FIT_SAFETY);
     }
     return need;
   }
@@ -1672,36 +1694,168 @@ export class Values3dComponent {
   }
 
   /**
-   * Wrapped size of a text block at a given font inside maxWidth: the height
-   * is the line count x line-height (word wrapping, greedy - the same rule the
-   * browser uses) and the width is the widest resulting line. Canvas only.
+   * HOW FAR THE CONTENT ACTUALLY REACHES FROM THE CENTRE OF ITS BODY.
+   *
+   * The content is a vertical stack of text BLOCKS (icon, title, wrapped
+   * description). Each block is a list of lines; every line is a rectangle of
+   * its own width at its own vertical position, so the distance from the body
+   * centre to the FARTHEST CORNER OF ANY LINE is what decides whether the
+   * content stays inside the sphere:
+   *
+   *      reach = max over lines of hypot(lineWidth / 2, |line top| .. |line bottom|)
+   *
+   * WHY NOT THE HALF-DIAGONAL OF THE WHOLE BLOCK (the previous model): the
+   * bounding rectangle of a wrapped text stack is far bigger than the text it
+   * contains - the widest line almost never sits at the very top or the very
+   * bottom, so charging the planet for that empty corner forced the text
+   * down by 30-50% on every planet and on the Sun, and even at the smallest
+   * allowed size the text still overflowed the disc (measured: the content
+   * wanted Ø133-186px inside a Ø89-144px sphere, i.e. it was clipped).
+   * Line-by-line containment is the exact test for "no glyph leaves the
+   * circle" - it buys the same guaranteed containment with far more text.
    */
-  private wrapBlock(
-    text: string,
-    font: string,
-    maxWidth: number,
-    lineHeight: number,
-  ): { w: number; h: number } {
+  private stackedReach(
+    blocks: ReadonlyArray<{ height: number; widths: readonly number[] }>,
+    gapPx: number,
+  ): number {
+    let total = 0;
+    for (const block of blocks) total += Math.max(0, block.height);
+    total += Math.max(0, gapPx) * Math.max(0, blocks.length - 1);
+    if (!(total > 0)) return 0;
+    let cursor = -total / 2;
+    let reach = 0;
+    for (const block of blocks) {
+      const height = Math.max(0, block.height);
+      const count = Math.max(1, block.widths.length);
+      const lineHeight = height / count;
+      for (let j = 0; j < count; j++) {
+        const top = cursor + j * lineHeight;
+        const bottom = top + lineHeight;
+        const offset = Math.max(Math.abs(top), Math.abs(bottom));
+        const distance = Math.hypot(block.widths[j] / 2, offset);
+        if (distance > reach) reach = distance;
+      }
+      cursor += height + gapPx;
+    }
+    return reach;
+  }
+
+  /**
+   * The same exact line-by-line reach, measured on the REAL laid-out block in
+   * the DOM (icon + title + description, in layout px, so neither the stage
+   * zoom nor the sphere transforms can distort it). Line COUNT and line HEIGHT
+   * come from the DOM; line WIDTHS come from the canvas with the element's own
+   * computed font - the same metric pairing the rest of the fit already uses.
+   */
+  private blockFootprint(
+    elements: ArrayLike<Element>,
+    gapPx: number,
+    boxWidth: number,
+  ): number {
+    const blocks: Array<{ height: number; widths: readonly number[] }> = [];
+    for (let k = 0; k < elements.length; k++) {
+      const el = elements[k] as HTMLElement;
+      const height = el.offsetHeight;
+      if (!(height > 0)) continue;
+      const lines = this.contentLineWidths(el, boxWidth, height);
+      blocks.push({ height, widths: lines });
+    }
+    return this.stackedReach(blocks, gapPx);
+  }
+
+  /**
+   * Wrapped line widths of one content child at `boxWidth`, as the browser
+   * actually laid it out: the line COUNT comes from the real box height
+   * divided by the real computed line-height, the widths from a greedy
+   * canvas wrap with the element's own computed font. If the two disagree
+   * (kerning, letter-spacing), the surplus lines are folded into the last one
+   * and missing ones repeat it, so the footprint stays conservative.
+   */
+  private contentLineWidths(
+    el: HTMLElement,
+    boxWidth: number,
+    boxHeight: number,
+  ): number[] {
     const ctx = this.measureCtx;
-    const words = (text ?? '').trim().split(/\s+/).filter((w) => w.length > 0);
-    if (!ctx || words.length === 0 || !(maxWidth > 0)) return { w: 0, h: 0 };
-    ctx.font = font;
-    const sizePx = parseFloat(font.split(' ')[1]) || 1;
-    let lines = 1;
+    const text = (el.textContent ?? '').trim();
+    const style = getComputedStyle(el);
+    if (!ctx || !text) {
+      const width = Math.min(el.offsetWidth, boxWidth) || el.offsetHeight;
+      return [width];
+    }
+    ctx.font = `${style.fontWeight} ${style.fontSize} ${style.fontFamily}`;
+    const sizePx = parseFloat(style.fontSize) || 1;
+    const letterSpacing = parseFloat(style.letterSpacing);
+    const tracking = isFinite(letterSpacing) ? letterSpacing : 0;
+    const lineHeightPx = parseFloat(style.lineHeight);
+    const lineHeight = isFinite(lineHeightPx) && lineHeightPx > 0 ? lineHeightPx : sizePx * 1.2;
+    const count = Math.max(1, Math.round(boxHeight / lineHeight));
+
+    const words = text.split(/\s+/).filter((w) => w.length > 0);
+    const space = ctx.measureText(' ').width + tracking;
+    let widestWord = 0;
+    const widths: number[] = [];
     let lineWidth = 0;
-    let widest = 0;
     for (const word of words) {
-      const wordWidth = ctx.measureText(word).width;
-      if (lineWidth > 0 && lineWidth + sizePx * 0.32 + wordWidth > maxWidth) {
-        widest = Math.max(widest, lineWidth);
-        lines++;
+      const wordWidth = ctx.measureText(word).width + tracking * (word.length - 1);
+      widestWord = Math.max(widestWord, wordWidth);
+      if (lineWidth > 0 && lineWidth + space + wordWidth > boxWidth) {
+        widths.push(lineWidth);
         lineWidth = wordWidth;
       } else {
-        lineWidth = lineWidth === 0 ? wordWidth : lineWidth + sizePx * 0.32 + wordWidth;
+        lineWidth = lineWidth === 0 ? wordWidth : lineWidth + space + wordWidth;
       }
     }
-    widest = Math.max(widest, lineWidth);
-    return { w: Math.min(widest, maxWidth), h: lines * sizePx * lineHeight };
+    if (lineWidth > 0 || widths.length === 0) widths.push(lineWidth);
+    // A word wider than the column cannot be broken by the browser either: it
+    // gets a line of its own, and the planet must be big enough to hold it.
+    const longest = Math.max(widestWord, ...widths);
+    if (longest > boxWidth) {
+      for (let j = 0; j < widths.length; j++) widths[j] = Math.min(widths[j], boxWidth);
+      widths[widths.length - 1] = Math.max(widths[widths.length - 1], widestWord);
+    }
+
+    if (widths.length === count) return widths;
+    if (widths.length > count) {
+      // The browser wrapped into fewer lines than the canvas: fold the tail
+      // into the last measured line (never smaller than any folded line).
+      const tail = widths.splice(count - 1);
+      widths[count - 1] = Math.max(...tail);
+      return widths;
+    }
+    // The browser wrapped into MORE lines (narrower column): repeat the last
+    // measured width, which keeps the stack at its real height.
+    while (widths.length < count) widths.push(widths[widths.length - 1]);
+    return widths;
+  }
+
+  /**
+   * Greedy word-wrap of `text` with `font` inside `maxWidth`, one entry per
+   * resulting line (canvas metrics only - no layout, no DOM, no per-frame
+   * cost, identical for FR / EN / AR including RTL).
+   */
+  private wrapLines(text: string, font: string, maxWidth: number): number[] {
+    const ctx = this.measureCtx;
+    const words = (text ?? '').trim().split(/\s+/).filter((w) => w.length > 0);
+    if (!ctx || words.length === 0 || !(maxWidth > 0)) return [];
+    ctx.font = font;
+    const space = ctx.measureText(' ').width;
+    const widths: number[] = [];
+    let widestWord = 0;
+    let lineWidth = 0;
+    for (const word of words) {
+      const wordWidth = ctx.measureText(word).width;
+      widestWord = Math.max(widestWord, wordWidth);
+      if (lineWidth > 0 && lineWidth + space + wordWidth > maxWidth) {
+        widths.push(lineWidth);
+        lineWidth = wordWidth;
+      } else {
+        lineWidth = lineWidth === 0 ? wordWidth : lineWidth + space + wordWidth;
+      }
+    }
+    if (lineWidth > 0 || widths.length === 0) widths.push(lineWidth);
+    if (widestWord > maxWidth) widths[widths.length - 1] = widestWord;
+    return widths;
   }
 
   /** Manual minimum visual radius of planet i for the CURRENT screen
@@ -1813,15 +1967,12 @@ export class Values3dComponent {
      to avoid clipping (values-3d.geometry.ts compute() bounding box). */
 
   /**
-   * STEP-2 orbit-1 affordability cap (rendered sizes): largest ANY planet
-   * may render while orbit 1 can still afford the Sun -> planet-1 gap at
-   * the plane projection:
-   *   - projection + gap: spacingTilt() * R1 >= visSun * (1 + 2*GAP)
-   *                                    + V3D_MAX_SCALE * visPlanet
-   *   - dominance:        visSun >= V3D_SUN_DOMINANCE * visPlanet.
-   * Same inequalities as firstOrbitRadius(); size gives way, position
-   * never moves. Planets keep their relative sizes (rowFactor trims the
-   * whole wish row uniformly instead of equalizing spheres).
+   * STEP-2 orbit-1 affordability, worst case over ALL planets (rendered
+   * sizes): the conservative closed form the geometry's projectedBoxFor()
+   * uses to resolve the inclination, kept here as the reference the dev
+   * spacing audit compares the per-planet caps against. It assumes planet 1
+   * sits at the Sun-dominance floor, so it is never larger than the exact
+   * per-planet cap in planetVisualCap().
    */
   private orbitCapRadius(): number {
     const gap = this.sunToFirstPlanetGap();
@@ -1833,39 +1984,64 @@ export class Values3dComponent {
   /**
    * STEP-2 Sun wish cap (rendered size): largest the Sun may render while
    * orbit 1 can still afford it at the plane projection - same derivation
-   * solved for the Sun. Keeps the Sun dominant without swallowing
+   * solved for the Sun, but with planet 1's REAL drawn radius instead of the
+   * worst-case "planet 1 sits at the Sun-dominance floor" assumption the
+   * conservative form has to make:
+   *      TILT * R1 >= visSun * (1 + 2*GAP) + V3D_MAX_SCALE * visPlanet1
+   * Planet 1 is itself held at its own frozen drawn budget
+   * (V3D_PLANET_VISUAL_HEADROOM * planetRadiiPx[0]), which is the same budget
+   * firstOrbitRadius() sized R1 with - so the result is exactly the Sun's own
+   * headroom and the clearance still holds at EVERY orbital angle, while the
+   * Sun is no longer needlessly held ~11% below the room it was given.
+   * Keeps the Sun dominant (see planetVisualCap) without swallowing
    * planet 1's path in front / behind / at the side.
    */
   private step2MaxSunRadius(r1: number): number {
-    const gap = this.sunToFirstPlanetGap();
-    const denominator = 1 + 2 * gap + 1 / V3D_SUN_DOMINANCE;
-    return Math.max(0, (r1 * this.spacingTilt()) / denominator);
+    return maxSunRadiusForOrbitWithPlanet(
+      r1,
+      this.spacingTilt(),
+      V3D_PLANET_VISUAL_HEADROOM * this.planetRadiiPx[0],
+    );
   }
 
   /**
-   * Rendered-size ceiling of planet i (design px) - the ONE place the two
-   * remaining distance invariants of this step meet, so they can never drift
-   * apart:
-   *   - what orbit 1 can afford (projection/gap)  -> orbitCapRadius(),
-   *   - the rendered/position budget that firstOrbitRadius() sized R1 with
-   *     (V3D_PLANET_VISUAL_HEADROOM x the position radius), which is what
-   *     makes the Sun -> Planet 1 clearance a guarantee for the DRAWN body.
-   * SCENE-EDGE CONTAINMENT IS NOT A SIZE CAP ANY MORE: it is owned by the ONE
-   * uniform fit scale (see the bounding box in values-3d.geometry.ts), so a
-   * planet is never shrunk on its own to avoid clipping.
-   * Never below the position baseline (a planet always renders at least its
-   * design anchor). Size only - this never moves a body.
+   * Rendered-size ceiling of planet i (design px) - the ONE place every
+   * remaining size constraint meets, so they can never drift apart:
+   *
+   *   1. DRAWN BUDGET - how far a sphere may grow beyond its orbital anchor
+   *      (V3D_PLANET_DRAWN_HEADROOM). Purely visual: the orbit radii still
+   *      come from the position layer, so nothing moves.
+   *      THE OUTERMOST PLANET IS THE EXCEPTION: its radius is what sets the
+   *      drawn bounding box (R6 + its body), hence the fit scale, the
+   *      composition aspect and --v3d-needed-h, i.e. the height of Section B.
+   *      It therefore keeps the historical V3D_PLANET_VISUAL_HEADROOM, which
+   *      makes the box, the fit and the SECTION HEIGHT provably unchanged by
+   *      this pass. The interior planets (1..4) are always well inside the
+   *      outer orbit's reach, so growing them costs NOTHING in the box.
+   *   2. ORBIT CLEARANCE - planetGapCapForOrbit() on THIS planet's own orbit:
+   *      the Sun -> body clearance keeps holding at every orbital angle.
+   *      Only orbit 1 can ever come near the Sun; later orbits leave more room.
+   *   3. SUN DOMINANCE - the Sun stays at least V3D_SUN_DOMINANCE x
+   *      V3D_MAX_SCALE bigger than the largest planet.
+   * SCENE-EDGE CONTAINMENT IS NOT A SIZE CAP: it is owned by the ONE uniform
+   * fit scale (the bounding box in values-3d.geometry.ts).
+   * Never below the position baseline. Size only - this never moves a body.
    */
   private planetVisualCap(i: number): number {
-    // CONTAINMENT IS OWNED BY THE ONE UNIFORM FIT SCALE - never by shrinking a
-    // single planet: compute() fits the WHOLE drawn composition (Sun, halo,
-    // every orbit, every drawn body, scene-fill padding) inside the measured scene.
-    // The drawn size is therefore limited only by its own rendered/position
-    // budget and by what orbit 1 can afford at the projection (Sun dominance).
-    // The old per-planet scene-edge cap is gone on purpose.
     const baseline = this.planetRadiiPx[i];
-    const budget = V3D_PLANET_VISUAL_HEADROOM * baseline;
-    return Math.max(baseline, Math.min(this.orbitCapRadius(), budget));
+    const isOutermost = i === V3D_SLOTS - 1;
+    const budget =
+      (isOutermost ? V3D_PLANET_VISUAL_HEADROOM : V3D_PLANET_DRAWN_HEADROOM) * baseline;
+    // The Sun is the ONLY orbit-1 neighbour, and it is the Sun's own drawn
+    // radius that decides the cap (no worst-case assumption).
+    const gapCap = planetGapCapForOrbit(
+      this.geometry.radii[i] ?? 0,
+      this.spacingTilt(),
+      this.visualSunRadiusPx,
+    );
+    // The Sun must stay clearly the largest body of the system.
+    const dominanceCap = this.visualSunRadiusPx / (V3D_SUN_DOMINANCE * V3D_MAX_SCALE);
+    return Math.max(baseline, Math.min(budget, gapCap, dominanceCap));
   }
 
   /**
@@ -1886,7 +2062,7 @@ export class Values3dComponent {
       this.writeBodySizes();
       let grew = false;
       for (let i = 0; i < V3D_SLOTS; i++) {
-        const need = this.requiredRadius(i);
+        const need = this.requiredRadiusOnPositionLayer(i);
         const ceiling = this.manualRadiiPx[i] * V3D_CONTENT_FIT_MAX_GROWTH;
         // More content -> bigger planet (never smaller text).
         if (need > this.planetRadiiPx[i] + 0.5 && need <= ceiling) {
@@ -1904,13 +2080,13 @@ export class Values3dComponent {
     // shrink in exactly the same proportion as the text.
     for (let i = 0; i < V3D_SLOTS; i++) {
       for (let pass = 0; pass < V3D_TEXT_FIT_PASSES; pass++) {
-        const need = this.requiredRadius(i);
+        const need = this.requiredRadiusOnPositionLayer(i);
         if (!(need > this.planetRadiiPx[i] + 0.5)) break;
         if (!(need > 0)) break;
         this.contentTitlePx[i] *= this.planetRadiiPx[i] / need;
         this.writeBodySizes();
       }
-      const remaining = this.requiredRadius(i);
+      const remaining = this.requiredRadiusOnPositionLayer(i);
       if (remaining > this.planetRadiiPx[i] + 0.5 && isDevMode()) {
         console.warn(
           `[values-3d] Planet ${i + 1}: content still needs Ø${(remaining * 2).toFixed(0)}px, planet has Ø${(this.planetRadiiPx[i] * 2).toFixed(0)}px.`,
@@ -1926,32 +2102,65 @@ export class Values3dComponent {
   }
 
   /**
-   * Radius (px) a planet needs so its measured content stays completely
+   * Radius planet i needs so its measured content stays completely
    * inside the sphere's front cap:
-   *   - block height = the REAL laid-out height of icon + title + description
-   *     (line wrapping included, so a longer FR/AR text needs a bigger planet)
-   *   - block width  = the widest real line, measured with the same font
-   *   - the half-diagonal of that block must stay inside the cap circle.
+   *   - every LINE of icon + title + description at its REAL laid-out height
+   *     (line wrapping included, so a longer FR/EN/AR text needs a bigger
+   *     planet),
+   *   - measured with the same fonts the browser used,
+   *   - the farthest corner of any line must stay inside the cap circle
+   *     (see stackedReach(): line by line, not block rectangle by block
+   *     rectangle - the block rectangle charged every planet for empty
+   *     corners and forced the text 30-50% below the size its disc allows).
    */
   private requiredRadius(i: number): number {
+    return this.requiredRadiusWith(i, false);
+  }
+
+  /**
+   * THE FROZEN POSITION-LAYER CRITERION - deliberately the OLD half-diagonal
+   * of the content bounding rectangle, NOT the exact line-by-line one used for
+   * the drawn bodies.
+   *
+   * WHY IT IS FROZEN: fitContentToPlanets() feeds this number into the
+   * POSITION layer (up to 1.35 x baseline) BEFORE the orbit radii are
+   * derived, so it decides R1..R6 - the orbital distances, which are part of
+   * the approved composition and must not move. A more accurate content
+   * model would ask for less room, the position layer would stop growing and
+   * every orbit would silently shrink. Improving the drawn content fit must
+   * therefore never reach the position layer: this method keeps the position
+   * arithmetic bit-for-bit as it was, and only the DRAWN pass (requiredRadius
+   * + planetVisualCap) is allowed to use the new, more generous criterion.
+   */
+  private requiredRadiusOnPositionLayer(i: number): number {
+    return this.requiredRadiusWith(i, true);
+  }
+
+  private requiredRadiusWith(i: number, frozenBlockModel: boolean): number {
     const content = this.contents[i];
     if (!content) return 0;
     const kids = content.children;
     if (kids.length === 0) return 0;
 
     const boxWidth = this.contentBoxWidth(i);
-    let blockWidth = 0;
-    let blockHeight = 0;
-    for (let k = 0; k < kids.length; k++) {
-      const el = kids[k] as HTMLElement;
-      blockHeight += el.offsetHeight;
-      blockWidth = Math.max(blockWidth, this.contentLineWidth(el, boxWidth));
+    let reach: number;
+    if (frozenBlockModel) {
+      let blockWidth = 0;
+      let blockHeight = 0;
+      for (let k = 0; k < kids.length; k++) {
+        const el = kids[k] as HTMLElement;
+        blockHeight += el.offsetHeight;
+        blockWidth = Math.max(blockWidth, this.contentLineWidth(el, boxWidth));
+      }
+      blockHeight += this.contentGapPx * (kids.length - 1);
+      if (blockWidth <= 0 || blockHeight <= 0) return 0;
+      reach = Math.hypot(blockWidth, blockHeight) / 2;
+    } else {
+      reach = this.blockFootprint(kids, this.contentGapPx, boxWidth);
     }
-    blockHeight += this.contentGapPx * (kids.length - 1);
-    if (blockWidth <= 0 || blockHeight <= 0) return 0;
+    if (!(reach > 0)) return 0;
 
-    const halfDiagonal = Math.hypot(blockWidth, blockHeight) / 2;
-    return (halfDiagonal * V3D_CONTENT_FIT_SAFETY * this.contentScale) / (2 * V3D_CAP_RADIUS_FRAC);
+    return (reach * V3D_CONTENT_FIT_SAFETY * this.contentScale) / (2 * V3D_CAP_RADIUS_FRAC);
   }
 
   /** Usable text width (px) inside a planet: surface cap minus its padding.
@@ -2214,6 +2423,18 @@ export class Values3dComponent {
       it here and the rendered offset is exactly the mathematical one. */
   private composeOrbitTransform(g: PlanetGeometry): string {
     return `translate3d(${(g.x - this.geometry.centerX).toFixed(2)}px, ${(g.y - this.geometry.centerY).toFixed(2)}px, 0) translate(-50%, -50%) scale(${g.scale.toFixed(4)})`;
+  }
+
+  /** The radius each sphere is DRAWN at right now: the visual radius scaled
+      by its own depth scale, exactly as the rendered transform does. */
+  private currentDrawnBodyRadii(): number[] {
+    const out: number[] = [];
+    for (let i = 0; i < V3D_SLOTS; i++) {
+      const p = this.geometry.orbitPoint(i, this.angles[i]);
+      const scale = V3D_MIN_SCALE + p.depth01 * (V3D_MAX_SCALE - V3D_MIN_SCALE);
+      out.push(this.visualRadiiPx[i] * scale);
+    }
+    return out;
   }
 
   /** B. SELF-ROTATION transform - the planet spinning around its own local
@@ -2607,6 +2828,55 @@ export class Values3dComponent {
     //    the Sun + its halo must stay inside the measured scene rectangle at
     //    the WORST orbital angle (theta = 0 deg for X, 90 deg for Y).
     this.validateSceneContainment();
+
+    // 8. Real collision audit: with the frozen phases and the depth scale in
+    //    play, this is the guarantee that no two discs ever touch.
+    this.validatePlanetPairClearance();
+  }
+
+  /**
+   * DEV-TIME COLLISION AUDIT (init / resize only; isDevMode(), zero
+   * production cost).
+   *
+   * validateSpacingGaps() answers a hypothetical ("what if two planets were at
+   * the SAME angle?"), which the frozen phases never allow - so it cannot
+   * prove that the planets really never touch. This one samples the ACTUAL
+   * rendered geometry over a full revolution of the real motion equation
+   * (same calculateOrbitGeometry the movement writes every frame) and reports
+   * the smallest disc-to-disc distance between every pair. A negative value
+   * would mean the two spheres visibly merge while crossing.
+   */
+  private validatePlanetPairClearance(): void {
+    if (!isDevMode() || this.geometry.radii.length < 2) return;
+    const original = Float64Array.from(this.angles);
+    const samples = 180;
+    let worst = Infinity;
+    let worstPair = '';
+    for (let s = 0; s < samples; s++) {
+      for (let i = 0; i < V3D_SLOTS; i++) {
+        this.angles[i] = original[i] + (s / samples) * Math.PI * 2;
+      }
+      const drawn = this.currentDrawnBodyRadii();
+      for (let i = 0; i < V3D_SLOTS; i++) {
+        const a = this.calculatePlanetGeometry(i, this.angles[i]);
+        for (let j = i + 1; j < V3D_SLOTS; j++) {
+          const b = this.calculatePlanetGeometry(j, this.angles[j]);
+          const gap =
+            Math.hypot(a.x - b.x, a.y - b.y) - (drawn[i] + drawn[j]);
+          if (gap < worst) {
+            worst = gap;
+            worstPair = `${i + 1}-${j + 1}`;
+          }
+        }
+      }
+    }
+    this.angles.set(original);
+    const line =
+      `[values-3d] Pair clearance: closest approach ${(worst * this.geometry.fit).toFixed(1)}px ` +
+      `(planets ${worstPair}) over a full revolution - ` +
+      `${worst > 0 ? 'OK, no collision at any angle' : 'FAIL, discs merge'}.`;
+    if (worst > 0) console.info(line);
+    else console.warn(line);
   }
 
   /**

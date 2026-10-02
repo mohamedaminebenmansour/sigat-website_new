@@ -436,8 +436,39 @@ export const V3D_SUN_VISUAL_HEADROOM = 1.6;
     (measured rendered/position was ~1.66 at STEP 1 - the few percent over
     the budget are simply trimmed). Enforced in
     Values3dComponent.growVisualBodies() so the guarantee used by
-    firstOrbitRadius() cannot drift. */
+    firstOrbitRadius() cannot drift.
+
+    ⚠ THIS CONSTANT IS A DISTANCE BUDGET AND MUST NEVER CHANGE: it is the
+    factor firstOrbitRadius() and bandGap() are BUILT with, so editing it
+    would move every orbit. The visual size the planets are allowed to reach
+    is a DIFFERENT, purely drawn-side budget: V3D_PLANET_DRAWN_HEADROOM. */
 export const V3D_PLANET_VISUAL_HEADROOM = 1.6;
+
+/**
+ * DRAWN-ONLY headroom of a planet (rendered radius = this factor x its
+ * POSITION radius), used exclusively by the component's drawn-size caps.
+ *
+ * WHY IT IS SEPARATE FROM V3D_PLANET_VISUAL_HEADROOM: the 1.6 above is a
+ * DISTANCE budget - it is what the orbit radii were sized with, so it is
+ * frozen. This one is only a drawing budget: it says how far a sphere may
+ * grow beyond its orbital anchor. Raising it moves NOBODY (the orbit radii
+ * still come from the position layer) and it costs NOTHING in the drawn
+ * bounding box for every body except the OUTERMOST one, whose radius is what
+ * sets that box - which is why the component keeps the outermost planet on
+ * the historical 1.6 budget and lets the INTERIOR planets (which are always
+ * well inside the outer orbit's reach) use this one.
+ *
+ * The real ceilings that must never be crossed are enforced separately and
+ * geometrically, not by this number:
+ *   - planetGapCapForOrbit()  - the Sun -> planet gap at EVERY orbital angle
+ *   - visSun / (DOMINANCE * MAX_SCALE) - the Sun stays dominant
+ *   - the component's dev-time pair-clearance audit (no disc collision)
+ *
+ * 1.8 (not 1.9+) keeps a real margin between neighbouring discs where the
+ * projected orbits are closest - the headless sweep's pair-overlap probe
+ * (bounding boxes of the drawn spheres) must stay at 0.
+ */
+export const V3D_PLANET_DRAWN_HEADROOM = 1.8;
 
 /** Safe edge margin between the composition and the boundary of the design
     space, expressed as a FRACTION of the measured scene width (the design is
@@ -574,10 +605,58 @@ export function maxPlanetRadiusForOrbit(r1: number, tilt: number): number {
 }
 
 /** Largest RENDERED Sun radius that orbit 1 can afford (same derivation,
-    solved for the Sun). Single source for the component's Sun wish cap. */
+    solved for the Sun) - conservative form: it assumes planet 1 sits exactly
+    at the Sun-dominance floor. Single source for the component's Sun wish
+    cap when planet 1's rendered radius is unknown. */
 export function maxSunRadiusForOrbit(r1: number, tilt: number): number {
   const denominator = 1 + 2 * V3D_SUN_TO_FIRST_PLANET_GAP + 1 / V3D_SUN_DOMINANCE;
   return Math.max(0, (r1 * tilt) / denominator);
+}
+
+/**
+ * EXACT Sun cap for a KNOWN rendered radius of planet 1.
+ *
+ * `maxSunRadiusForOrbit` above has to assume the worst case for planet 1 (it
+ * is pinned at the Sun-dominance floor), so it under-reports how big the Sun
+ * may actually be drawn. This variant solves the very same inequality for the
+ * Sun with planet 1's REAL drawn radius:
+ *
+ *      TILT * R1 >= visSun * (1 + 2 * GAP) + V3D_MAX_SCALE * visPlanet1
+ *   =>  visSun    <= (TILT * R1 - V3D_MAX_SCALE * visPlanet1) / (1 + 2*GAP)
+ *
+ * With planet 1 held at its own frozen drawn budget this resolves to exactly
+ * `V3D_SUN_VISUAL_HEADROOM * sunRadius`, i.e. the Sun finally gets the full
+ * headroom firstOrbitRadius() was sized with - and nothing more, so the
+ * Sun -> planet 1 clearance still holds at EVERY orbital angle.
+ */
+export function maxSunRadiusForOrbitWithPlanet(
+  r1: number,
+  tilt: number,
+  planet1Radius: number,
+): number {
+  const numerator = r1 * tilt - V3D_MAX_SCALE * Math.max(0, planet1Radius);
+  return Math.max(0, numerator / (1 + 2 * V3D_SUN_TO_FIRST_PLANET_GAP));
+}
+
+/**
+ * PER-PLANET clearance cap: the largest RENDERED radius planet `i` may have
+ * while the Sun -> planet clearance still holds on this orbit at the plane
+ * projection - solved for the planet instead of for the Sun:
+ *
+ *      visPlanet <= (TILT * R_i - visSun * (1 + 2 * GAP)) / V3D_MAX_SCALE
+ *
+ * It is per orbit (not one global number), so an interior planet is capped by
+ * the room its OWN orbit actually leaves - which is the whole point: orbit 1
+ * is the only one that can come near the Sun, and every later orbit leaves
+ * progressively more room.
+ */
+export function planetGapCapForOrbit(
+  radius: number,
+  tilt: number,
+  sunRadius: number,
+): number {
+  const numerator = radius * tilt - Math.max(0, sunRadius) * (1 + 2 * V3D_SUN_TO_FIRST_PLANET_GAP);
+  return Math.max(0, numerator / V3D_MAX_SCALE);
 }
 
 /**
