@@ -12,11 +12,9 @@ import {
 import { MediaShowcaseService } from '../../services/media-showcase.service';
 import { SHOWCASE_MEDIA } from '../../data/media.data';
 import { SHOWCASE_SOCIAL_LINKS } from '../../data/social-links.data';
-import { COMPANY_STATS } from '../../data/company-stats.data';
 import { MediaStageComponent } from '../media-stage/media-stage.component';
 import { MediaNavigationComponent } from '../media-navigation/media-navigation.component';
 import { SocialLinksComponent } from '../social-links/social-links.component';
-import { CompanyStatsComponent } from '../company-stats/company-stats.component';
 
 /**
  * Minimum visible fraction of the showcase for which the hero video may play.
@@ -31,8 +29,7 @@ const VISIBILITY_THRESHOLD = 0.4;
   imports: [
     MediaStageComponent,
     MediaNavigationComponent,
-    SocialLinksComponent,
-    CompanyStatsComponent
+    SocialLinksComponent
   ],
   template: `
     <div
@@ -66,10 +63,6 @@ const VISIBILITY_THRESHOLD = 0.4;
         <div class="showcase-social">
           <app-social-links [links]="socialLinks" />
         </div>
-      </div>
-
-      <div class="showcase-footer">
-        <app-company-stats [stats]="companyStats" />
       </div>
     </div>
   `,
@@ -121,24 +114,13 @@ const VISIBILITY_THRESHOLD = 0.4;
         padding: 1.5rem;
       }
 
-      .showcase-footer {
-        position: absolute;
-        bottom: 0;
-        left: 0;
-        right: 0;
-        z-index: 20;
-        padding: 1.5rem;
-        background: linear-gradient(to top, rgba(0, 0, 0, 0.6) 0%, transparent 100%);
-      }
-
       @media (max-width: 767px) {
-        /* Structurally separated mobile composition:
-             .media-showcase = flex column
-             ├── .showcase-grid (flex:1, media zone)  -> + social + navigation
-             └── .showcase-footer (flex:0, reserved stats row)
-           The navigation is anchored to the BOTTOM of the media zone, and the
-           statistics are a real sibling row below it -- so the two can never
-           collide regardless of viewport height or orientation. */
+        /* Mobile composition: .media-showcase = flex column with the media
+           zone (.showcase-grid) filling the available height. The navigation
+           pill is anchored to the BOTTOM of the media zone, while the water
+           stats band (the showcase's next sibling) overlaps the very bottom
+           edge from outside — so the two can never collide regardless of
+           viewport height or orientation. */
         .media-showcase {
           display: flex;
           flex-direction: column;
@@ -185,20 +167,6 @@ const VISIBILITY_THRESHOLD = 0.4;
           z-index: 20;
         }
 
-        /* The stats band is a real reserved row (not an overlay), so it
-           keeps its own vertical space clear of the navigation. */
-        .showcase-footer {
-          position: relative;
-          flex: 0 0 auto;
-          z-index: 20;
-          padding: 0.7rem 0.75rem calc(0.85rem + env(safe-area-inset-bottom, 0px));
-          background:
-            linear-gradient(to top, rgba(10, 20, 40, 0.55) 0%, rgba(10, 20, 40, 0) 100%),
-            rgba(10, 20, 40, 0.28);
-          backdrop-filter: blur(6px);
-          -webkit-backdrop-filter: blur(6px);
-        }
-
         /* Squat / landscape screens: drop the decorative social pill so the
            nav + media + stats composition stays clean. */
         @media (max-height: 480px) {
@@ -217,10 +185,6 @@ const VISIBILITY_THRESHOLD = 0.4;
         .showcase-social {
           padding-inline-end: 1.75rem;
         }
-
-        .showcase-footer {
-          padding: 1.1rem 1.5rem calc(1.2rem + env(safe-area-inset-bottom, 0px));
-        }
       }
     `
   ]
@@ -228,7 +192,6 @@ const VISIBILITY_THRESHOLD = 0.4;
 export class MediaShowcaseComponent implements OnInit, OnDestroy, AfterViewInit {
   readonly media = SHOWCASE_MEDIA;
   readonly socialLinks = SHOWCASE_SOCIAL_LINKS;
-  readonly companyStats = COMPANY_STATS;
 
   /** Media stage hosting the active <video> element (visibility playback). */
   @ViewChild('stage') stageRef?: MediaStageComponent;

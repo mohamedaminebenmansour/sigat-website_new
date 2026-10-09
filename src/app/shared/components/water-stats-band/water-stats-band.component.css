@@ -1,0 +1,270 @@
+/* ============================================================
+   WaterStatsBand — organic water transition with statistics.
+   Every visual value arrives as a CSS custom property bound from
+   WATER_STATS_BAND_CONFIG (see water-stats-band.model.ts).
+   Motion uses transform/opacity only (GPU friendly).
+   ============================================================ */
+
+:host {
+  display: block;
+  position: relative;
+  /* Paint above the previous section so the transparent wave crest
+     can overlap it (hero video / last content section). */
+  z-index: 5;
+}
+
+.wsb {
+  /* Resolved tokens — the mobile media query swaps these. */
+  --wsb-h: var(--wsb-wave-h);
+  --wsb-amt: var(--wsb-amp);
+  --wsb-ov: var(--wsb-overlap);
+
+  position: relative;
+  display: block;
+  /* The band overlaps the previous section instead of leaving a gap. */
+  margin-top: calc(-1 * var(--wsb-ov));
+}
+
+@media (max-width: 767px) {
+  .wsb {
+    --wsb-h: var(--wsb-wave-h-sm);
+    --wsb-amt: var(--wsb-amp-sm);
+    --wsb-ov: var(--wsb-overlap-sm);
+  }
+}
+
+/* ---------- Top wave ---------- */
+
+.wsb-wave--top {
+  display: block;
+  width: 100%;
+  height: var(--wsb-h);
+  /* Bridge the sub-pixel seam between svg and body. */
+  margin-bottom: -1px;
+}
+
+/* Vertical amplitude of the centre line (origin pinned to the viewBox
+   bottom so the fill never lifts off the water body). */
+.wsb-amp {
+  transform: scaleY(var(--wsb-amt));
+  transform-box: view-box;
+  transform-origin: 0 160px;
+}
+
+/* The ONE authoritative water path: fill and crest highlight urls come
+   from the template (unique per-instance gradient ids). No CSS `fill`
+   here — a CSS fill would override the presentation attribute. */
+.wsb-water {
+  stroke-width: 2.5;
+  stroke-linecap: round;
+  /* Highlight affects the stroke only, never the water fill. */
+  stroke-opacity: var(--wsb-highlight);
+}
+
+/* Surface depth gradient stops (colours bound from config on .wsb):
+   lighter near the upper surface → stronger blue with depth. */
+.wsb-surface-stop-0 {
+  stop-color: var(--wsb-surface-0);
+}
+.wsb-surface-stop-1 {
+  stop-color: var(--wsb-surface-1);
+}
+.wsb-surface-stop-2 {
+  stop-color: var(--wsb-surface-2);
+}
+.wsb-surface-stop-3 {
+  stop-color: var(--wsb-surface-3);
+}
+
+/* Slow seamless drift: the path spans three full periods, so translating
+   exactly one period (-1440 user units, --wsb-period) loops invisibly. */
+.wsb-drift {
+  animation: wsb-drift var(--wsb-drift) linear infinite;
+  will-change: transform;
+}
+
+@keyframes wsb-drift {
+  from {
+    transform: translateX(0);
+  }
+  to {
+    transform: translateX(calc(-1 * var(--wsb-period)));
+  }
+}
+
+/* ---------- Water body ---------- */
+
+.wsb-body {
+  position: relative;
+  overflow: hidden;
+  padding: var(--wsb-body-pad-y) clamp(1rem, 4vw, 2.5rem);
+  background: var(--wsb-body-grad);
+  /* Depth toward the lower water (tonal only — no extra element). */
+  box-shadow: inset 0 -40px 44px -34px rgba(1, 10, 32, 0.85);
+}
+
+/* Cool surface light — a straight vertical fade (NOT a wave/boundary):
+   light catching the water just below the crest. */
+.wsb-body::before {
+  content: '';
+  position: absolute;
+  inset-inline: 0;
+  top: 0;
+  height: 46%;
+  background: linear-gradient(
+    180deg,
+    rgba(191, 219, 254, 0.18),
+    rgba(191, 219, 254, 0.05) 45%,
+    rgba(191, 219, 254, 0)
+  );
+  pointer-events: none;
+}
+
+/* Elegant translucent highlight sweeping across the water — one complete
+   pass takes --wsb-sheen (10–18 s). Transform only: the wave geometry and
+   the statistics never move, so it reads as flowing water, not bouncing. */
+.wsb-sheen {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  background: linear-gradient(
+    100deg,
+    transparent 30%,
+    rgba(219, 234, 255, 0.07) 42%,
+    rgba(255, 255, 255, 0.11) 50%,
+    rgba(219, 234, 255, 0.05) 58%,
+    transparent 70%
+  );
+  transform: translateX(-18%);
+  animation: wsb-sheen var(--wsb-sheen) ease-in-out infinite alternate;
+  pointer-events: none;
+}
+
+@keyframes wsb-sheen {
+  from {
+    transform: translateX(-18%);
+  }
+  to {
+    transform: translateX(18%);
+  }
+}
+
+/* ---------- Statistics ---------- */
+
+.wsb-stats {
+  position: relative;
+  z-index: 1;
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: var(--wsb-stats-gap-y) var(--wsb-stats-gap-x);
+  width: 100%;
+  max-width: 72rem;
+  margin-inline: auto; /* RTL-safe centring */
+  padding: 0;
+  list-style: none;
+}
+
+.wsb-stat {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.5rem;
+  text-align: center;
+}
+
+.wsb-stat-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: clamp(2rem, 3vw, 2.5rem);
+  height: clamp(2rem, 3vw, 2.5rem);
+  border-radius: 50%;
+  background: rgba(147, 197, 253, 0.14);
+  border: 1px solid rgba(147, 197, 253, 0.34);
+  color: #bfdbfe;
+}
+
+.wsb-stat-icon i {
+  font-size: 0.95rem;
+  line-height: 1;
+}
+
+.wsb-stat-figure {
+  display: inline-flex;
+  align-items: baseline;
+}
+
+.wsb-number {
+  font-size: var(--wsb-value-size);
+  font-weight: 800;
+  line-height: 1;
+  color: #f4f8ff;
+  text-shadow: 0 2px 10px rgba(1, 12, 35, 0.45);
+  white-space: nowrap;
+  /* Stable digit widths while the count-up runs. */
+  font-variant-numeric: tabular-nums;
+}
+
+.wsb-stat-suffix {
+  margin-inline-start: 0.06em;
+  font-size: 0.66em;
+  font-weight: 700;
+  color: #f59e0b; /* existing SIGAT amber accent */
+}
+
+.wsb-stat-label {
+  font-size: var(--wsb-label-size);
+  font-weight: 600;
+  line-height: 1.35;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+  color: rgba(214, 231, 255, 0.88);
+}
+
+/* Thin vertical separator between neighbouring statistics (desktop). */
+@media (min-width: 768px) {
+  .wsb-stat:not(:first-child)::before {
+    content: '';
+    position: absolute;
+    inset-block: 18%;
+    inset-inline-start: calc(-0.5 * var(--wsb-stats-gap-x));
+    width: 1px;
+    background: rgba(255, 255, 255, 0.18);
+    pointer-events: none;
+  }
+}
+
+/* Mobile: clean 2x2 — never four squeezed into one row. */
+@media (max-width: 767px) {
+  .wsb-stats {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    max-width: 26rem;
+  }
+}
+
+/* ---------- Footer variant: compact ---------- */
+
+.wsb--footer .wsb-stat-icon {
+  width: 1.75rem;
+  height: 1.75rem;
+}
+
+.wsb--footer .wsb-stat-icon i {
+  font-size: 0.8rem;
+}
+
+.wsb--footer .wsb-stat {
+  gap: 0.35rem;
+}
+
+/* ---------- Reduced motion ----------
+   Water shape, gradients and highlights stay fully visible;
+   only the movement is disabled. */
+@media (prefers-reduced-motion: reduce) {
+  .wsb-drift,
+  .wsb-sheen {
+    animation: none;
+  }
+}
+

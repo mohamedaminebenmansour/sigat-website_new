@@ -1,0 +1,111 @@
+<div
+  class="wsb"
+  [class.wsb--footer]="variant() === 'footer'"
+  [style.--wsb-period]="waveWidthPx"
+  [style.--wsb-wave-h]="px(cfg().waveHeight)"
+  [style.--wsb-wave-h-sm]="px(cfg().waveHeightSm)"
+  [style.--wsb-overlap]="px(cfg().overlap)"
+  [style.--wsb-overlap-sm]="px(cfg().overlapSm)"
+  [style.--wsb-amp]="cfg().amplitude"
+  [style.--wsb-amp-sm]="cfg().amplitudeSm"
+  [style.--wsb-drift]="cfg().driftMs / 1000 + 's'"
+  [style.--wsb-sheen]="cfg().sheenMs / 1000 + 's'"
+  [style.--wsb-highlight]="cfg().highlightOpacity"
+  [style.--wsb-surface-0]="cfg().surfaceStops[0]"
+  [style.--wsb-surface-1]="cfg().surfaceStops[1]"
+  [style.--wsb-surface-2]="cfg().surfaceStops[2]"
+  [style.--wsb-surface-3]="cfg().surfaceStops[3]"
+  [style.--wsb-body-grad]="cfg().bodyGradient"
+  [style.--wsb-stats-gap-x]="cfg().statsGapX"
+  [style.--wsb-stats-gap-y]="cfg().statsGapY"
+  [style.--wsb-body-pad-y]="cfg().bodyPaddingY"
+  [style.--wsb-value-size]="cfg().valueSize"
+  [style.--wsb-label-size]="cfg().labelSize"
+>
+  <!-- ===== THE water boundary — ONE curved upper edge overlapping the
+       previous section (transparent above the curve, water below it),
+       carried by the single authoritative path element below. Decorative. ===== -->
+  <svg
+    class="wsb-wave wsb-wave--top"
+    [attr.viewBox]="waveViewBox"
+    preserveAspectRatio="none"
+    aria-hidden="true"
+    focusable="false"
+  >
+    <defs>
+      <linearGradient [attr.id]="uid() + '-sheen'" x1="0" y1="0" x2="1" y2="0">
+        <stop offset="0" stop-color="#ffffff" stop-opacity="0" />
+        <stop offset="0.35" stop-color="#dbeafe" stop-opacity="0.9" />
+        <stop offset="0.62" stop-color="#ffffff" stop-opacity="0.5" />
+        <stop offset="1" stop-color="#ffffff" stop-opacity="0" />
+      </linearGradient>
+      <!-- Water depth gradient: lighter near the upper surface, stronger
+           blue through the body (colours arrive as CSS custom properties). -->
+      <linearGradient [attr.id]="uid() + '-surface'" x1="0" y1="0" x2="0" y2="1">
+        <stop offset="0" class="wsb-surface-stop-0" />
+        <stop offset="0.35" class="wsb-surface-stop-1" />
+        <stop offset="0.7" class="wsb-surface-stop-2" />
+        <stop offset="1" class="wsb-surface-stop-3" />
+      </linearGradient>
+      <!-- Very subtle organic deformation — attached only on desktop
+           without reduced-motion (see component.ts setupRipple). -->
+      <filter
+        [attr.id]="uid() + '-ripple'"
+        x="-4%"
+        y="-25%"
+        width="108%"
+        height="150%"
+        color-interpolation-filters="sRGB"
+      >
+        <feTurbulence
+          type="fractalNoise"
+          baseFrequency="0.011 0.032"
+          numOctaves="2"
+          seed="7"
+          result="noise"
+        />
+        <feDisplacementMap
+          in="SourceGraphic"
+          in2="noise"
+          scale="3"
+          xChannelSelector="R"
+          yChannelSelector="G"
+        />
+      </filter>
+    </defs>
+
+    <g class="wsb-amp">
+      <!-- THE ONE authoritative water path: fill = depth gradient,
+           stroke = specular crest highlight riding the same boundary. -->
+      <g class="wsb-drift" [attr.filter]="rippleFilter()">
+        <path
+          class="wsb-water"
+          [attr.d]="wavePath()"
+          [attr.fill]="'url(#' + uid() + '-surface)'"
+          [attr.stroke]="'url(#' + uid() + '-sheen)'"
+        />
+      </g>
+    </g>
+  </svg>
+
+  <!-- ===== WATER BODY: statistics live inside the transition ===== -->
+  <div class="wsb-body">
+    <span class="wsb-sheen" aria-hidden="true"></span>
+    <ul class="wsb-stats" aria-label="Company statistics">
+      @for (stat of stats(); track stat.labelKey) {
+        <li class="wsb-stat">
+          @if (stat.icon) {
+            <span class="wsb-stat-icon" aria-hidden="true">
+              <i [class]="stat.icon"></i>
+            </span>
+          }
+          <span class="wsb-stat-figure">
+            <span class="wsb-number" #number>{{ stat.value }}</span
+            ><span class="wsb-stat-suffix">{{ stat.suffix }}</span>
+          </span>
+          <span class="wsb-stat-label">{{ stat.labelKey | translate }}</span>
+        </li>
+      }
+    </ul>
+  </div>
+</div>

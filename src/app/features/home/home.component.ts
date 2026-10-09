@@ -8,6 +8,7 @@ import { CtaBannerComponent } from '../../shared/components/cta-banner.component
 import { CompanyStoryComponent } from '../about/components/company-story.component';
 import { ValuesComponent } from '../about/components/values.component';
 import { Values3dComponent } from "../about/components/values-3d.component";
+import { WaterStatsBandComponent } from '../../shared/components/water-stats-band/water-stats-band.component';
 
 @Component({
   selector: 'app-home',
@@ -21,11 +22,18 @@ import { Values3dComponent } from "../about/components/values-3d.component";
     CtaBannerComponent,
     CompanyStoryComponent,
     ValuesComponent,
-    Values3dComponent
+    Values3dComponent,
+    WaterStatsBandComponent
 ],
   template: `
-    <!-- ==================== MEDIA SHOWCASE / HERO (includes stats) ==================== -->
+    <!-- ==================== MEDIA SHOWCASE / HERO ==================== -->
     <app-media-showcase />
+
+    <!-- ==================== WATER STATS BAND (organic wave + stats) ====================
+         Overlaps the bottom of the hero video and carries the company
+         statistics inside the transition (reuses COMPANY_STATS — no
+         duplicated data). Sits between hero and company story. -->
+    <app-water-stats-band variant="hero" />
 
     <!-- ==================== COMPANY STORY ==================== -->
     <app-company-story />
