@@ -131,8 +131,9 @@ const V3D_Z_SPAN = 200;
     therefore decided by the 3D model - never by an angle comparison and never
     by a per-half special case. */
 const V3D_Z_SUN = V3D_Z_BASE + V3D_Z_SPAN / 2;
-/** Fixed planet accent colors (SIGAT identity: warm gold + cool blues). */
-const V3D_COLORS = ['#f59e0b', '#2563eb', '#0ea5e9', '#6366f1', '#1d4ed8', '#0f766e'];
+/** Fixed accent colors for the six orbiting hydraulic components
+    (SIGAT identity: cyan / blue / steel - never warm solar tones). */
+const V3D_COLORS = ['#0284c7', '#2563eb', '#0ea5e9', '#1d4ed8', '#06b6d4', '#64748b'];
 
 /* ============================================================
    ORBITAL SYSTEM — POSITION MODEL (locked geometry)
@@ -424,7 +425,10 @@ interface PlanetGeometry {
 }
 
 /**
- * "SIGAT Values Solar System" - company values as a premium orbital system.
+ * "SIGAT Values Impeller" - company values as a premium hydraulic scene:
+ * a central centrifugal pump impeller surrounded by six orbiting hydraulic
+ * components on stylized flow lines (blue / cyan / silver / glass materials
+ * on a white corporate background).
  *
  * Geometry model (single mathematical source of truth):
  *   SIZES first: applyVisualSizes() resolves the Sun radius and the six
@@ -494,7 +498,7 @@ interface PlanetGeometry {
          --v3d-content-scale: 1;
          --v3d-content-curve: 6deg;
          position: relative;
-         background: linear-gradient(180deg, #ffffff 0%, #f4f7fc 100%);
+         background: linear-gradient(180deg, #ffffff 0%, #f2f7fb 100%);
          overflow: hidden;
          width: 100%;
          /* Natural height: the page scrolls (Section A intro + Section B scene).
@@ -546,7 +550,7 @@ interface PlanetGeometry {
        }
 
        /* ============================================================
-          SECTION B - SOLAR SYSTEM (own controlled height, independent
+          SECTION B - PUMP SCENE (own controlled height, independent
           from the introduction). One viewport tall; its top band reserves
           the real navbar height, so the scene can NEVER sit underneath the
           fixed header. The engine's uniform fit still guarantees that all
@@ -634,6 +638,22 @@ interface PlanetGeometry {
         pointer-events: none;
         z-index: 1;
       }
+      /* Base trace: one faint continuous coolant line per orbit. */
+      .v3d-orbit-traces .v3d-orbit-base {
+        stroke: rgba(14, 165, 233, 0.3);
+      }
+      /* Flow trace: a brighter cyan segment travelling along the VERY SAME
+         sampled path (same d) - stylized flowing water with zero extra
+         geometry. Decorative only, non-interactive, disabled under
+         prefers-reduced-motion. Dash period 400 = seamless -400 loop. */
+      .v3d-orbit-traces .v3d-orbit-flow {
+        stroke: rgba(34, 211, 238, 0.85);
+        stroke-dasharray: 120 280;
+        animation: v3d-flow 6s linear infinite;
+      }
+      @keyframes v3d-flow {
+        to { stroke-dashoffset: -400; }
+      }
 
       /* Planets - LAYER 1 (orbit wrapper + sphere BODY). Centered at 50/50
          like the Sun itself; the rAF loop writes ONLY this element's
@@ -664,20 +684,23 @@ interface PlanetGeometry {
         /* Perspective for the rotating sphere layer (parent of the rotated
            element must carry it). */
         perspective: 700px;
-        /* Layered spherical shading: top-left specular highlight, soft
-           mid-tone wrap to base color, lower-right core shadow, plus an
-           ambient rim — reads as a stylized sphere, not a plastic button. */
+        /* HYDRAULIC GLASS MATERIAL: top-left specular + soft mid highlight,
+           cool blue core shadow, translucent tinted base wash and a thin
+           inner glass rim - reads as a stylized glass-like water body tinted
+           by --v3d-pc, not a plastic button. Faux glass only: NO
+           backdrop-filter (it would repaint the spinning sphere every frame). */
         background:
-          radial-gradient(circle at 26% 22%, rgba(255, 255, 255, 0.95) 0%, rgba(255, 255, 255, 0) 26%),
-          radial-gradient(circle at 34% 30%, rgba(255, 255, 255, 0.32) 0%, rgba(255, 255, 255, 0) 46%),
-          radial-gradient(circle at 67% 72%, color-mix(in srgb, var(--v3d-pc) 45%, #000 55%) 0%, color-mix(in srgb, var(--v3d-pc) 70%, #000 30%) 46%, transparent 74%),
-          var(--v3d-pc);
-        border: 2px solid rgba(255, 255, 255, 0.5);
+          radial-gradient(circle at 26% 22%, rgba(255, 255, 255, 0.96) 0%, rgba(255, 255, 255, 0) 26%),
+          radial-gradient(circle at 34% 30%, rgba(255, 255, 255, 0.34) 0%, rgba(255, 255, 255, 0) 46%),
+          radial-gradient(circle at 67% 74%, color-mix(in srgb, var(--v3d-pc) 38%, #0b1220 62%) 0%, color-mix(in srgb, var(--v3d-pc) 66%, #0f172a 34%) 48%, transparent 76%),
+          linear-gradient(152deg, color-mix(in srgb, var(--v3d-pc) 80%, #ffffff 20%) 0%, var(--v3d-pc) 56%, color-mix(in srgb, var(--v3d-pc) 76%, #0f172a 24%) 100%);
+        border: 2px solid rgba(255, 255, 255, 0.62);
         box-shadow:
-          0 8px 20px rgba(15, 23, 42, 0.25),
-          inset 0 -12px 22px rgba(0, 0, 0, 0.3),
-          inset 5px 8px 14px rgba(255, 255, 255, 0.28),
-          inset -6px -8px 16px color-mix(in srgb, var(--v3d-pc) 45%, #000 55%);
+          0 10px 24px rgba(2, 18, 40, 0.22),
+          inset 0 -12px 22px rgba(15, 23, 42, 0.26),
+          inset 6px 9px 16px rgba(255, 255, 255, 0.32),
+          inset -7px -9px 18px color-mix(in srgb, var(--v3d-pc) 42%, #0f172a 58%),
+          inset 0 0 0 1px rgba(255, 255, 255, 0.14);
         /* NO transform here beyond the rAF-owned one; only paint props may
            transition (never the orbital transform). */
         transition: box-shadow 250ms ease, border-color 250ms ease, filter 250ms ease;
@@ -786,7 +809,7 @@ interface PlanetGeometry {
         color: #ffffff;
         background:
           radial-gradient(circle at 42% 34%, rgba(255, 255, 255, 0.14) 0%, rgba(255, 255, 255, 0) 56%),
-          radial-gradient(circle at 66% 78%, rgba(0, 0, 0, 0.22) 0%, rgba(0, 0, 0, 0) 64%);
+          radial-gradient(circle at 66% 78%, rgba(15, 23, 42, 0.26) 0%, rgba(15, 23, 42, 0) 64%);
         text-shadow: 0 1px 3px rgba(15, 23, 42, 0.55), 0 1px 0 rgba(255, 255, 255, 0.14);
         user-select: none;
         --v3d-face: 1;
@@ -807,11 +830,11 @@ interface PlanetGeometry {
       /* Hover: beaming emphasis ONLY - it NEVER pauses orbital motion. */
       .v3d-planet:hover {
         border-color: rgba(255, 255, 255, 0.95);
-        filter: brightness(1.12);
+        filter: brightness(1.06);
         box-shadow:
-          0 14px 36px rgba(15, 23, 42, 0.34),
-          0 0 0 3px color-mix(in srgb, var(--v3d-pc) 55%, transparent),
-          0 0 30px color-mix(in srgb, var(--v3d-pc) 60%, transparent);
+          0 14px 34px rgba(2, 18, 40, 0.3),
+          0 0 0 3px color-mix(in srgb, var(--v3d-pc) 50%, transparent),
+          0 0 28px color-mix(in srgb, var(--v3d-pc) 55%, transparent);
       }
       .v3d-planet.active::after {
         content: '';
@@ -856,45 +879,74 @@ interface PlanetGeometry {
         overflow-wrap: break-word;
       }
 
-      /* ================= Central sun ================= */
+      /* ============ Central centrifugal pump impeller ============
+         Same box, same anchor, same z-band as before - the engine's
+         geometry, sizes and audits are untouched. Only the MATERIAL is
+         hydraulic: a light brushed-steel body, a slow-spinning vane ring
+         (::before) and a cool cyan glow. The living pulse moved to the
+         halo as a composited opacity animation (the old version animated
+         this disc's box-shadow and repainted the largest element of the
+         page several times per second). */
       .v3d-sun {
         position: absolute;
         /* Same anchor as the planets - 50% + the optional composition offset -
-           so the Sun stays the exact mathematical origin (centerX / centerY)
-           of the orbital system. */
+           so the impeller stays the exact mathematical origin (centerX /
+           centerY) of the orbital system. */
         left: calc(50% + var(--v3d-offset-x, 0px));
         top: calc(50% + var(--v3d-offset-y, 0px));
         width: var(--v3d-sun);
         height: var(--v3d-sun);
-        /* Between the far (200) and near (400) planet z-band so planets
-           genuinely pass behind AND in front of the sun. MUST stay in sync
+        /* Between the far (200) and near (400) component z-band so bodies
+           genuinely pass behind AND in front of the impeller. MUST stay in sync
            with V3D_Z_SUN in the TS engine - the depth decides the order. */
         z-index: 300;
         transform: translate(-50%, -50%);
         border-radius: 50%;
-        border: 2px solid rgba(255, 255, 255, 0.65);
+        border: 2px solid rgba(255, 255, 255, 0.85);
+        /* Brushed steel, deliberately LIGHT so the dark hydraulic ink of the
+           active value stays readable in FR / EN / AR. */
         background: radial-gradient(
           circle at 30% 28%,
-          #fffdf4 0%,
-          #fff2cd 30%,
-          #ffe58a 58%,
-          #ffc44d 82%,
-          #f59e0b 100%
+          #ffffff 0%,
+          #f1f5f9 30%,
+          #dde5ee 58%,
+          #c3cedb 82%,
+          #a8b6c7 100%
         );
         box-shadow:
-          0 0 34px rgba(255, 191, 87, 0.42),
-          0 0 96px rgba(255, 150, 30, 0.2),
-          inset 0 0 0 8px rgba(255, 247, 208, 0.55),
-          inset 0 -16px 30px rgba(230, 92, 16, 0.32),
-          inset 4px 6px 12px rgba(255, 255, 240, 0.5);
+          0 0 34px rgba(14, 165, 233, 0.35),
+          0 0 96px rgba(59, 130, 246, 0.18),
+          inset 0 0 0 8px rgba(255, 255, 255, 0.6),
+          inset 0 -16px 30px rgba(15, 23, 42, 0.16),
+          inset 4px 6px 12px rgba(255, 255, 255, 0.65);
         display: flex;
         align-items: center;
         justify-content: center;
-        animation: v3d-sun-pulse 3.2s ease-in-out infinite;
       }
-      @keyframes v3d-sun-pulse {
-        0%, 100% { box-shadow: 0 0 34px rgba(255, 191, 87, 0.42), 0 0 96px rgba(255, 150, 30, 0.2), inset 0 0 0 8px rgba(255, 247, 208, 0.55), inset 0 -16px 30px rgba(230, 92, 16, 0.32), inset 4px 6px 12px rgba(255, 255, 240, 0.5); }
-        50%      { box-shadow: 0 0 54px rgba(255, 191, 87, 0.56), 0 0 132px rgba(255, 150, 30, 0.28), inset 0 0 0 8px rgba(255, 247, 208, 0.64), inset 0 -16px 30px rgba(230, 92, 16, 0.32), inset 4px 6px 12px rgba(255, 255, 240, 0.5); }
+      /* Impeller vane ring: a masked repeating conic pattern (steel vane /
+         groove / coolant tint) reading as the vanes of a centrifugal
+         impeller. Slow composited transform rotation, masked to a ring so
+         the text hub stays clean; low alphas so the spin never fights the
+         content, which always paints ABOVE it (z-index 2). */
+      .v3d-sun::before {
+        content: '';
+        position: absolute;
+        inset: 3%;
+        border-radius: 50%;
+        background: repeating-conic-gradient(
+          from 0deg,
+          rgba(255, 255, 255, 0.38) 0deg 5deg,
+          rgba(148, 163, 184, 0.18) 5deg 10deg,
+          rgba(14, 165, 233, 0.1) 10deg 15deg,
+          rgba(15, 23, 42, 0.12) 15deg 20deg
+        );
+        -webkit-mask-image: radial-gradient(circle, transparent 24%, #000 32%, #000 76%, transparent 90%);
+        mask-image: radial-gradient(circle, transparent 24%, #000 32%, #000 76%, transparent 90%);
+        pointer-events: none;
+        animation: v3d-impeller-spin 26s linear infinite;
+      }
+      @keyframes v3d-impeller-spin {
+        to { transform: rotate(360deg); }
       }
       .v3d-sun-halo {
         position: absolute;
@@ -905,11 +957,20 @@ interface PlanetGeometry {
         z-index: 80;
         transform: translate(-50%, -50%);
         border-radius: 50%;
-        background: radial-gradient(circle, rgba(255, 179, 71, 0.35) 0%, rgba(255, 179, 71, 0.12) 48%, transparent 72%);
+        background: radial-gradient(circle, rgba(14, 165, 233, 0.32) 0%, rgba(56, 189, 248, 0.12) 48%, transparent 72%);
         filter: blur(2px);
         pointer-events: none;
+        /* THE PULSE: composited opacity/scale only. The old warm version
+           animated the impeller disc's box-shadow - the largest continuous
+           repaint of the page. This reads as cool hydraulic energy instead. */
+        animation: v3d-halo-pulse 3.2s ease-in-out infinite;
       }
-      /* Sun content: on the sphere surface, not a flat card - convex lighting. */
+      @keyframes v3d-halo-pulse {
+        0%, 100% { opacity: 0.8; transform: translate(-50%, -50%) scale(1); }
+        50%      { opacity: 1;   transform: translate(-50%, -50%) scale(1.05); }
+      }
+      /* Impeller content: on the steel surface, not a flat card - convex
+         lighting, dark hydraulic ink on the light brushed-steel body. */
       .v3d-sun-content {
         position: relative;
         z-index: 2;
@@ -924,19 +985,19 @@ interface PlanetGeometry {
         overflow: hidden;
         padding: 5% 13%;
         text-align: center;
-        color: #78350f;
+        color: #0f172a;
         perspective: 480px;
         background:
-          radial-gradient(circle at 38% 30%, rgba(255, 255, 255, 0.35) 0%, rgba(255, 255, 255, 0) 52%),
-          radial-gradient(circle at 62% 78%, rgba(124, 45, 18, 0.22) 0%, rgba(124, 45, 18, 0) 62%);
+          radial-gradient(circle at 38% 30%, rgba(255, 255, 255, 0.4) 0%, rgba(255, 255, 255, 0) 52%),
+          radial-gradient(circle at 62% 78%, rgba(15, 23, 42, 0.14) 0%, rgba(15, 23, 42, 0) 62%);
         animation: v3d-swap 300ms var(--v3d-ease) both;
       }
       .v3d-sun-content i,
       .v3d-sun-content h3,
       .v3d-sun-content p {
         text-shadow:
-          0 1px 0 rgba(255, 251, 235, 0.55),
-          0 -1px 2px rgba(124, 45, 18, 0.28);
+          0 1px 0 rgba(255, 255, 255, 0.75),
+          0 -1px 2px rgba(14, 165, 233, 0.28);
       }
       .v3d-sun-content i { font-size: var(--v3d-sun-icon-size, 2rem); line-height: 1; }
       .v3d-sun-content h3 {
@@ -950,7 +1011,7 @@ interface PlanetGeometry {
         margin: 0;
         font-size: var(--v3d-sun-desc-size, 0.95rem);
         line-height: 1.45;
-        color: #92400e;
+        color: #334155;
         display: block;
         overflow-wrap: break-word;
       }
@@ -975,12 +1036,12 @@ interface PlanetGeometry {
         height: 0.55rem;
         padding: 0;
         border-radius: 9999px;
-        border: 1px solid rgba(30, 58, 138, 0.45);
+        border: 1px solid rgba(2, 132, 199, 0.55);
         background: rgba(255, 255, 255, 0.9);
         cursor: pointer;
         transition: background 250ms ease, transform 250ms ease;
       }
-      .v3d-dot.active { background: #f59e0b; transform: scale(1.3); }
+      .v3d-dot.active { background: #0ea5e9; transform: scale(1.3); }
       .v3d-dot:focus-visible { outline: 2px solid #1e3a8a; outline-offset: 2px; }
 
       /* ================= Responsive geometry =================
@@ -997,6 +1058,13 @@ interface PlanetGeometry {
       @media (prefers-reduced-motion: reduce) {
         .v3d-sun-content { animation: none; }
         .v3d-sun { animation: none; }
+        /* All decorative CSS motion stops: the spinning vane ring, the halo
+           pulse and the travelling flow segments. The traces stay visible as
+           plain continuous lines. */
+        .v3d-sun::before,
+        .v3d-sun-halo,
+        .v3d-orbit-traces .v3d-orbit-flow { animation: none; }
+        .v3d-orbit-traces .v3d-orbit-flow { stroke-dasharray: none; }
         .v3d-planet, .v3d-planet-surface, .v3d-dot { transition: none; }
         .v3d-planet-sphere { transform: none; }
         /* !important overrides any inline value already written by the
@@ -1017,34 +1085,42 @@ interface PlanetGeometry {
         <p class="v3d-intro-text">{{ 'values_intro' | translate }}</p>
       </div>
 
-      <!-- Section B - the solar system owns its own height, independent
+      <!-- Section B - the pump scene owns its own height, independent
            from the introduction above (.v3d-scene-section). -->
       <div class="v3d-scene-section">
         <div class="v3d-scene">
         <!-- The whole orbital system lives on ONE design-space surface that
-             is uniformly scaled to fit the real scene (--v3d-fit): the Sun
-             and every planet share this single coordinate system, whose
-             origin is the Sun's centre (centerX / centerY). -->
+             is uniformly scaled to fit the real scene (--v3d-fit): the
+             impeller and every orbiting component share this single
+             coordinate system, whose origin is the impeller centre
+             (centerX / centerY). -->
         <div class="v3d-stage">
-        <!-- Orbit traces are sampled from the exact same trajectory the planets
+        <!-- Orbit traces are sampled from the exact same trajectory the components
              move on (calculateOrbitPoint / geometry.radii / the ONE plane angle),
-             so a trace can never disagree with the planet that rides it. -->
+             so a trace can never disagree with the body that rides it. -->
         @if (traces().length > 0) {
           <svg class="v3d-orbit-traces" aria-hidden="true">
             @for (trace of traces(); track trace.index) {
-              <path [attr.d]="trace.d"
+              <!-- Same sampled curve rendered twice: a faint continuous base
+                   line plus a brighter travelling segment (stylized flow). -->
+              <path class="v3d-orbit-base"
+                    [attr.d]="trace.d"
                     fill="none"
-                    stroke="rgba(148, 163, 184, 0.35)"
+                    stroke-width="1.5"
+                    vector-effect="non-scaling-stroke" />
+              <path class="v3d-orbit-flow"
+                    [attr.d]="trace.d"
+                    fill="none"
                     stroke-width="1.5"
                     vector-effect="non-scaling-stroke" />
             }
           </svg>
         }
 
-        <!-- Soft halo shield keeps the sun visually dominant. -->
+        <!-- Cool aura keeps the impeller visually dominant. -->
         <div class="v3d-sun-halo" aria-hidden="true"></div>
 
-        <!-- Central sun - always shows the active value. The @for over a
+        <!-- Central impeller - always shows the active value. The @for over a
              single item keyed by activeIndex() re-creates the content node
              on every change so the swap animation restarts cleanly. -->
         <div class="v3d-sun">
@@ -1070,7 +1146,7 @@ interface PlanetGeometry {
           </div>
         </div>
 
-        <!-- Orbiting planets - exactly six, positioned by the rAF loop.
+        <!-- Orbiting hydraulic components - exactly six, positioned by the rAF loop.
              LAYER 1 = button (orbit position) / LAYER 2 = sphere (self
              rotation) / LAYER 3 = TWO content caps (front + back) with the
              same bound value, so one of them is always facing the viewer. -->

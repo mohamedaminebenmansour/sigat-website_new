@@ -1,3 +1,4 @@
+import { COMPANY_INFO, COMPANY_MAILTO, COMPANY_TEL } from '../../../core/company/company-info';
 import { Component } from '@angular/core';
 import { TranslatePipe } from '@ngx-translate/core';
 
@@ -23,7 +24,7 @@ import { TranslatePipe } from '@ngx-translate/core';
               </svg>
             </div>
             <h3 class="text-lg font-bold text-gray-900 mb-1">{{ 'contact_address' | translate }}</h3>
-            <p class="text-sm text-gray-600 whitespace-pre-line">{{ 'contact_address_value' | translate }}</p>
+            <p class="text-sm text-gray-600 whitespace-pre-line">{{ info.address }}</p>
           </div>
 
           <div class="bg-white rounded-xl p-6 text-center border border-gray-100">
@@ -33,7 +34,7 @@ import { TranslatePipe } from '@ngx-translate/core';
               </svg>
             </div>
             <h3 class="text-lg font-bold text-gray-900 mb-1">{{ 'contact_phone' | translate }}</h3>
-            <a href="tel:+21323456789" class="text-sm text-blue-900 hover:text-orange-500 transition-colors font-medium">{{ 'contact_phone_value' | translate }}</a>
+            <a [attr.href]="tel" class="text-sm text-blue-900 hover:text-orange-500 transition-colors font-medium">{{ info.phone }}</a>
           </div>
 
           <div class="bg-white rounded-xl p-6 text-center border border-gray-100">
@@ -43,7 +44,7 @@ import { TranslatePipe } from '@ngx-translate/core';
               </svg>
             </div>
             <h3 class="text-lg font-bold text-gray-900 mb-1">{{ 'contact_email' | translate }}</h3>
-            <a href="mailto:contact@sigat.com" class="text-sm text-blue-900 hover:text-orange-500 transition-colors font-medium">{{ 'contact_email_value' | translate }}</a>
+            <a [href]="mailto" class="text-sm text-blue-900 hover:text-orange-500 transition-colors font-medium">{{ info.email }}</a>
           </div>
 
           <div class="bg-white rounded-xl p-6 text-center border border-gray-100">
@@ -60,4 +61,7 @@ import { TranslatePipe } from '@ngx-translate/core';
     </section>
   `
 })
-export class ContactInformationComponent {}
+export class ContactInformationComponent {
+  readonly info = COMPANY_INFO;
+  readonly tel = COMPANY_TEL;
+  readonly mailto = COMPANY_MAILTO;}

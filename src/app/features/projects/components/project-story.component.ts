@@ -139,13 +139,15 @@ const pad2 = (n: number): string => String(n).padStart(2, '0');
 
           <!-- ==================== Stacked gallery ==================== -->
           <div class="min-w-0 self-start lg:sticky lg:top-24">
-            @if (gallery().length > 0) {
+            @if (showGallery() && gallery().length > 0) {
               <app-project-gallery
                 [images]="gallery()"
                 [altText]="project().title"
                 [cover]="project().media?.cover || ''"
               />
-
+            } @else {
+              <!-- Optional side content when the page shows its own gallery -->
+              <ng-content select="[storyAside]" />
             }
           </div>
         </div>
@@ -155,6 +157,9 @@ const pad2 = (n: number): string => String(n).padStart(2, '0');
 })
 export class ProjectStoryComponent {
   readonly project = input.required<Project>();
+  /** Show the built-in stacked gallery (default). The project detail page
+   *  turns it off and projects a [storyAside] block instead. */
+  readonly showGallery = input(true);
 
   /**
    * Single source of truth for accordion state: the currently open section

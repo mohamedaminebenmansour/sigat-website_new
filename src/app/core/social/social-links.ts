@@ -1,4 +1,5 @@
 import { SocialLink } from './social.model';
+import { COMPANY_INFO } from '../company/company-info';
 
 /**
  * Single source of truth for social media links.
@@ -13,13 +14,13 @@ import { SocialLink } from './social.model';
 export const SOCIAL_LINKS: SocialLink[] = [
   {
     platform: 'facebook',
-    url: 'https://www.facebook.com/placeholder-sigat',
+    url: COMPANY_INFO.social.facebook,
     labelKey: '',
     icon: 'fa-brands fa-facebook-f'
   },
   {
     platform: 'linkedin',
-    url: 'https://www.linkedin.com/company/placeholder-sigat',
+    url: COMPANY_INFO.social.linkedin,
     labelKey: '',
     icon: 'fa-brands fa-linkedin-in'
   }

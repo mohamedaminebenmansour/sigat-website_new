@@ -1,10 +1,12 @@
 import { Routes } from '@angular/router';
 import { MainLayoutComponent } from './layout/main-layout.component';
+import { hxFlowGate } from './shared/hydro/hx-flow-transition.component';
 
 export const routes: Routes = [
   {
     path: '',
     component: MainLayoutComponent,
+    canActivateChild: [hxFlowGate],
     children: [
       {
         path: '',

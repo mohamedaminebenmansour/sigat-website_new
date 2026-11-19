@@ -1,77 +1,62 @@
-import { Component, signal } from '@angular/core';
-import { RouterLink } from '@angular/router';
+import { Component, computed, inject, signal } from '@angular/core';
 import { TranslatePipe } from '@ngx-translate/core';
 import { MockDataService } from '../../core/services/mock-data.service';
-import { SectionHeaderComponent } from '../../shared/components/section-header.component';
-import { ProjectCardComponent } from '../../shared/components/project-card.component';
 import { ProjectMapComponent } from '../../shared/components/project-map/project-map.component';
 import type { ProjectMapEntry } from '../../shared/components/project-map/project-map.types';
+import { HxRevealDirective } from '../../shared/hydro/hx-reveal.directive';
+import { ProjectsHeroComponent } from './components/projects-hero.component';
+import { ManifoldBranch, ProjectsManifoldComponent } from './components/projects-manifold.component';
+import { SightGlassCardComponent } from './components/sight-glass-card.component';
 
 type Filter = 'all' | 'hydraulic' | 'construction';
 
+/**
+ * PROJECTS — "where the water arrives".
+ * The pipe that runs through the site ends here (outfall hero), fills the
+ * pool, and the water is distributed by a valve manifold (the filter) to
+ * the projects, each seen through a sight glass. The map closes the story.
+ * Hand-off colours: pool #0a3d73 → network section (#0a3d73 → #04294f)
+ * → glass-pipe joint → map (#fff) → footer.
+ */
 @Component({
   selector: 'app-projects',
   standalone: true,
-  imports: [RouterLink, TranslatePipe, SectionHeaderComponent, ProjectCardComponent, ProjectMapComponent],
+  imports: [TranslatePipe, ProjectMapComponent, HxRevealDirective, ProjectsHeroComponent, ProjectsManifoldComponent, SightGlassCardComponent],
   template: `
-    <section class="py-16 md:py-20 bg-gray-50">
-      <div class="container mx-auto px-4">
-        <app-section-header
-          [title]="'projects_title' | translate"
-          [subtitle]="'projects_subtitle' | translate"
-        />
+    <app-projects-hero [count]="projects.length" [regions]="regions" />
 
-        <!-- Filter Bar -->
-        <div class="flex flex-wrap justify-center gap-3 mb-12">
-          @for (filter of filters; track filter.key) {
-            <button
-              (click)="activeFilter.set(filter.key)"
-              class="px-6 py-2.5 rounded-lg font-medium text-sm transition-colors"
-              [class.bg-blue-900]="activeFilter() === filter.key"
-              [class.text-white]="activeFilter() === filter.key"
-              [class.bg-gray-200]="activeFilter() !== filter.key"
-              [class.text-gray-700]="activeFilter() !== filter.key"
-              [class.hover:bg-gray-300]="activeFilter() !== filter.key"
-            >
-              {{ filter.label | translate }}
-            </button>
-          }
-        </div>
+    <section class="pj-net">
+      <div class="hx-container">
+        <header class="hx-head pj-net__head hx-reveal" hxReveal>
+          <p class="hx-eyebrow hx-eyebrow--light">{{ 'pj_net_kicker' | translate }}</p>
+          <h2 class="hx-h2 hx-display">{{ 'pj_net_title' | translate }}</h2>
+          <p class="hx-lead">{{ 'pj_net_sub' | translate }}</p>
+        </header>
 
-        <!-- Projects Grid -->
-        @if (filteredProjects.length > 0) {
-          <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
-            @for (project of filteredProjects; track project.id) {
-              <app-project-card
-                [title]="project.title"
-                [description]="project.description"
-                [location]="project.location"
-                [year]="project.year"
-                [category]="project.category"
-                [imageUrl]="project.media?.cover ?? project.imageUrl"
-                [routerLink]="'/projects/' + project.id"
-              />
+        <app-projects-manifold [branches]="branches()" [active]="active()" (pick)="active.set($any($event))" />
+
+        @if (visible().length) {
+          <div class="pj-grid">
+            @for (p of visible(); track p.id; let i = $index) {
+              <app-sight-glass-card [style.--i]="i"
+                [title]="p.title" [location]="p.location" [year]="p.year"
+                [categoryKey]="'projects_filter_' + p.category"
+                [image]="p.media?.cover ?? p.imageUrl" [link]="'/projects/' + p.id" />
             }
           </div>
         } @else {
-          <p class="text-center text-gray-500 py-12">{{ 'projects_empty' | translate }}</p>
+          <p class="pj-empty">{{ 'projects_empty' | translate }}</p>
         }
       </div>
     </section>
 
-    <!-- Project map (Mode B: no current project, every marker navigates) -->
-    @if (mapEntries.length > 0) {
-      <section class="py-16 md:py-20 bg-white" aria-labelledby="projects-map-title">
-        <div class="container mx-auto px-4">
-          <p class="text-sm font-semibold uppercase tracking-widest text-orange-500 mb-2 text-center">
-            {{ 'project_map_title' | translate }}
-          </p>
-          <h2
-            id="projects-map-title"
-            class="text-2xl md:text-3xl font-bold text-blue-900 text-center mb-8 md:mb-10"
-          >
-            {{ 'project_map_subtitle' | translate }}
-          </h2>
+    @if (mapEntries.length) {
+      <section class="pj-map" aria-labelledby="projects-map-title">
+        <div class="hx-container">
+          <header class="hx-head hx-reveal" hxReveal>
+            <p class="hx-eyebrow">{{ 'project_map_title' | translate }}</p>
+            <h2 id="projects-map-title" class="hx-h2 hx-display">{{ 'project_map_subtitle' | translate }}</h2>
+          </header>
           <app-project-map [projects]="mapEntries" />
         </div>
       </section>
@@ -79,28 +64,20 @@ type Filter = 'all' | 'hydraulic' | 'construction';
   `
 })
 export class ProjectsComponent {
-  readonly activeFilter = signal<Filter>('all');
-  readonly filters: { key: Filter; label: string }[] = [
-    { key: 'all', label: 'projects_filter_all' },
-    { key: 'hydraulic', label: 'projects_filter_hydraulic' },
-    { key: 'construction', label: 'projects_filter_construction' }
-  ];
+  private readonly data = inject(MockDataService);
+  /** Real worksites only (the head office is on the map, not in the list). */
+  readonly projects = this.data.getProjects().filter(p => !p.isOffice);
+  readonly mapEntries: ProjectMapEntry[] = this.data.getProjectMapEntries();
+  readonly regions = new Set(this.projects.map(p => p.location.split(',')[0].trim())).size;
 
-  private allProjects;
-
-  /** Map entries derived from the same data source (no duplicated data). */
-  readonly mapEntries: ProjectMapEntry[];
-
-  constructor(private mockData: MockDataService) {
-    this.allProjects = this.mockData.getProjects();
-    this.mapEntries = this.mockData.getProjectMapEntries();
-  }
-
-  get filteredProjects() {
-    const currentFilter = this.activeFilter();
-    if (currentFilter === 'all') {
-      return this.allProjects;
-    }
-    return this.allProjects.filter(p => p.category === currentFilter);
-  }
+  readonly active = signal<Filter>('all');
+  readonly branches = computed<ManifoldBranch[]>(() => [
+    { key: 'all', labelKey: 'projects_filter_all', count: this.projects.length },
+    { key: 'hydraulic', labelKey: 'projects_filter_hydraulic', count: this.projects.filter(p => p.category === 'hydraulic').length },
+    { key: 'construction', labelKey: 'projects_filter_construction', count: this.projects.filter(p => p.category === 'construction').length }
+  ]);
+  readonly visible = computed(() => {
+    const f = this.active();
+    return f === 'all' ? this.projects : this.projects.filter(p => p.category === f);
+  });
 }

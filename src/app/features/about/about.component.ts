@@ -4,7 +4,7 @@ import { TranslatePipe } from '@ngx-translate/core';
 import { StatCounterComponent } from '../../shared/components/stat-counter.component';
 import { CompanyStoryComponent } from './components/company-story.component';
 import { MissionVisionComponent } from './components/mission-vision.component';
-import { ValuesComponent } from './components/values.component';
+import { ValuesPumpComponent } from './components/values-pump.component';
 import { LeadershipComponent } from './components/leadership.component';
 import { GeographicPresenceComponent } from './components/geographic-presence.component';
 
@@ -17,7 +17,7 @@ import { GeographicPresenceComponent } from './components/geographic-presence.co
     StatCounterComponent,
     CompanyStoryComponent,
     MissionVisionComponent,
-    ValuesComponent,
+    ValuesPumpComponent,
     LeadershipComponent,
     GeographicPresenceComponent
   ],
@@ -48,8 +48,8 @@ import { GeographicPresenceComponent } from './components/geographic-presence.co
     <!-- Mission & Vision -->
     <app-mission-vision />
 
-    <!-- Core Values -->
-    <app-values />
+    <!-- Core Values — orbiting the pump (replaces the old orbit "solar system") -->
+    <app-values-pump />
 
     <!-- Leadership Team -->
     <app-leadership />

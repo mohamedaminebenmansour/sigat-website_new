@@ -10,7 +10,7 @@ import { NAV_LINKS, SUPPORTED_LANGUAGES } from '../../core/navigation/navigation
   imports: [RouterLink, RouterLinkActive, TranslatePipe],
   template: `
     @if (isOpen()) {
-      <div class="fixed inset-0 z-[100] bg-blue-900 md:hidden">
+      <div class="fixed inset-0 z-[100] bg-blue-900 lg:hidden">
         <!-- Close button -->
         <div class="flex justify-end p-4">
           <button

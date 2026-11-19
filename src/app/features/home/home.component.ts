@@ -1,93 +1,39 @@
-import { Component } from '@angular/core';
-import { RouterLink } from '@angular/router';
-import { TranslatePipe } from '@ngx-translate/core';
-import { MediaShowcaseComponent } from '../media-showcase/components/media-showcase/media-showcase.component';
-import { SectionHeaderComponent } from '../../shared/components/section-header.component';
-import { ProjectCardComponent } from '../../shared/components/project-card.component';
-import { CtaBannerComponent } from '../../shared/components/cta-banner.component';
-import { CompanyStoryComponent } from '../about/components/company-story.component';
-import { ValuesComponent } from '../about/components/values.component';
-import { Values3dComponent } from "../about/components/values-3d.component";
-import { WaterStatsBandComponent } from '../../shared/components/water-stats-band/water-stats-band.component';
+import { Component, signal } from '@angular/core';
+import { HomeHeroComponent } from './sections/home-hero.component';
+import { HomeWaterSceneComponent } from './sections/home-water-scene.component';
+import { WavePipeComponent } from '../../shared/hydraulics/wave-pipe.component';
+import { ValuesPumpComponent } from '../about/components/values-pump.component';
+import { HomeProjectsComponent } from './sections/home-projects.component';
+import { HomeTapComponent } from './sections/home-tap.component';
 
+/**
+ * HOME — where SIGAT's water comes from, as a real installation:
+ *
+ *   hero          — the water rises over the site video
+ *   water scene   — the official logo is a living reservoir (variable level,
+ *                   pump refill); its drops deliver the figures (buoys);
+ *                   the 3D crystal SIGAT letters rise from the waves; the
+ *                   story is written on the water
+ *   valeurs       — wet well -> centrifugal pump (values in its free vortex)
+ *                   -> rising main straight up into the logo's J
+ *   realisations, robinet (call to action)
+ *
+ * The riser x is reported by the water scene (tailX), so the pump section
+ * always lines up with the logo's J whatever the screen size.
+ */
 @Component({
   selector: 'app-home',
   standalone: true,
-  imports: [
-    RouterLink,
-    TranslatePipe,
-    MediaShowcaseComponent,
-    SectionHeaderComponent,
-    ProjectCardComponent,
-    CtaBannerComponent,
-    CompanyStoryComponent,
-    ValuesComponent,
-    Values3dComponent,
-    WaterStatsBandComponent
-],
+  imports: [HomeHeroComponent, HomeWaterSceneComponent, WavePipeComponent, ValuesPumpComponent, HomeProjectsComponent, HomeTapComponent],
   template: `
-    <!-- ==================== MEDIA SHOWCASE / HERO ==================== -->
-    <app-media-showcase />
-
-    <!-- ==================== WATER STATS BAND (organic wave + stats) ====================
-         Overlaps the bottom of the hero video and carries the company
-         statistics inside the transition (reuses COMPANY_STATS — no
-         duplicated data). Sits between hero and company story. -->
-    <app-water-stats-band variant="hero" />
-
-    <!-- ==================== COMPANY STORY ==================== -->
-    <app-company-story />
-
-    <!-- ==================== CORE VALUES ==================== -->
-    <app-values />
-    <app-values-3d/>
-
-    <!-- ==================== FEATURED PROJECTS ==================== -->
-    <section class="py-16 md:py-20 bg-white">
-      <div class="container mx-auto px-4">
-        <app-section-header
-          [title]="'home_projects_title' | translate"
-          [subtitle]="'home_projects_subtitle' | translate"
-        />
-        <div class="grid grid-cols-1 md:grid-cols-3 gap-8">
-          <app-project-card
-            [title]="'home_project_1_title' | translate"
-            [location]="'home_project_1_location' | translate"
-            year="2023"
-            category="Hydraulic"
-            [imageUrl]="'https://images.unsplash.com/photo-1541888946425-d81bb50b2e0b?w=800&q=80'"
-            routerLink="/projects/1"
-          />
-          <app-project-card
-            [title]="'home_project_2_title' | translate"
-            [location]="'home_project_2_location' | translate"
-            year="2022"
-            category="Pipeline"
-            [imageUrl]="'https://images.unsplash.com/photo-1581092160562-40aa08e78837?w=800&q=80'"
-            routerLink="/projects/2"
-          />
-          <app-project-card
-            [title]="'home_project_3_title' | translate"
-            [location]="'home_project_3_location' | translate"
-            year="2024"
-            category="Infrastructure"
-            [imageUrl]="'https://images.unsplash.com/photo-1581092795360-fd1ca04f0952?w=800&q=80'"
-            routerLink="/projects/4"
-          />
-        </div>
-      </div>
-    </section>
-
-    <!-- ==================== CTA BANNER ====================
-         BUSINESS CTA ("Démarrer un projet") → /contact.
-         The footer owns "Devenir Partenaire" → /partnerships, so the two
-         conversion messages don't compete with identical text. -->
-    <app-cta-banner
-      [title]="'contact_cta_title' | translate"
-      [description]="'contact_cta_subtitle' | translate"
-      [buttonText]="'contact_cta_btn' | translate"
-      buttonRoute="/contact"
-    />
+    <app-home-hero />
+    <app-wave-pipe class="hx-joint" [height]="110" [amplitude]="30" [phase]="0.6" fillAbove="#04294f" fillBelow="#86d0f7" />
+    <app-home-water-scene (tailX)="riserX.set($event)" />
+    <app-values-pump [riserX]="riserX()" [source]="true" sectionId="values-home" />
+    <app-home-projects />
+    <app-home-tap />
   `
 })
-export class HomeComponent {}
+export class HomeComponent {
+  readonly riserX = signal(0.3);
+}
