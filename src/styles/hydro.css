@@ -94,6 +94,8 @@
 }
 .hx-ch--light { background-color: var(--hx-foam); color: var(--hx-ink); }
 .hx-ch--white { background: #fff; color: var(--hx-ink); }
+/* home: the water arrives — the section keeps a trace of the well's blue, fading to white */
+.hx-ch--arrive { background: linear-gradient(180deg, #d6edfb 0, #f2f9fe 220px, #fff 420px); }
 .hx-blueprint {
   background-image:
     linear-gradient(rgba(21, 101, 192, .06) 1px, transparent 1px),
@@ -256,19 +258,14 @@
   background: radial-gradient(ellipse at 20% 10%, rgba(79, 179, 255, .18), transparent 55%), linear-gradient(180deg, #06243f 0%, #0a3a6b 100%);
 }
 .hx-tap__cv { position: absolute; inset: 0; width: 100%; height: 100%; touch-action: pan-y; }
-.hx-tap__faucet { position: absolute; top: 12%; inset-inline-start: max(1rem, calc((100vw - 1200px) / 2 + 2rem)); width: clamp(150px, 19vw, 240px); z-index: 1; filter: drop-shadow(0 18px 24px rgba(0, 0, 0, .35)); }
-[dir='rtl'] .hx-tap__faucet svg { transform: scaleX(-1); }
-.hx-tap__faucet svg { display: block; width: 100%; height: auto; }
-.hx-tap__handle { transform-box: view-box; transform-origin: 101px 24px; transform: rotate(calc(var(--flow, 0) * -75deg)); }
 .hx-tap__copy {
   position: relative; z-index: 2; align-self: center; justify-self: end; width: min(560px, 100% - 2rem);
   margin-inline-end: max(1rem, calc((100vw - 1200px) / 2)); padding: 6rem 0 26%;
 }
 @media (max-width: 1023px) {
   .hx-tap { min-height: 0; }
-  .hx-tap__copy { justify-self: center; align-self: start; margin-inline-end: 0; padding: 6rem 0 calc(20% + 320px); }
-  /* faucet sits below the copy so the stream never crosses the text */
-  .hx-tap__faucet { top: auto; bottom: calc(20% + 120px); width: 150px; }
+  /* the installation (gauge, valve, outlet) sits under the copy, above the pool */
+  .hx-tap__copy { justify-self: center; align-self: start; margin-inline-end: 0; padding: 6rem 0 440px; }
 }
 
 /* =====================================================================

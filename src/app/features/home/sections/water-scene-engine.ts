@@ -30,10 +30,10 @@
  * sprites, underwater light at half resolution.
  */
 import { WaveSurface, clamp, rand } from '../../../shared/hydro/hydro-physics';
-import { Path, Seg, buildPath, drawGlassPipe } from '../../../shared/hydraulics/hydraulics-core';
+import { Path, Seg, buildPath, drawGlassPipe, tracePath } from '../../../shared/hydraulics/hydraulics-core';
 
 const G = 1650;                // px/s²
-const WAVE_C = 300;            // travelling-wave speed along the surface (px/s)
+const WAVE_C = 480;            // travelling-wave speed along the surface (px/s)
 
 const LG = {
   crop: { x: 40, w: 1055, h: 1440 }, img: 0.8,
@@ -45,8 +45,31 @@ const LG = {
 const J_LINE: [number, number][] = [[505, 1395], [600, 1325], [690, 1215], [760, 1050], [775, 900], [765, 750], [745, 600], [720, 480], [690, 330], [640, 250], [580, 232], [520, 252], [480, 300], [462, 350]];
 const LEFT_LINE: [number, number][] = [[463, 1120], [440, 980], [415, 800], [400, 650], [395, 560]];
 const MID_LINE: [number, number][] = [[575, 1120], [575, 700]];
+/** the drain (vidange) leg, from its mouth inside the reservoir down to the outlet */
+const LEG_LINE: [number, number][] = [[395, 560], [400, 650], [415, 800], [440, 980], [463, 1120], [463, 1136]];
+const TUBE_R = 48.75;                      // glass tube outer radius (logo units)
+const RING_IN = { cx: 566.25, cy: 362.5, rx: 417.5, ry: 265 };   // inner edge of the ring = the reservoir
+const VALVE_Y = 905;                       // drain valve on the left leg (logo units)
+/** Chaikin smoothing — identical to the one used to shade the glass tubes of logo-glass.webp */
+function chaikin(l: [number, number][], it = 3): [number, number][] {
+  for (let k = 0; k < it; k++) {
+    const o: [number, number][] = [l[0]];
+    for (let i = 0; i < l.length - 1; i++) {
+      const [ax, ay] = l[i], [bx, by] = l[i + 1];
+      o.push([ax * 0.75 + bx * 0.25, ay * 0.75 + by * 0.25], [ax * 0.25 + bx * 0.75, ay * 0.25 + by * 0.75]);
+    }
+    o.push(l[l.length - 1]); l = o;
+  }
+  return l;
+}
 
 export interface SceneFigure { value: string; label: string; }
+
+/** The owner's crystal SIGAT artwork, one transparent sprite per letter (w/h at 420 px high). */
+const LETTER_ART = ['S', 'I', 'G', 'A', 'T'].map(ch => `assets/media/home/letters/sigat-${ch}.webp`);
+const LETTER_ASPECT = [323 / 420, 143 / 420, 359 / 420, 385 / 420, 346 / 420];
+/** gap after each letter, in letter heights (A–T kerned: the T bar overhangs the A foot) */
+const LETTER_GAP = [0.03, 0.03, 0.03, -0.09, 0];
 
 interface Letter {
   ch: string; x: number; w: number; pad: number;
@@ -82,7 +105,6 @@ export class WaterSceneEngine {
   private ringRip: Ring[] = [];
   private ringBub: P[] = [];
   private jet: P[] = [];
-  private tracers: { s: number; o: number; r: number }[] = [];
   private buoys: Buoy[] = [];
   private figures: SceneFigure[] = [];
   // cycle
@@ -91,27 +113,46 @@ export class WaterSceneEngine {
   private level = 0;                // the ring starts EMPTY
   private dropsDone = 0;
   private firstCycle = true;
-  private drop: { phase: 'grow' | 'fall'; t: number; y: number; vy: number; r: number; i: number } | null = null;
-  private dropWait = 0.6;
+  /** the pendant drop growing at the left leg (one at a time) and the ones already falling */
+  private pendant: { t: number; T: number; r: number; R: number; i: number } | null = null;
+  private fallingFig: { y: number; vy: number; r: number; i: number }[] = [];
+  private dripWait = 0;
+  private pumpState = false;
   // pointer
   private drag: { x: number; y: number; t: number } | null = null;
   private wakeClock = 0;
   // assets
-  private logo = new Image(); private tubes?: HTMLCanvasElement;
+  private logo = new Image();
   private caustA: HTMLCanvasElement; private caustB: HTMLCanvasElement;
   private jPath?: Path;
+  private legPath?: Path;
+  // riser (J): water front as a fraction of its length, front speed
+  private jFill = 0; private jV = 0; private jPh = 0;
+  // drain leg: column above the valve (fraction, filled from the valve up), valve opening,
+  // and the column below the valve between tail legT and front legF (arclengths)
+  private sValve = 0; private legUpper = 0; private valve = 0; private releasing = false;
+  private legT = 0; private legF = 0; private legV = 0; private legTV = 0; private legPh = 0;
+  private ringPh = 0;
+  private art: HTMLImageElement[] = [];
+  private artReady = false;
   private skyC = document.createElement('canvas');
   private fxC = document.createElement('canvas');
 
   onTail?: (fraction: number) => void;
+  /** the pump below runs while the ring is being filled */
+  onPump?: (on: boolean) => void;
 
   constructor(private canvas: HTMLCanvasElement, private section: HTMLElement, private story: HTMLElement, private reduced: boolean) {
     this.ctx = canvas.getContext('2d')!;
-    this.logo.src = 'assets/brand/logo-live.webp';
-    this.logo.onload = () => { this.tubes = this.buildTubes(); };
+    this.logo.src = 'assets/brand/logo-glass.webp';   // the official artwork as EMPTY glass — all water is live
+    let loaded = 0;
+    this.art = LETTER_ART.map(src => {
+      const im = new Image(); im.decoding = 'async'; im.src = src;
+      im.onload = () => { if (++loaded === LETTER_ART.length) { this.artReady = true; if (this.W > 1) this.layout(this.W, this.vh); } };
+      return im;
+    });
     this.caustA = this.causticTile(7); this.caustB = this.causticTile(23);
-    for (let i = 0; i < 36; i++) this.tracers.push({ s: Math.random(), o: rand(-0.55, 0.55), r: rand(0.8, 2) });
-    if (reduced) { this.level = 0.6; this.phase = 'hold'; this.firstCycle = false; }
+    if (reduced) { this.level = 0.6; this.phase = 'hold'; this.firstCycle = false; this.legUpper = 1; }
   }
 
   setFigures(f: SceneFigure[]) {
@@ -126,15 +167,12 @@ export class WaterSceneEngine {
     this.margin = clamp(W * 0.05, 16, 90);
     const m = this.margin, gap = narrow ? 10 : clamp(W * 0.03, 20, 60);
     const ringSpan = LG.surf - LG.ringBottom;
-    const font = (f: number) => `900 ${f}px "Arial Rounded MT Bold", "Varela Round", "Nunito", Arial, sans-serif`;
-    const meas = document.createElement('canvas').getContext('2d')!;
-    meas.font = font(100);
-    const wordW100 = meas.measureText('SIGAT').width + 100 * 0.08 * 4;
-    const capRatio = 0.72, kMax = 1.7;
+    const wordAspect = LETTER_ASPECT.reduce((a, b) => a + b, 0) + LETTER_GAP.reduce((a, b) => a + b, 0);   // word width / height
+    const kMax = 1.3;                                  // the bubbly glass tolerates a slight vertical stretch
     let s: number;
-    if (narrow) s = (W * 0.42) / LG.crop.w;
+    if (narrow) s = (W * 0.38) / LG.crop.w;           // phones: the logo-reservoir stays the hero, the word beside it
     else {
-      const perS = LG.crop.w + (ringSpan / (capRatio * kMax)) * (wordW100 / 100);
+      const perS = LG.crop.w + (ringSpan / kMax) * wordAspect;
       s = Math.min((W - 2 * m - gap) / perS, (vh * 0.86) / LG.crop.h, 0.62);
     }
     this.s = s;
@@ -142,14 +180,13 @@ export class WaterSceneEngine {
     this.ly = top; this.lx = m - LG.crop.x * s;
     this.surfY = top + LG.surf * s;
     const avail = W - m - (m + LG.crop.w * s + gap);
-    let fs = avail / (wordW100 / 100);
-    const cap = ringSpan * s;
-    let k = cap / (capRatio * fs);
-    if (k < 1) { fs = cap / capRatio; k = 1; }
-    if (k > kMax) k = kMax;
-    this.fs = fs; this.k = k; this.capH = capRatio * fs * k;
-    this.lettersX0 = m + LG.crop.w * s + gap + (avail - fs * wordW100 / 100) / 2;
-    this.buildLetters(font(fs));
+    // letter height = ring bottom → water line (their top sits at the "empty" level)
+    let H = ringSpan * s;
+    let k = clamp((H * wordAspect) / avail, 1, kMax);
+    if ((H * wordAspect) / k > avail) H = (avail * kMax) / wordAspect;
+    this.k = k; this.capH = H; this.fs = H / 0.72;
+    this.lettersX0 = m + LG.crop.w * s + gap + (avail - (H * wordAspect) / k) / 2;
+    this.buildLetters();
     this.storyTop = this.surfY + Math.max(this.capH * 0.75, 110);
     const storyH = this.story.offsetHeight || 360;
     this.Hs = Math.round(this.storyTop + storyH + clamp(vh * 0.18, 110, 200));
@@ -172,7 +209,11 @@ export class WaterSceneEngine {
     const [tx, ty] = this.M(LG.tail.x, LG.tail.y);
     this.mainR = clamp(36 * s, 6, 16);
     this.main = narrow ? undefined : buildPath(tx, ty, [['L', tx, this.Hs + 30] as Seg]);
-    this.jPath = buildPath(...this.M(J_LINE[0][0], J_LINE[0][1]), J_LINE.slice(1).map(p => ['L', ...this.M(p[0], p[1])] as Seg));
+    const mk = (l: [number, number][]) => { const c = chaikin(l); return buildPath(...this.M(c[0][0], c[0][1]), c.slice(1).map(p => ['L', ...this.M(p[0], p[1])] as Seg), 1.5); };
+    this.jPath = mk(J_LINE);
+    this.legPath = mk(LEG_LINE);
+    this.sValve = this.legPath.sAtY(this.M(0, VALVE_Y)[1]);
+    if (this.legT === 0 && this.legF === 0) { this.legT = this.legF = this.sValve; }
     this.onTail?.(tx / W);
   }
 
@@ -190,78 +231,36 @@ export class WaterSceneEngine {
   };
 
   /* ================================================================ sprites */
-  private buildLetters(font: string) {
-    const word = 'SIGAT';
-    const meas = document.createElement('canvas').getContext('2d')!;
-    meas.font = font;
+  private buildLetters() {
+    if (!this.artReady) return;
     const old = this.letters;
     this.letters = [];
+    const H = this.capH, k = this.k;
     let x = this.lettersX0;
-    for (let i = 0; i < word.length; i++) {
-      const ch = word[i];
-      const w = meas.measureText(ch).width;
-      const pad = Math.ceil(this.fs * 0.12);
-      const cw = Math.ceil(w + pad * 2), chh = Math.ceil(this.fs * this.k * 0.78 + pad * 2);
+    LETTER_ASPECT.forEach((asp, i) => {
+      const w = (H * asp) / k;
+      const pad = Math.ceil(H * 0.05);
+      const cw = Math.ceil(w + pad * 2), chh = Math.ceil(H + pad * 2);
       const mk = () => { const c = document.createElement('canvas'); c.width = cw; c.height = chh; return c; };
-      const glyph = (g: CanvasRenderingContext2D, ox = 0, oy = 0, stroke = false) => {
-        g.save(); g.translate(pad + ox, chh - pad + oy); g.scale(1, this.k); g.font = font; g.textBaseline = 'alphabetic';
-        stroke ? g.strokeText(ch, 0, 0) : g.fillText(ch, 0, 0); g.restore();
-      };
-      const mask = mk(); const mg = mask.getContext('2d')!; mg.fillStyle = '#000'; glyph(mg);
-      // extrusion colour (deep glass)
-      const depth = mk(); const dg = depth.getContext('2d')!; dg.drawImage(mask, 0, 0);
-      dg.globalCompositeOperation = 'source-in';
-      const dgr = dg.createLinearGradient(0, 0, 0, chh); dgr.addColorStop(0, 'rgba(60,140,225,0.7)'); dgr.addColorStop(1, 'rgba(12,60,150,0.85)');
-      dg.fillStyle = dgr; dg.fillRect(0, 0, cw, chh);
-      // crystal body
+      const mask = mk(); mask.getContext('2d')!.drawImage(this.art[i], pad, pad, w, H);
+      // sprite = the artwork, harmonised with the site's water blues
       const sprite = mk(); const g = sprite.getContext('2d')!;
-      g.save(); g.shadowColor = 'rgba(255,255,255,0.85)'; g.shadowBlur = this.fs * 0.05;
-      const lg = g.createLinearGradient(0, pad, 0, chh - pad);
-      lg.addColorStop(0, 'rgba(252,255,255,0.95)'); lg.addColorStop(0.5, 'rgba(205,238,253,0.65)'); lg.addColorStop(1, 'rgba(150,212,250,0.72)');
-      g.fillStyle = lg; glyph(g); g.restore();
+      g.save(); g.shadowColor = 'rgba(255,255,255,0.7)'; g.shadowBlur = H * 0.04;
+      g.drawImage(this.art[i], pad, pad, w, H); g.restore();
       g.globalCompositeOperation = 'source-atop';
-      // bevel: light from the top-left, inner shadow bottom-right
-      g.lineJoin = 'round'; g.lineWidth = Math.max(2, this.fs * 0.05);
-      g.strokeStyle = 'rgba(255,255,255,0.9)'; glyph(g, -this.fs * 0.018, -this.fs * 0.018, true);
-      g.strokeStyle = 'rgba(25,95,200,0.45)'; glyph(g, this.fs * 0.022, this.fs * 0.022, true);
-      let seed = ch.charCodeAt(0) * 97 + 13;
-      const rnd = () => ((seed = (seed * 16807) % 2147483647) / 2147483647);
-      for (let b = 0; b < 24; b++) {
-        const bx = rnd() * cw, by = rnd() * chh * 0.55, r = this.fs * (0.008 + rnd() * 0.022);
-        const rg = g.createRadialGradient(bx - r * 0.3, by - r * 0.3, r * 0.1, bx, by, r);
-        rg.addColorStop(0, 'rgba(255,255,255,0.95)'); rg.addColorStop(0.65, 'rgba(210,240,255,0.4)'); rg.addColorStop(1, 'rgba(60,140,225,0.55)');
-        g.fillStyle = rg; g.beginPath(); g.arc(bx, by, r, 0, 7); g.fill();
-      }
-      const hg = g.createLinearGradient(0, 0, cw * 0.7, chh);
-      hg.addColorStop(0, 'rgba(255,255,255,0.7)'); hg.addColorStop(0.25, 'rgba(255,255,255,0)');
-      g.fillStyle = hg; g.fillRect(0, 0, cw, chh);
+      g.fillStyle = 'rgba(40,140,230,0.10)'; g.fillRect(0, 0, cw, chh);
       g.globalCompositeOperation = 'source-over';
-      g.lineWidth = Math.max(1.5, this.fs * 0.02); g.strokeStyle = 'rgba(255,255,255,0.95)'; glyph(g, 0, 0, true);
-      g.lineWidth = Math.max(1, this.fs * 0.007); g.strokeStyle = 'rgba(20,85,190,0.6)'; glyph(g, 0, 0, true);
       const prev = old[i];
       this.letters.push({
-        ch, x, w, pad, sprite, mask, depth, water: mk(),
+        ch: 'SIGAT'[i], x, w, pad, sprite, mask, depth: mask, water: mk(),
         shown: prev?.shown ?? this.reduced, risen: prev?.risen ?? (this.reduced ? -100 : -1),
         y: prev?.y ?? 0, vy: prev?.vy ?? 0, th: prev?.th ?? 0, om: prev?.om ?? 0,
-        bub: Array.from({ length: 8 }, () => ({ x: rand(0.15, 0.85), y: rand(0.5, 1), r: rand(0.006, 0.016), v: rand(0.08, 0.2) }))
+        bub: Array.from({ length: 7 }, () => ({ x: rand(0.2, 0.8), y: rand(0.5, 1), r: rand(0.005, 0.012), v: rand(0.08, 0.2) }))
       });
-      x += w + this.fs * 0.08;
-    }
+      x += w + (H * LETTER_GAP[i]) / k;
+    });
   }
 
-  private buildTubes(): HTMLCanvasElement {
-    const im = this.logo, c = document.createElement('canvas');
-    c.width = im.naturalWidth; c.height = im.naturalHeight;
-    const g = c.getContext('2d')!;
-    const P = (x: number, y: number) => [(x - LG.crop.x) * LG.img, y * LG.img] as const;
-    g.lineCap = 'round'; g.lineJoin = 'round'; g.strokeStyle = '#000'; g.lineWidth = 36 * 2.3 * LG.img;
-    for (const line of [J_LINE, LEFT_LINE, MID_LINE]) {
-      g.beginPath(); line.forEach(([x, y], i) => { const [px, py] = P(x, y); i ? g.lineTo(px, py) : g.moveTo(px, py); }); g.stroke();
-    }
-    g.globalCompositeOperation = 'source-in';
-    g.drawImage(im, 0, 0);
-    return c;
-  }
 
   private causticTile(seed: number): HTMLCanvasElement {
     const S = 256, c = document.createElement('canvas'); c.width = c.height = S;
@@ -407,6 +406,13 @@ export class WaterSceneEngine {
       b.vy += ((target - b.y) * kS - b.vy * 4) * dt; b.y += b.vy * dt;
       b.x += (this.slotX(b.i) - b.x) * Math.min(1, dt * 0.8);
     }
+    // floats in contact push each other apart (keeps the labels readable while one drifts past)
+    const minD = Rb * (this.W < 768 ? 2.2 : 4.6);
+    const live = this.buoys.filter(b => b.sink < 0);
+    for (let a = 0; a < live.length; a++) for (let c = a + 1; c < live.length; c++) {
+      const A = live[a], B = live[c], d = B.x - A.x, o = minD - Math.abs(d);
+      if (o > 0) { const p = Math.sign(d || 1) * o * Math.min(1, dt * 6) * 0.5; A.x -= p; B.x += p; }
+    }
     this.buoys = this.buoys.filter(b => b.sink < 0 || this.t - b.sink < 3.5);
 
     for (const p of this.parts) { p.vy += G * 0.7 * dt; p.x += p.vx * dt; p.y += p.vy * dt; if (p.vy > 0 && p.y > this.surfaceAt(p.x) + 2) p.life = 0; }
@@ -416,74 +422,112 @@ export class WaterSceneEngine {
   }
 
   /** FILL → DROPS → HOLD → SINK → FILL … */
+  /**
+   * RUN  — the pump fills the ring (it stops at the HIGH switch); once the ring is
+   *        half full the left leg starts dripping: each pendant drop grows for a
+   *        slightly different time (Tate), detaches, falls, and the next one starts
+   *        forming right away — drops overlap in flight, nothing is in lockstep.
+   * HOLD — the five figures float.   SINK — they go under one by one → RUN.
+   */
   private cycle(dt: number) {
     const n = Math.min(5, this.figures.length);
-    switch (this.phase) {
-      case 'fill':
-        if (this.level >= 0.92 && this.phaseT > 0.5) { this.phase = 'drops'; this.phaseT = 0; this.dropsDone = 0; this.dropWait = 0.8; }
-        break;
-      case 'drops': {
-        if (!this.drop && this.dropsDone < n) {
-          this.dropWait -= dt;
-          if (this.dropWait <= 0) this.drop = { phase: 'grow', t: 0, y: 0, vy: 0, r: 2, i: this.dropsDone };
-        }
-        const d = this.drop;
-        if (d) {
-          const [dx, dy] = this.M(LG.drip.x, LG.drip.y);
-          const Rd = clamp(70 * this.s, 12, 30);
-          d.t += dt;
-          if (d.phase === 'grow') {
-            const f = clamp(d.t / 1.3, 0, 1);
-            d.r = Rd * (0.15 + 0.85 * (1 - (1 - f) * (1 - f)));   // pendant drop swells (Tate)
-            d.y = dy + d.r * 1.15;
-            if (f >= 1) { d.phase = 'fall'; d.vy = 30; }
-          } else {
-            d.vy += G * dt; d.y += d.vy * dt;
-            if (d.y + d.r * 0.6 >= this.surfaceAt(dx)) {
-              this.wave.splash(dx, 700, 30);
-              this.rings.push({ x: dx, t: 0, amp: 1 });
-              for (let k = 0; k < 18; k++) { const a = -Math.PI / 2 + rand(-1.1, 1.1), sp = rand(100, 280); this.parts.push({ x: dx, y: this.surfY - 2, vx: Math.cos(a) * sp, vy: Math.sin(a) * sp, r: rand(1, 2.6), life: 1 }); }
-              // the wave that travels to the letters (and reveals letter i on the first cycle)
-              this.packets.push({ x0: dx, t: 0, A: 9, dir: 1, reveal: this.firstCycle ? d.i : -1 });
-              this.packets.push({ x0: dx, t: 0, A: 6, dir: -1, reveal: -1 });
-              this.level = Math.max(0, this.level - 0.92 / n);        // one drop's worth drains the ring
-              const old = this.buoys.find(b => b.i === d.i);
-              if (old) { old.vy -= 160; old.sink = -1; }
-              else this.buoys.push({ i: d.i, x: dx, y: this.surfY, vy: 0, sink: -1 });
-              this.dropsDone++;
-              this.dropWait = 1.0;
-              this.drop = null;
-            }
-          }
-        } else if (this.dropsDone >= n && n) { this.phase = 'hold'; this.phaseT = 0; this.firstCycle = false; }
-        break;
+    if (this.phase === 'fill') {
+      // dripping (only one pendant drop forms at a time at the outlet)
+      // the drain valve opens once the ring is half full; drops can only form once the
+      // column released by the valve has run down to the outlet
+      if (!this.releasing && this.dropsDone < n && (this.level >= 0.5 || (!this.pumpOn && this.level > 0.1))) this.releasing = true;
+      const atOutlet = this.legPath && this.legF >= this.legPath.length - 0.5 && this.legT <= this.sValve + 0.5;
+      if (!this.pendant && this.dropsDone < n && this.releasing && atOutlet && this.valve > 0.8) {
+        this.dripWait -= dt;
+        if (this.dripWait <= 0) this.pendant = { t: 0, T: rand(0.75, 1.15), r: 2, R: this.dropR(this.dropsDone), i: this.dropsDone };
       }
-      case 'hold':
-        if (this.phaseT > 5 && !this.reduced) { this.phase = 'sink'; this.phaseT = 0; }
-        break;
-      case 'sink': {
-        // floats lose buoyancy one after the other
-        this.buoys.forEach((b, i) => { if (b.sink < 0 && this.phaseT > i * 0.45) { b.sink = this.t; b.vy += 40; } });
-        if (this.phaseT > this.buoys.length * 0.45 + 1.2) { this.phase = 'fill'; this.phaseT = 0; }
-        break;
+      if (this.pendant) {
+        const d = this.pendant;
+        d.t += dt;
+        const f = clamp(d.t / d.T, 0, 1);
+        d.r = d.R * (0.15 + 0.85 * (1 - (1 - f) * (1 - f)));
+        if (f >= 1) {                                         // pinch-off
+          const [, dy] = this.M(LG.drip.x, LG.drip.y);
+          this.fallingFig.push({ y: dy + d.r * 0.95, vy: 30, r: d.r, i: d.i });
+          this.level = Math.max(0, this.level - 0.92 / Math.max(1, n));
+          this.dropsDone++;
+          this.pendant = null;
+          this.dripWait = rand(0.05, 0.3);
+        }
+      }
+      if (this.dropsDone >= n) this.releasing = false;                      // last drop gone: shut the valve
+      if (this.dropsDone >= n && n && !this.pendant && !this.fallingFig.length) { this.phase = 'hold'; this.phaseT = 0; this.firstCycle = false; }
+    } else if (this.phase === 'hold') {
+      if (this.phaseT > 5 && !this.reduced) { this.phase = 'sink'; this.phaseT = 0; }
+    } else if (this.phase === 'sink') {
+      this.buoys.forEach((b, i) => { if (b.sink < 0 && this.phaseT > i * 0.4) { b.sink = this.t; b.vy += 40; } });
+      if (this.phaseT > this.buoys.length * 0.4 + 1.2) { this.phase = 'fill'; this.phaseT = 0; this.dropsDone = 0; this.pumpRun = true; }
+    }
+
+    // falling figure drops → impact
+    const [dx] = this.M(LG.drip.x, LG.drip.y);
+    for (const d of this.fallingFig) {
+      d.vy += G * dt; d.y += d.vy * dt;
+      if (d.y + d.r * 0.6 >= this.surfaceAt(dx)) {
+        this.wave.splash(dx, 700, 30);
+        this.rings.push({ x: dx, t: 0, amp: 1 });
+        for (let k = 0; k < 18; k++) { const a = -Math.PI / 2 + rand(-1.1, 1.1), sp = rand(100, 280); this.parts.push({ x: dx, y: this.surfY - 2, vx: Math.cos(a) * sp, vy: Math.sin(a) * sp, r: rand(1, 2.6), life: 1 }); }
+        this.packets.push({ x0: dx, t: 0, A: rand(7.5, 10), dir: 1, reveal: this.firstCycle ? d.i : -1 });
+        this.packets.push({ x0: dx, t: 0, A: 6, dir: -1, reveal: -1 });
+        const old = this.buoys.find(b => b.i === d.i);
+        if (old) { old.vy -= 160; old.sink = -1; }
+        else this.buoys.push({ i: d.i, x: dx, y: this.surfY, vy: 0, sink: -1 });
+        d.r = -1;
       }
     }
+    this.fallingFig = this.fallingFig.filter(d => d.r > 0);
   }
 
   /** pump runs only during FILL; the gooseneck jet + water climbing the J */
+  /** pump: runs from the start of a cycle until the HIGH float switch */
+  /**
+   * PUMP → RISER → RING. The riser starts empty: while the pump runs the water front
+   * climbs the J; only when it reaches the gooseneck does water pour into the ring.
+   * The pump stops at the HIGH switch and the riser drains back (front falls under g).
+   * DRAIN LEG: ring → column above the valve (always full behind a shut valve) →
+   * valve → column below it, which runs down to the outlet and feeds the drops.
+   */
   private reservoir(dt: number) {
-    const pumpOn = this.phase === 'fill' && this.phaseT > 0.4;
-    if (pumpOn) {
-      this.level = Math.min(1, this.level + 0.2 * dt);
+    const s = this.s, Lj = Math.max(1, this.jPath?.length ?? 1), Ll = this.legPath?.length ?? 1;
+    // riser
+    if (this.pumpOn) { this.jV = Math.min(900 * s, this.jV + 2600 * s * dt); this.jFill = Math.min(1, this.jFill + (this.jV * dt) / Lj); }
+    else if (this.jFill > 0) { this.jV = Math.max(-1400 * s, Math.min(0, this.jV) - G * 0.6 * s * dt); this.jFill = Math.max(0, this.jFill + (this.jV * dt) / Lj); }
+    this.jPh += dt * Math.max(0, this.jV) * (this.pumpOn ? 1 : 0);
+    const pouring = this.pumpOn && this.jFill >= 1;
+    if (pouring && this.phase === 'fill') {
+      this.level = Math.min(1, this.level + 0.45 * dt);
+      if (this.level >= 0.92) this.pumpRun = false;
+    }
+    if (this.pumpOn !== this.pumpState) { this.pumpState = this.pumpOn; this.onPump?.(this.pumpOn); }
+    if (pouring) {
       const [sx, sy] = this.M(LG.spout.x, LG.spout.y);
-      for (let q = 0; q < 2; q++) this.jet.push({ x: sx + rand(-1.5, 1.5), y: sy, vx: rand(-6, 6), vy: rand(20, 60), r: rand(0.8, 1.8), life: 1 });
-      for (const tr of this.tracers) { tr.s += (110 * dt) / Math.max(1, this.jPath?.length ?? 1); if (tr.s > 1) tr.s -= 1; }
+      for (let q = 0; q < 2; q++) this.jet.push({ x: sx + rand(-2, 2), y: this.levelY() - 2, vx: rand(-40, 40), vy: -rand(20, 90), r: rand(0.8, 1.8), life: 1 });
+      if (Math.random() < 0.5) this.ringBub.push({ x: sx + rand(-6, 6), y: this.levelY() + rand(6, 26), vx: 0, vy: 0, r: rand(0.8, 2.2), life: 1 });
+      if (Math.random() < 0.15) this.ringRip.push({ x: sx, t: 0, amp: 1 });
+      void sy;
     }
+    // drain leg — the valve is turned by hand-ish speed (~0.35 s)
+    this.valve = clamp(this.valve + (this.releasing ? 1 : -1) * dt / 0.35, 0, 1);
+    if (this.level > 0.004) this.legUpper = Math.min(1, this.legUpper + dt * 1.6);          // ring water runs down to the shut valve
+    else if (this.valve > 0.2) this.legUpper = Math.max(0, this.legUpper - dt * 0.8);       // empty ring + open valve: it drains
+    const g = G * 0.75 * s / 0.4;                                                             // free fall in the pipe (wall friction)
+    if (this.valve > 0.25 && this.legUpper > 0.3) {
+      this.legT = this.sValve; this.legTV = 0;
+      this.legV = Math.min(this.legV + g * dt, 1200 * s); this.legF = Math.min(Ll, this.legF + this.legV * dt);
+    } else if (this.legF > this.legT + 0.5) {
+      this.legTV = Math.min(this.legTV + g * dt, 1400 * s); this.legT = Math.min(this.legF, this.legT + this.legTV * dt);  // the column falls out
+      if (this.legF < Ll) { this.legV = Math.min(this.legV + g * dt, 1200 * s); this.legF = Math.min(Ll, this.legF + this.legV * dt); }
+    } else { this.legT = this.legF = this.sValve; this.legV = this.legTV = 0; }
+    this.legPh += dt * (this.valve > 0.25 ? 1 : 0.2);
+    this.ringPh += dt;
+    // pour splash + ring bubbles + ripples
     const wl = this.levelY();
-    for (const p of this.jet) {
-      p.vy += G * 0.55 * dt; p.x += p.vx * dt; p.y += p.vy * dt;
-      if (p.y >= wl) { p.life = 0; if (Math.random() < 0.2) this.ringRip.push({ x: p.x, t: 0, amp: 1 }); if (Math.random() < 0.4) this.ringBub.push({ x: p.x + rand(-4, 4), y: wl + rand(4, 20), vx: 0, vy: 0, r: rand(0.6, 1.8), life: 1 }); }
-    }
+    for (const p of this.jet) { p.vy += G * 0.55 * dt; p.x += p.vx * dt; p.y += p.vy * dt; if (p.vy > 0 && p.y >= wl) p.life = 0; }
     this.jet = this.jet.filter(p => p.life > 0).slice(-120);
     for (const b of this.ringBub) { b.y -= (12 + b.r * 9) * dt; if (b.y <= wl + 1) b.life = 0; }
     this.ringBub = this.ringBub.filter(b => b.life > 0).slice(-80);
@@ -491,8 +535,22 @@ export class WaterSceneEngine {
     this.ringRip = this.ringRip.filter(r => r.t < 1.2);
   }
 
-  private get pumpOn() { return this.phase === 'fill' && this.phaseT > 0.4; }
+  private pumpRun = true;
+  private get pumpOn() { return this.pumpRun && this.phase === 'fill' && this.phaseT > 0.3; }
   private levelY(): number { return this.M(0, LG.ringBottom - (LG.ringBottom - LG.full) * this.level)[1]; }
+  /** drop font + radius: the drop is sized to carry its figure (number big, unit below) */
+  private dropFont(): number { return this.W < 768 ? 11 : clamp(this.capH * 0.09, 15, 22); }
+  private splitFig(v: string): [string, string] {
+    const m = v.match(/^([\d.,]+)\s*(.*)$/);
+    return m ? [m[1] + (m[2] === '+' ? '+' : ''), m[2] === '+' ? '' : m[2]] : [v, ''];
+  }
+  private dropR(i: number): number {
+    const fz = this.dropFont(), [num] = this.splitFig(this.figures[i]?.value ?? '');
+    this.ctx.font = `800 ${fz}px Sora, system-ui, sans-serif`;
+    const want = Math.max(fz * 1.5, this.ctx.measureText(num).width * 0.62 + fz * 0.45);
+    const gap = this.surfY - this.M(0, LG.drip.y)[1];                 // the pendant must hang clear of the water
+    return clamp(want, 9, Math.max(9, gap * (this.W < 768 ? 0.5 : 0.42)));
+  }
   private buoyR(): number { return clamp(this.fs * 0.14, 16, 28); }
   private slotX(i: number): number {
     const n = Math.max(1, Math.min(5, this.figures.length)), Rb = this.buoyR();
@@ -503,6 +561,8 @@ export class WaterSceneEngine {
     let worst = 0;
     xs.forEach((x, k) => { if (Math.abs(x - drip) < Math.abs(xs[worst] - drip)) worst = k; });
     xs.splice(worst, 1);
+    // every float starts under the drip: the first one travels farthest, so none ever crosses another
+    xs.sort((u, v) => Math.abs(v - drip) - Math.abs(u - drip));
     return xs[i % xs.length];
   }
 
@@ -572,47 +632,147 @@ export class WaterSceneEngine {
     if (!im.complete || !im.naturalWidth) return;
     const s = this.s, [ix, iy] = this.M(LG.crop.x, 0);
     const iw = LG.crop.w * s, ih = LG.crop.h * s;
+    this.drawRingWater(ctx);                                        // the water is INSIDE the glass ring
     ctx.save(); ctx.beginPath(); ctx.rect(ix - 2, iy - 2, iw + 4, this.surfY - iy + 2); ctx.clip();
     ctx.drawImage(im, ix, iy, iw, ih); ctx.restore();
     ctx.save(); ctx.beginPath(); ctx.rect(ix, this.surfY, iw, ih); ctx.clip(); ctx.globalAlpha = 0.5;
     ctx.drawImage(im, ix, iy, iw, ih); ctx.restore();
 
-    // ring reservoir — variable level over the painted water
-    const [icx, icy] = this.M(LG.inner.cx, LG.inner.cy);
-    const irx = LG.inner.rx * s * 0.9, iry = LG.inner.ry * s * 0.86;
-    const wl = this.levelY(), art = this.M(0, LG.art)[1];
-    ctx.save();
-    ctx.beginPath(); ctx.ellipse(icx, icy, irx, iry, 0, 0, Math.PI * 2); ctx.clip();
-    if (wl > art) ctx.drawImage(this.skyC, ix / 2, (art - 10 * s) / 2, iw / 2, (wl - art + 10 * s) / 2, ix, art - 10 * s, iw, wl - art + 10 * s);
-    else { const g = ctx.createLinearGradient(0, wl, 0, art); g.addColorStop(0, 'rgba(120,200,250,0.55)'); g.addColorStop(1, 'rgba(60,160,235,0.6)'); ctx.fillStyle = g; ctx.fillRect(icx - irx, wl, irx * 2, art - wl + 2); }
-    if (this.level > 0.02) {
-      ctx.beginPath();
-      for (let x = icx - irx; x <= icx + irx; x += 4) {
-        const y = wl + Math.sin(x * 0.07 + this.t * 3.1) * 1.3 + Math.sin(x * 0.025 - this.t * 1.7) * 1.4;
-        x === icx - irx ? ctx.moveTo(x, y) : ctx.lineTo(x, y);
-      }
-      ctx.strokeStyle = 'rgba(255,255,255,0.85)'; ctx.lineWidth = 1.6; ctx.stroke();
+    const r = TUBE_R * s * 0.72;                                     // bore radius
+    // riser: water front climbing / draining
+    if (this.jPath && this.jFill > 0) this.tubeWater(ctx, this.jPath, 0, this.jFill * this.jPath.length, r, this.jPh * 1.2, this.jV > 0 && this.pumpOn, this.jFill < 1 ? 1 : 0);
+    // drain leg: above the valve, then the released column below it
+    if (this.legPath) {
+      const lp = this.legPath;
+      if (this.legUpper > 0) this.tubeWater(ctx, lp, this.sValve * (1 - this.legUpper), this.sValve, r, this.legPh * 60 * s, this.valve > 0.25, this.legUpper < 1 ? -1 : 0);
+      if (this.legF > this.legT + 0.5) this.tubeWater(ctx, lp, this.legT, this.legF, r, this.legPh * 60 * s, true, this.legF < lp.length - 0.5 ? 1 : 0);
+      this.drawValve(ctx, lp);
     }
-    for (const r of this.ringRip) {
-      const rad = 3 + r.t * 70 * s / 0.4, a = 0.7 * (1 - r.t / 1.2);
-      ctx.beginPath(); ctx.ellipse(r.x, wl + 1, rad, rad * 0.16, 0, 0, Math.PI * 2);
+    this.drawPour(ctx, r);
+  }
+
+  /** water inside a glass tube between arclengths s0..s1, with foam streaks and a meniscus at the front */
+  private tubeWater(ctx: CanvasRenderingContext2D, p: Path, s0: number, s1: number, r: number, ph: number, flowing: boolean, front: 1 | -1 | 0) {
+    if (s1 - s0 < 0.5) return;
+    ctx.save();
+    ctx.lineCap = 'butt'; ctx.lineJoin = 'round';
+    tracePath(ctx, p, s0, s1, 0);
+    ctx.lineWidth = r * 2; ctx.strokeStyle = 'rgba(22,118,222,0.8)'; ctx.stroke();
+    ctx.lineWidth = r * 1.15; ctx.strokeStyle = 'rgba(80,182,255,0.6)'; ctx.stroke();
+    ctx.lineWidth = Math.max(1, r * 0.32); ctx.strokeStyle = 'rgba(205,240,255,0.45)'; ctx.stroke();
+    if (flowing && r > 2.5) {                                       // turbulent foam streaks advected with the flow
+      for (const [o, dash, a] of [[-0.45, 1.3, 0.55], [0.3, 2.1, 0.4]] as const) {
+        tracePath(ctx, p, s0, s1, o * r);
+        ctx.setLineDash([r * dash, r * 2.4]); ctx.lineDashOffset = -ph * (1 + o * 0.3);
+        ctx.lineWidth = Math.max(1, r * 0.18); ctx.strokeStyle = `rgba(255,255,255,${a})`; ctx.stroke();
+      }
+      ctx.setLineDash([]);
+    }
+    tracePath(ctx, p, s0, s1, -r * 0.62);                           // glass highlight seen over the water
+    ctx.lineWidth = Math.max(1, r * 0.16); ctx.strokeStyle = 'rgba(255,255,255,0.55)'; ctx.stroke();
+    // meniscus across the bore at a free front (none where the water is continuous)
+    if (!front) { ctx.restore(); return; }
+    const a = p.at(front === 1 ? s1 : s0);
+    ctx.translate(a.x, a.y); ctx.rotate(Math.atan2(a.ty, a.tx));
+    ctx.beginPath(); ctx.ellipse(0, 0, r * 0.32, r * 0.98, 0, 0, Math.PI * 2);
+    ctx.fillStyle = 'rgba(200,240,255,0.55)'; ctx.fill();
+    ctx.strokeStyle = 'rgba(255,255,255,0.9)'; ctx.lineWidth = 1.2; ctx.stroke();
+    ctx.restore();
+  }
+
+  /** the reservoir water: free surface with a meniscus, light lines underneath, ripples, bubbles */
+  private drawRingWater(ctx: CanvasRenderingContext2D) {
+    if (this.level <= 0.003) return;
+    const s = this.s, [cx, cy] = this.M(RING_IN.cx, RING_IN.cy);
+    const rx = RING_IN.rx * s, ry = RING_IN.ry * s, wl = this.levelY(), bot = cy + ry;
+    const surf = (x: number) => wl + Math.sin(x * 0.07 + this.t * 3.1) * 1.2 + Math.sin(x * 0.024 - this.t * 1.7) * 1.4
+      + (this.pumpOn && this.jFill >= 1 ? Math.sin((x - this.M(LG.spout.x, 0)[0]) * 0.18 - this.t * 9) * 1.2 * Math.exp(-Math.abs(x - this.M(LG.spout.x, 0)[0]) / (40 * s / 0.4)) : 0);
+    ctx.save();
+    ctx.beginPath(); ctx.ellipse(cx, cy, rx, ry, 0, 0, Math.PI * 2); ctx.clip();
+    ctx.beginPath(); ctx.moveTo(cx - rx, surf(cx - rx));
+    for (let x = cx - rx; x <= cx + rx; x += 4) ctx.lineTo(x, surf(x));
+    ctx.lineTo(cx + rx, bot + 2); ctx.lineTo(cx - rx, bot + 2); ctx.closePath();
+    const g = ctx.createLinearGradient(0, wl, 0, bot);
+    g.addColorStop(0, 'rgba(150,222,255,0.62)'); g.addColorStop(0.25, 'rgba(60,165,240,0.72)'); g.addColorStop(1, 'rgba(14,92,196,0.86)');
+    ctx.fillStyle = g; ctx.fill();
+    ctx.save(); ctx.clip();                                        // light lines ONLY under the surface
+    ctx.globalCompositeOperation = 'lighter';
+    ctx.strokeStyle = 'rgba(255,255,255,0.12)'; ctx.lineWidth = Math.max(1, 2.2 * s / 0.4);
+    for (let k = 0; k < 4; k++) {
+      const y0 = wl + (bot - wl) * (0.18 + k * 0.2);
+      ctx.beginPath();
+      for (let x = cx - rx; x <= cx + rx; x += 8) {
+        const y = y0 + Math.sin(x * 0.045 + this.ringPh * (1.1 + k * 0.3) + k * 2) * 3 + Math.sin(x * 0.11 - this.ringPh * 1.7) * 1.4;
+        x === cx - rx ? ctx.moveTo(x, y) : ctx.lineTo(x, y);
+      }
+      ctx.stroke();
+    }
+    ctx.restore();
+    // surface: bright meniscus line + a soft band beneath it
+    ctx.beginPath();
+    for (let x = cx - rx; x <= cx + rx; x += 4) x === cx - rx ? ctx.moveTo(x, surf(x)) : ctx.lineTo(x, surf(x));
+    ctx.strokeStyle = 'rgba(255,255,255,0.95)'; ctx.lineWidth = 1.8; ctx.stroke();
+    ctx.translate(0, 3); ctx.strokeStyle = 'rgba(255,255,255,0.25)'; ctx.lineWidth = 3; ctx.stroke(); ctx.translate(0, -3);
+    for (const rp of this.ringRip) {
+      const rad = 3 + rp.t * 70 * s / 0.4, a = 0.7 * (1 - rp.t / 1.2);
+      ctx.beginPath(); ctx.ellipse(rp.x, wl + 1, rad, rad * 0.16, 0, 0, Math.PI * 2);
       ctx.strokeStyle = `rgba(255,255,255,${a.toFixed(2)})`; ctx.lineWidth = 1; ctx.stroke();
     }
-    for (const b of this.ringBub) { ctx.beginPath(); ctx.arc(b.x, b.y, b.r, 0, 7); ctx.fillStyle = 'rgba(240,250,255,0.55)'; ctx.fill(); }
+    for (const b of this.ringBub) { ctx.beginPath(); ctx.arc(b.x, b.y, b.r, 0, 7); ctx.fillStyle = 'rgba(240,250,255,0.6)'; ctx.fill(); }
     ctx.restore();
-    if (this.tubes) { ctx.save(); ctx.beginPath(); ctx.rect(ix, iy, iw, this.surfY - iy); ctx.clip(); ctx.drawImage(this.tubes, ix, iy, iw, ih); ctx.restore(); }
-    if (this.pumpOn && this.jPath) {
-      ctx.fillStyle = 'rgba(240,252,255,0.85)';
-      for (const tr of this.tracers) {
-        const a = this.jPath.at(tr.s * this.jPath.length);
-        const o = tr.o * this.mainR * 0.8;
-        const x = a.x + a.nx * o, y = a.y + a.ny * o;
-        if (y > this.surfY) continue;
-        ctx.beginPath(); ctx.arc(x, y, tr.r, 0, 7); ctx.fill();
+  }
+
+  /** the gooseneck pours into the ring: the falling sheet narrows as it accelerates (continuity) */
+  private drawPour(ctx: CanvasRenderingContext2D, r: number) {
+    if (this.pumpOn && this.jFill >= 1) {
+      const [sx, sy] = this.M(LG.spout.x, LG.spout.y), wl = this.levelY();
+      if (wl > sy + 2) {
+        const v0 = 260 * this.s / 0.4, w0 = r * 0.9, n = 14;
+        const half = (i: number) => {
+          const y = sy + ((wl - sy) * i) / n, v = Math.sqrt(v0 * v0 + 2 * G * (y - sy));
+          return { y, w: w0 * Math.sqrt(v0 / v) * (1 + 0.12 * Math.sin(y * 0.3 - this.t * 28) * (i / n)) };
+        };
+        ctx.beginPath();
+        for (let i = 0; i <= n; i++) { const h = half(i); i ? ctx.lineTo(sx - h.w, h.y) : ctx.moveTo(sx - h.w, h.y); }
+        for (let i = n; i >= 0; i--) { const h = half(i); ctx.lineTo(sx + h.w, h.y); }
+        ctx.closePath();
+        const g = ctx.createLinearGradient(sx - w0, 0, sx + w0, 0);
+        g.addColorStop(0, 'rgba(90,180,250,0.75)'); g.addColorStop(0.45, 'rgba(235,250,255,0.95)'); g.addColorStop(1, 'rgba(60,150,235,0.8)');
+        ctx.fillStyle = g; ctx.fill();
       }
     }
     ctx.fillStyle = 'rgba(230,248,255,0.95)';
     for (const p of this.jet) { ctx.beginPath(); ctx.arc(p.x, p.y, p.r, 0, 7); ctx.fill(); }
+  }
+
+  /** quarter-turn ball valve on the drain leg: flanged body across the tube, stem outward, orange lever
+   *  (along the pipe = open, across = shut, foreshortened as it turns) */
+  private drawValve(ctx: CanvasRenderingContext2D, p: Path) {
+    const a = p.at(this.sValve), R = Math.max(5, TUBE_R * this.s);
+    ctx.save();
+    ctx.translate(a.x, a.y); ctx.rotate(Math.atan2(a.ty, a.tx));   // x' along the tube (downward), y' = −normal… (left of the flow)
+    const bw = R * 1.5, bh = R * 2.7;
+    ctx.fillStyle = '#8fa4b8';
+    for (const fx of [-bw * 0.62, bw * 0.62]) ctx.fillRect(fx - R * 0.16, -bh * 0.56, R * 0.32, bh * 1.12);   // flanges
+    const gr = ctx.createLinearGradient(0, -bh / 2, 0, bh / 2);
+    gr.addColorStop(0, '#5d9be0'); gr.addColorStop(0.4, '#2a6fc4'); gr.addColorStop(1, '#123f7a');
+    ctx.fillStyle = gr; ctx.beginPath(); ctx.roundRect(-bw / 2, -bh / 2, bw, bh, R * 0.3); ctx.fill();
+    ctx.strokeStyle = 'rgba(8,30,60,0.6)'; ctx.lineWidth = 1; ctx.stroke();
+    ctx.fillStyle = 'rgba(255,255,255,0.22)'; ctx.beginPath(); ctx.arc(0, 0, R * 0.55, 0, 7); ctx.fill();   // ball housing
+    // stem out to the left of the logo (−y' side when the tube runs downward)
+    const side = a.ty > 0 ? 1 : -1;
+    const stemEnd = side * (bh / 2 + R * 0.55);
+    ctx.strokeStyle = '#c7d2dd'; ctx.lineWidth = Math.max(2, R * 0.28);
+    ctx.beginPath(); ctx.moveTo(0, side * bh / 2); ctx.lineTo(0, stemEnd); ctx.stroke();
+    const phi = (1 - this.valve) * Math.PI / 2, L = R * 2.6;
+    const lx = L * Math.cos(phi), ly = stemEnd + side * L * 0.3 * Math.sin(phi);
+    ctx.lineCap = 'round';
+    ctx.strokeStyle = '#c4570e'; ctx.lineWidth = Math.max(3, R * 0.5);
+    ctx.beginPath(); ctx.moveTo(0, stemEnd); ctx.lineTo(lx, ly); ctx.stroke();
+    ctx.strokeStyle = '#ff7a1a'; ctx.lineWidth = Math.max(2, R * 0.36); ctx.stroke();
+    ctx.fillStyle = '#ff9d55'; ctx.beginPath(); ctx.arc(lx, ly, Math.max(1.6, R * 0.26), 0, 7); ctx.fill();
+    ctx.fillStyle = '#4b5d70'; ctx.beginPath(); ctx.arc(0, stemEnd, Math.max(1.4, R * 0.2), 0, 7); ctx.fill();
+    ctx.restore();
   }
 
   private drawSurface(ctx: CanvasRenderingContext2D) {
@@ -636,7 +796,7 @@ export class WaterSceneEngine {
     const w = c.width, h = c.height;
     g.globalCompositeOperation = 'source-over';
     g.clearRect(0, 0, w, h);
-    const lvl = h - l.pad - (h - 2 * l.pad) * 0.56;
+    const lvl = h - l.pad - (h - 2 * l.pad) * 0.5;
     const tilt = Math.tan(clamp(l.th, -0.5, 0.5));
     const yS = (x: number) => lvl + (x - w / 2) * tilt + Math.sin(x * 0.12 + this.t * 4 + idx) * 1.3;
     g.beginPath();
@@ -681,10 +841,8 @@ export class WaterSceneEngine {
       // only what is above the water is seen in air
       ctx.beginPath(); ctx.rect(l.x - l.pad - 20, base - sh - 60, sw + 40, Math.max(0, this.surfaceAt(cx) - (base - sh - 60) + 1)); ctx.clip();
       ctx.translate(cx, base); ctx.rotate(tilt); ctx.translate(-l.w / 2 - l.pad, -(sh - l.pad));
-      for (let d = 8; d >= 1; d--) { ctx.globalAlpha = 0.18 + 0.08 * (8 - d); ctx.drawImage(l.depth, d * 1.3, d * 1.05); } // 3D extrusion
-      ctx.globalAlpha = 1;
       ctx.drawImage(l.sprite, 0, 0);
-      ctx.globalAlpha = 0.95; ctx.drawImage(l.water, 0, 0);
+      ctx.globalAlpha = 0.6; ctx.drawImage(l.water, 0, 0);   // water sloshing inside the crystal
       ctx.restore();
     });
   }
@@ -740,10 +898,9 @@ export class WaterSceneEngine {
   }
 
   private drawFigureDrop(ctx: CanvasRenderingContext2D) {
-    const d = this.drop;
-    if (!d) return;
-    const [dx] = this.M(LG.drip.x, LG.drip.y);
-    this.dropShape(ctx, dx, d.y, d.r, d.phase === 'fall' ? Math.min(0.35, d.vy / 1600) : 0.08, this.figures[d.i]?.value ?? '');
+    const [dx, dy] = this.M(LG.drip.x, LG.drip.y);
+    if (this.pendant) this.dropShape(ctx, dx, dy + this.pendant.r * 0.95, this.pendant.r, 0.08, this.figures[this.pendant.i]?.value ?? '');
+    for (const d of this.fallingFig) this.dropShape(ctx, dx, d.y, d.r, Math.min(0.35, d.vy / 1600), this.figures[d.i]?.value ?? '');
   }
 
   private dropShape(ctx: CanvasRenderingContext2D, x: number, y: number, r: number, stretch: number, label: string) {
@@ -756,12 +913,26 @@ export class WaterSceneEngine {
     ctx.bezierCurveTo(-r, -r * 0.3, -r * 0.45, -r * 0.9, 0, -r * 1.7);
     const g = ctx.createRadialGradient(-r * 0.35, -r * 0.2, 1, 0, r * 0.1, r * 1.3);
     g.addColorStop(0, 'rgba(255,255,255,0.98)'); g.addColorStop(0.55, 'rgba(160,215,255,0.9)'); g.addColorStop(1, 'rgba(40,130,220,0.92)');
+    if (label) { ctx.shadowColor = 'rgba(4,41,79,0.35)'; ctx.shadowBlur = r * 0.35; ctx.shadowOffsetY = r * 0.08; }
     ctx.fillStyle = g; ctx.fill();
-    ctx.strokeStyle = 'rgba(255,255,255,0.95)'; ctx.lineWidth = 1; ctx.stroke();
-    if (label && r > 10) {
-      ctx.fillStyle = '#e8620a'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
-      ctx.font = `800 ${Math.round(r * (label.length > 4 ? 0.5 : 0.7))}px Sora, system-ui, sans-serif`;
-      ctx.fillText(label, 0, r * 0.2);
+    ctx.shadowColor = 'transparent';
+    ctx.strokeStyle = 'rgba(255,255,255,0.95)'; ctx.lineWidth = label ? 1.6 : 1; ctx.stroke();
+    const fz = this.dropFont();
+    if (label && r > fz * 0.95) {
+      // number big, unit small below — legible on a drop that carries it
+      const [num, unit] = this.splitFig(label);
+      const k = clamp((r - fz * 0.95) / (fz * 0.5), 0, 1);            // fades in while the drop grows
+      ctx.globalAlpha = k;
+      ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+      ctx.font = `800 ${fz}px Sora, system-ui, sans-serif`;
+      const ny = unit ? r * 0.02 : r * 0.18;
+      ctx.lineWidth = 3; ctx.strokeStyle = 'rgba(255,255,255,0.85)'; ctx.lineJoin = 'round';
+      ctx.strokeText(num, 0, ny); ctx.fillStyle = '#e8620a'; ctx.fillText(num, 0, ny);
+      if (unit) {
+        ctx.font = `700 ${Math.max(8, Math.round(fz * 0.52))}px Sora, system-ui, sans-serif`;
+        ctx.fillStyle = '#0b3d75'; ctx.fillText(unit, 0, ny + fz * 0.72);
+      }
+      ctx.globalAlpha = 1;
     }
     ctx.restore();
   }

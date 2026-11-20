@@ -12,7 +12,7 @@ import { Component, input } from '@angular/core';
   host: { class: 'hx-edge', '[class.hx-edge--flip]': 'flip()', 'aria-hidden': 'true' },
   template: `
     <svg class="hx-edge__l hx-edge__l--back" viewBox="0 0 2400 120" preserveAspectRatio="none">
-      <path [attr.fill]="color()" fill-opacity="0.45"
+      <path [attr.fill]="back() || color()" [attr.fill-opacity]="back() ? 1 : 0.45"
         d="M0 62 C200 30 400 30 600 62 S1000 94 1200 62 S1600 30 1800 62 S2200 94 2400 62 V120 H0Z" />
     </svg>
     <svg class="hx-edge__l hx-edge__l--front" viewBox="0 0 2400 120" preserveAspectRatio="none">
@@ -26,4 +26,6 @@ import { Component, input } from '@angular/core';
 export class HxWaveEdgeComponent {
   readonly color = input('#ffffff');
   readonly flip = input(false);
+  /** optional colour of the back wave (default: a translucent copy of `color`) */
+  readonly back = input('');
 }

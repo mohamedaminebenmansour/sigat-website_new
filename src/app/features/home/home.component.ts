@@ -28,12 +28,16 @@ import { HomeTapComponent } from './sections/home-tap.component';
   template: `
     <app-home-hero />
     <app-wave-pipe class="hx-joint" [height]="110" [amplitude]="30" [phase]="0.6" fillAbove="#04294f" fillBelow="#86d0f7" />
-    <app-home-water-scene (tailX)="riserX.set($event)" />
-    <app-values-pump [riserX]="riserX()" [source]="true" sectionId="values-home" />
+    <app-home-water-scene (tailX)="riserX.set($event)" (pump)="pumpOn.set($event)" />
+    <app-values-pump [riserX]="riserX()" [running]="pumpOn()" [source]="true" sectionId="values-home" />
+    <!-- the network carries on: the well's water hands over to the projects ("where the water arrives") -->
+    <app-wave-pipe class="hx-joint" [height]="110" [amplitude]="28" [phase]="1.7" fillAbove="#1d6dc6" fillBelow="#d6edfb" />
     <app-home-projects />
     <app-home-tap />
   `
 })
 export class HomeComponent {
-  readonly riserX = signal(0.3);
+  readonly riserX = signal(0.3)
+  /** the pump runs while the logo reservoir is filling (float switches in the scene) */
+  readonly pumpOn = signal(true);
 }

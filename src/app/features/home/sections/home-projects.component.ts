@@ -13,7 +13,7 @@ import { HxRevealDirective } from '../../../shared/hydro/hx-reveal.directive';
   standalone: true,
   imports: [RouterLink, TranslatePipe, HxRevealDirective],
   template: `
-    <section class="hx-ch hx-ch--white" id="ch-projects" data-chapter="05">
+    <section class="hx-ch hx-ch--white hx-ch--arrive" id="ch-projects" data-chapter="05">
       <div class="hx-container">
         <header class="hx-head hx-head--split hx-reveal" hxReveal>
           <div>

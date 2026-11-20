@@ -69,6 +69,8 @@ export class ValuesPumpComponent implements AfterViewInit, OnDestroy {
   /** Draw the water source: wet well + suction line + foot valve/strainer. */
   readonly source = input(false);
   readonly sectionId = input('values');
+  /** Motor contactor. Home: driven by the reservoir float switches above; About: always on. */
+  readonly running = input(true);
 
   readonly values = COMPANY_VALUES;
   readonly hover = signal(-1);
@@ -78,6 +80,17 @@ export class ValuesPumpComponent implements AfterViewInit, OnDestroy {
   private t = 0;        // pump / flow clock
   private orbitT = 0;   // orbit clock (slows down while a value is read)
   private spin = 0;
+  /**
+   * Machine state. n = rotor speed / rated (inertia: spin-up τ≈0.7 s, coast-down τ≈2.4 s).
+   * Affinity laws: H ∝ n², and the pump only delivers once its head beats the
+   * static head of the column (H0). Q is what the flow meter reads.
+   */
+  private n = 1;
+  private q = 1;             // delivered flow / rated
+  private flowPh = 0;        // ∫ q dt — advects every streak, so slowing never makes them jump
+  private chk = 1;           // swing check-valve disc opening 0..1 (it lags the flow)
+  private hammer = -1;       // time since the check valve slammed (water hammer), −1 = none
+  private static readonly H0 = 0.42;   // static head / shut-off head at rated speed
   private pipe?: Path;
   private suction?: Path;
   /** horizontal discharge run (section coords) carrying the fittings */
@@ -181,6 +194,39 @@ export class ValuesPumpComponent implements AfterViewInit, OnDestroy {
     };
   }
 
+  /** motor + pump + check valve + column, integrated each frame */
+  private machine(dt: number): void {
+    const run = this.running() || this.reduced;
+    const H0 = ValuesPumpComponent.H0;
+    this.n += (run ? (1 - this.n) / 0.7 : -this.n / 2.4) * dt;
+    this.n = clamp(this.n, 0, 1);
+    // operating point: head left after the static lift drives the flow (H − H0 ∝ Q² friction)
+    const qT = Math.sqrt(Math.max(0, (this.n * this.n - H0) / (1 - H0)));
+    const prev = this.q;
+    this.q += (qT - this.q) * Math.min(1, dt * 5);              // the column has inertia too
+    if (this.q < 0.004) this.q = 0;
+    // swing check valve: the disc follows the flow, and slams shut when the flow reverses
+    const chkT = Math.sqrt(this.q);
+    this.chk += (chkT - this.chk) * Math.min(1, dt * (chkT > this.chk ? 6 : 14));
+    if (prev > 0 && this.q === 0 && this.hammer < 0) this.hammer = 0;   // Joukowsky surge on closure
+    if (this.hammer >= 0) { this.hammer += dt; if (this.hammer > 3) this.hammer = -1; }
+    this.flowPh += dt * this.q;
+  }
+
+  /** pressure downstream of the check valve, as a fraction of the gauge's range */
+  private pressure(): number {
+    const H0 = ValuesPumpComponent.H0;
+    // running: pump head on its curve; stopped: the column above still stands on the closed disc
+    let p = Math.max(H0, this.n * this.n * (1 - 0.18 * this.q * this.q));
+    if (this.hammer >= 0) {                                      // damped pressure wave, period 4L/a
+      const t = this.hammer;
+      p += 0.32 * Math.exp(-t * 1.6) * Math.cos(t * 2 * Math.PI * 2.2);
+    }
+    return clamp(p, 0, 1.15);
+  }
+
+  private get reduced(): boolean { return this.ticker.reducedMotion; }
+
   private tick(dt: number): void {
     const rect = this.stage.nativeElement.getBoundingClientRect();
     const sr = this.sec.nativeElement.getBoundingClientRect();
@@ -189,9 +235,11 @@ export class ValuesPumpComponent implements AfterViewInit, OnDestroy {
     this.layout(w, h, ox, oy, sr.width, sr.height);
     const reading = this.hover() >= 0;
     this.t += dt;
-    this.orbitT += dt * (reading ? 0.2 : 1);
-    // Impeller: spins up when idle, eases off while a value is read.
-    this.spin += dt * (reading ? 1.2 : 2.6);
+    this.machine(dt);
+    const n = this.n;
+    // the vortex outside the pump decays when it stops, but never quite freezes (values stay legible)
+    this.orbitT += dt * (reading ? 0.2 : 1) * (0.3 + 0.7 * n);
+    this.spin += dt * 2.6 * n * (reading ? 0.6 : 1);           // impeller ω = n · ω_rated (clockwise)
 
     const back = this.fit(this.back.nativeElement, sr.width, sr.height);
     const front = this.fit(this.front.nativeElement, sr.width, sr.height);
@@ -199,7 +247,7 @@ export class ValuesPumpComponent implements AfterViewInit, OnDestroy {
     if (this.suction) this.drawSource(back, sr.width, sr.height);
     // Home: a coupling (manchette) where the rising main meets the section above
     const rings = this.riserX() !== null && this.pipe ? [60, 220, 380, this.pipe.length - 44] : [60, 220, 380, 540];
-    if (this.pipe) drawGlassPipe(back, this.pipe, { r: g.pipeR, flow: reading ? 50 : 95, t: this.t, rings });
+    if (this.pipe) drawGlassPipe(back, this.pipe, { r: g.pipeR, flow: 95, t: this.flowPh, rings });
     if (this.run) this.drawFittings(back, reading);
     // Orbits and pump are drawn in stage coordinates.
     back.translate(ox, oy);
@@ -271,6 +319,16 @@ export class ValuesPumpComponent implements AfterViewInit, OnDestroy {
     let x = at(0.16);
     flanges(x, r * 1.7); body(x, r * 3.1, r * 2.3);
     ctx.fillStyle = '#1d4f8f'; ctx.beginPath(); ctx.roundRect(x - r * 1.1, y - r * 1.75, r * 2.2, r * 0.6, 3); ctx.fill();   // bolted cover
+    // external lever + counterweight on the disc shaft: it shows the disc opening
+    {
+      const hx = x - run.d * r * 0.7, hy = y - r * 0.2, L = r * 2.4;
+      const a = Math.PI / 2 - run.d * (0.12 + 1.0 * this.chk);         // hangs down when shut, swings downstream with the flow
+      const ex = hx + Math.cos(a) * L, ey = hy + Math.sin(a) * L;
+      ctx.strokeStyle = '#c7d2dd'; ctx.lineWidth = Math.max(2, r * 0.22);
+      ctx.beginPath(); ctx.moveTo(hx, hy); ctx.lineTo(ex, ey); ctx.stroke();
+      ctx.fillStyle = '#d64545'; ctx.beginPath(); ctx.arc(ex, ey, Math.max(3, r * 0.45), 0, 7); ctx.fill();
+      ctx.fillStyle = '#4b5d70'; ctx.beginPath(); ctx.arc(hx, hy, Math.max(1.6, r * 0.18), 0, 7); ctx.fill();
+    }
     ctx.strokeStyle = 'rgba(255,255,255,0.9)'; ctx.lineWidth = 1.6;                                                   // flow arrow
     ctx.beginPath(); ctx.moveTo(x - run.d * r * 0.8, y); ctx.lineTo(x + run.d * r * 0.8, y);
     ctx.moveTo(x + run.d * r * 0.8, y); ctx.lineTo(x + run.d * r * 0.4, y - r * 0.35);
@@ -296,7 +354,7 @@ export class ValuesPumpComponent implements AfterViewInit, OnDestroy {
     ctx.fillStyle = cg; ctx.beginPath(); ctx.roundRect(bx, byy, bw, bh, 4); ctx.fill();
     ctx.strokeStyle = 'rgba(30,50,70,0.5)'; ctx.lineWidth = 1; ctx.stroke();
     ctx.fillStyle = '#0d2a1c'; ctx.fillRect(bx + bw * 0.1, byy + bh * 0.2, bw * 0.8, bh * 0.6);                         // LCD
-    const q = (reading ? 31 : 42) + Math.sin(this.t * 1.7) * 0.4 + Math.sin(this.t * 4.3) * 0.15;
+    const q = this.q > 0 ? 42 * this.q + (Math.sin(this.t * 1.7) * 0.4 + Math.sin(this.t * 4.3) * 0.15) * this.q : 0;
     ctx.fillStyle = '#7dff9e'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
     ctx.font = `700 ${Math.max(8, Math.round(bh * 0.3))}px ui-monospace, Consolas, monospace`;
     ctx.fillText(`${q.toFixed(1)} m³/h`, x, byy + bh * 0.5);
@@ -309,7 +367,8 @@ export class ValuesPumpComponent implements AfterViewInit, OnDestroy {
     ctx.strokeStyle = '#8fa4b8'; ctx.lineWidth = Math.max(2, gr * 0.18); ctx.stroke();
     ctx.strokeStyle = '#d64545'; ctx.lineWidth = Math.max(1, gr * 0.12);
     ctx.beginPath(); ctx.arc(x, gy, gr * 0.78, Math.PI * 0.2, Math.PI * 0.45); ctx.stroke();                          // red zone
-    const ang = -Math.PI * 0.75 + (reading ? 0.95 : 1.15) * Math.PI * 0.5 + Math.sin(this.t * 9) * 0.02;              // pulsation
+    // needle sweeps 270°; blade-pass pulsation only while the impeller turns
+    const ang = -Math.PI * 1.25 + this.pressure() * Math.PI * 1.25 + Math.sin(this.t * 9) * 0.02 * this.n;
     ctx.strokeStyle = '#1f3b57'; ctx.lineWidth = Math.max(1.2, gr * 0.1);
     ctx.beginPath(); ctx.moveTo(x, gy); ctx.lineTo(x + Math.cos(ang) * gr * 0.75, gy + Math.sin(ang) * gr * 0.75); ctx.stroke();
     ctx.fillStyle = '#1f3b57'; ctx.beginPath(); ctx.arc(x, gy, gr * 0.12, 0, 7); ctx.fill();
@@ -326,7 +385,7 @@ export class ValuesPumpComponent implements AfterViewInit, OnDestroy {
   private drawSource(ctx: CanvasRenderingContext2D, sw: number, sh: number): void {
     const top = sh - this.wellH(sh);
     const g = this.g;
-    if (this.suction) drawGlassPipe(ctx, this.suction, { r: g.pipeR * 0.95, flow: -80, t: this.t, rings: [40] });
+    if (this.suction) drawGlassPipe(ctx, this.suction, { r: g.pipeR * 0.95, flow: -80, t: this.flowPh, rings: [40] });
     // foot valve + strainer at the bottom of the suction line
     const fx = g.ox + g.x, fy = top + this.wellH(sh) * 0.62;
     ctx.fillStyle = '#7d93a8';
@@ -339,7 +398,7 @@ export class ValuesPumpComponent implements AfterViewInit, OnDestroy {
     ctx.beginPath();
     for (let x = 0; x <= sw; x += 12) {
       const y = top + Math.sin(x * 0.012 + this.t * 1.4) * 3 + Math.sin(x * 0.031 - this.t * 2.1) * 1.5
-        - (Math.abs(x - fx) < 40 ? 2.5 * Math.cos(((x - fx) / 40) * Math.PI / 2) : 0); // slight draw-down at the intake
+        - (Math.abs(x - fx) < 40 ? 2.5 * this.q * Math.cos(((x - fx) / 40) * Math.PI / 2) : 0); // draw-down at the intake ∝ Q
       x === 0 ? ctx.moveTo(x, y) : ctx.lineTo(x, y);
     }
     ctx.lineTo(sw, sh); ctx.lineTo(0, sh); ctx.closePath();
@@ -412,7 +471,7 @@ export class ValuesPumpComponent implements AfterViewInit, OnDestroy {
     }
     // streaks rising in the discharge nozzle
     ctx.setLineDash([R * 0.18, R * 0.22]);
-    ctx.lineDashOffset = t * R * 2.2;
+    ctx.lineDashOffset = this.flowPh * R * 2.2;
     ctx.strokeStyle = 'rgba(230,248,255,0.7)'; ctx.lineWidth = 1.4;
     for (const f of [0.35, 0.5, 0.65]) {
       ctx.beginPath(); ctx.moveTo(x - R + f * R * 0.5, y - R * 0.95); ctx.lineTo(x - R + f * R * 0.5, y - R * 1.55); ctx.stroke();
@@ -497,7 +556,7 @@ export class ValuesPumpComponent implements AfterViewInit, OnDestroy {
         j ? ctx.lineTo(px, py) : ctx.moveTo(px, py);
       }
       ctx.setLineDash(on ? [6, 9] : [3, 10]);
-      ctx.lineDashOffset = -this.t * (on ? 42 : 24);
+      ctx.lineDashOffset = -this.flowPh * (on ? 42 : 24);
       ctx.strokeStyle = on ? 'rgba(255,255,255,0.95)' : 'rgba(255,255,255,0.35)';
       ctx.lineWidth = on ? 2.2 : 1.1;
       ctx.stroke();

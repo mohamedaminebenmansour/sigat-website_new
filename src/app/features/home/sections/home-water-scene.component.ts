@@ -51,11 +51,15 @@ export class HomeWaterSceneComponent implements AfterViewInit, OnDestroy {
 
   /** x of the logo's J-tail as a fraction of the width — the pump riser below aligns to it. */
   readonly tailX = output<number>();
+  /** contactor of the pump below: true while the reservoir is filling. When the scene
+   *  is off-screen its cycle is paused, so the pump just keeps running (downstream demand). */
+  readonly pump = output<boolean>();
   readonly stats = COMPANY_STATS;
 
   private engine?: WaterSceneEngine;
   private off?: () => void;
   private ro?: ResizeObserver;
+  private io?: IntersectionObserver;
   private lastTail = -1;
 
   ngAfterViewInit(): void {
@@ -66,6 +70,11 @@ export class HomeWaterSceneComponent implements AfterViewInit, OnDestroy {
       this.lastTail = f;
       this.zone.run(() => this.tailX.emit(f));
     };
+    let scenePump = true, inView = false;
+    const sendPump = () => this.zone.run(() => this.pump.emit(inView ? scenePump : true));
+    this.engine.onPump = on => { scenePump = on; sendPump(); };
+    this.io = new IntersectionObserver(([e]) => { inView = e.isIntersecting; sendPump(); }, { rootMargin: '-20% 0px' });
+    this.io.observe(sec);
     const relayout = () => this.engine?.layout(sec.clientWidth || window.innerWidth, window.innerHeight);
     relayout();
     this.ro = new ResizeObserver(relayout);
@@ -93,6 +102,7 @@ export class HomeWaterSceneComponent implements AfterViewInit, OnDestroy {
   ngOnDestroy(): void {
     this.off?.();
     this.ro?.disconnect();
+    this.io?.disconnect();
   }
 
   private local(e: PointerEvent): [number, number] {
