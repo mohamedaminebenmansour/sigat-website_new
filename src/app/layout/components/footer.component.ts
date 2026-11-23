@@ -47,7 +47,7 @@ import { WavePipeComponent } from '../../shared/hydraulics/wave-pipe.component';
             <p class="mt-4 max-w-sm text-sm leading-relaxed text-blue-950/85">{{ 'footer_company_desc' | translate }}</p>
             <ul class="mt-5 space-y-2.5 text-sm">
               <li class="flex gap-3"><i class="fa-solid fa-location-dot mt-0.5 w-4 text-blue-700"></i><a [href]="info.mapsUrl" target="_blank" rel="noopener noreferrer" class="hover:text-blue-700">{{ info.address }}</a></li>
-              <li class="flex gap-3"><i class="fa-solid fa-phone mt-0.5 w-4 text-blue-700"></i>@if (tel) {<a [href]="tel" class="hover:text-blue-700">{{ info.phone }}</a>} @else {{{ info.phone }}}</li>
+              @if (tel) { <li class="flex gap-3"><i class="fa-solid fa-phone mt-0.5 w-4 text-blue-700"></i><a [href]="tel" class="hover:text-blue-700" dir="ltr">{{ info.phone }}</a></li> }
               <li class="flex gap-3"><i class="fa-regular fa-envelope mt-0.5 w-4 text-blue-700"></i><a [href]="mailto" class="hover:text-blue-700">{{ info.email }}</a></li>
             </ul>
           </div>
@@ -74,7 +74,9 @@ import { WavePipeComponent } from '../../shared/hydraulics/wave-pipe.component';
       </div>
 
       <div class="relative border-t-[3px] border-blue-950 py-3 text-center text-xs text-blue-950/90">
-        {{ 'footer_copyright' | translate }}
+        <span>© {{ year }} SIGAT – Société Internationale des Grands Travaux. {{ 'footer_rights' | translate }}</span>
+        <span class="mx-2" aria-hidden="true">·</span><a routerLink="/legal" class="hover:text-blue-700 underline-offset-2 hover:underline">{{ 'footer_legal' | translate }}</a>
+        <span class="mx-2" aria-hidden="true">·</span><a routerLink="/legal" fragment="privacy" class="hover:text-blue-700 underline-offset-2 hover:underline">{{ 'footer_privacy' | translate }}</a>
       </div>
     </footer>
   `
@@ -87,4 +89,5 @@ export class FooterComponent {
   readonly mailto = COMPANY_MAILTO;
   readonly colA = NAV_LINKS.filter(l => ['/home', '/about', '/projects', '/contact'].includes(l.path));
   readonly colB = NAV_LINKS.filter(l => !['/home', '/about', '/projects', '/contact'].includes(l.path));
+  readonly year = new Date().getFullYear();
 }

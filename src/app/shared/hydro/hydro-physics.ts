@@ -77,8 +77,9 @@ export class WaveSurface {
   private integrate(dt: number): void {
     const { n, h, v, lap } = this;
     const dx = this.width / (n - 1);
-    // CFL guard: c·dt/dx must stay < 1.
-    const c = Math.min(this.speed, (0.9 * dx) / dt);
+    // CFL guard: c·dt/dx must stay < 1; 0.5 leaves margin for the spring, damping and forcing terms
+    // (at 0.9 a fine grid on phones, ~1.3 px per column, slowly blew up under a steady jet).
+    const c = Math.min(this.speed, (0.5 * dx) / dt);
     const c2 = (c * c) / (dx * dx);
     for (let i = 0; i < n; i++) {
       const l = h[i > 0 ? i - 1 : 0]; // reflective walls

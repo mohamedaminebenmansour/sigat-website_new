@@ -32,8 +32,8 @@ import { WaterSceneEngine } from './water-scene-engine';
       <div #story class="ws__story">
         <p class="ws__kicker">{{ 'ww_about_eyebrow' | translate }}</p>
         <h3 class="ws__title hx-display">{{ 'about_story_title' | translate }}</h3>
-        <p class="ws__text">{{ 'about_story_text' | translate }}</p>
-        <p class="ws__quote">{{ 'about_story_highlight' | translate }}</p>
+        <p class="ws__text">{{ 'ws_story_text' | translate }}</p>
+        <p class="ws__quote">{{ 'ws_story_quote' | translate }}</p>
         <a routerLink="/about" class="ws__link">{{ 'hx_res_link' | translate }} <i class="fa-solid fa-arrow-right" aria-hidden="true"></i></a>
         <p class="ws__hint">{{ 'ws_hint' | translate }}</p>
       </div>
@@ -95,6 +95,9 @@ export class HomeWaterSceneComponent implements AfterViewInit, OnDestroy {
       ]);
     });
     this.destroyRef.onDestroy(() => sub.unsubscribe());
+    const tagSub = this.translate.stream(['ws_tag_kicker', 'ws_tag_lead', 'ws_tag_accent']).subscribe((t: Record<string, string>) =>
+      this.engine?.setTagline({ kicker: t['ws_tag_kicker'], lead: t['ws_tag_lead'], accent: t['ws_tag_accent'] }));
+    this.destroyRef.onDestroy(() => tagSub.unsubscribe());
 
     this.off = this.ticker.register(sec, dt => this.engine?.frame(dt, sec.getBoundingClientRect().top));
   }

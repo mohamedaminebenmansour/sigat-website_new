@@ -64,6 +64,14 @@ export const routes: Routes = [
         loadComponent: () => import('./features/media/media.component').then(m => m.MediaComponent)
       },
       {
+        path: 'careers',
+        loadComponent: () => import('./features/careers/careers.component').then(m => m.CareersComponent)
+      },
+      {
+        path: 'legal',
+        loadComponent: () => import('./features/legal/legal.component').then(m => m.LegalComponent)
+      },
+      {
         path: 'contact',
         loadComponent: () => import('./features/contact/contact.component').then(m => m.ContactComponent)
       },

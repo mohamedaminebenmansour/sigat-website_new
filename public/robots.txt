@@ -1,0 +1,5 @@
+User-agent: *
+Allow: /
+
+# TODO(SIGAT): once the domain is live, add:
+# Sitemap: https://<domain>/sitemap.xml

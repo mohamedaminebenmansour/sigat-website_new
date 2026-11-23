@@ -11,7 +11,10 @@ export class MockDataService {
   private projects: Project[] = [
     {
       id: 1,
+      amount: 'gt10', // TODO(SIGAT): sample value
+      status: 'done', // TODO(SIGAT): sample value
       title: 'Réseau d\'assainissement - Sousse',
+      work: 'sewer',
       category: 'hydraulic',
       location: 'Sousse, Tunisie',
       year: '2023',
@@ -64,7 +67,10 @@ export class MockDataService {
     },
     {
       id: 2,
+      amount: '5_10', // TODO(SIGAT): sample value
+      status: 'done', // TODO(SIGAT): sample value
       title: 'Adduction d\'eau potable - Nabeul',
+      work: 'supply',
       category: 'hydraulic',
       location: 'Nabeul, Tunisie',
       year: '2022',
@@ -80,7 +86,10 @@ export class MockDataService {
     },
     {
       id: 3,
+      amount: 'gt10', // TODO(SIGAT): sample value
+      status: 'ongoing', // TODO(SIGAT): sample value
       title: 'Station de dessalement - Djerba',
+      work: 'desal',
       category: 'hydraulic',
       location: 'Djerba, Tunisie',
       year: '2024',
@@ -96,7 +105,10 @@ export class MockDataService {
     },
     {
       id: 4,
+      amount: '1_5', // TODO(SIGAT): sample value
+      status: 'done', // TODO(SIGAT): sample value
       title: 'Zone industrielle - Mégrine',
+      work: 'vrd',
       category: 'construction',
       location: 'Mégrine, Grand Tunis, Tunisie',
       year: '2023',
@@ -129,7 +141,10 @@ export class MockDataService {
     },
     {
       id: 6,
+      amount: '5_10', // TODO(SIGAT): sample value
+      status: 'done', // TODO(SIGAT): sample value
       title: 'Pont-canal - Béja',
+      work: 'bridge',
       category: 'construction',
       location: 'Béja, Tunisie',
       year: '2022',

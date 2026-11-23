@@ -8,8 +8,19 @@ export class AppTranslateService {
   constructor(private translate: TranslateService) {
     // The default language ('fr') is set via provideTranslateService config.
     // Switch to it explicitly and set HTML attributes.
-    this.translate.use('fr');
-    this.setHtmlAttributes('fr');
+    // ?lang=ar in the URL wins (shareable), then the visitor's last choice, then French
+    const lang = AppTranslateService.initialLang();
+    this.translate.use(lang);
+    this.setHtmlAttributes(lang);
+  }
+
+  private static initialLang(): 'fr' | 'en' | 'ar' {
+    const ok = (v: string | null): v is 'fr' | 'en' | 'ar' => v === 'fr' || v === 'en' || v === 'ar';
+    if (typeof window === 'undefined') return 'fr';
+    const q = new URLSearchParams(window.location.search).get('lang');
+    if (ok(q)) return q;
+    try { const saved = localStorage.getItem('sigat-lang'); if (ok(saved)) return saved; } catch { /* storage blocked */ }
+    return 'fr';
   }
 
   /**
@@ -19,6 +30,7 @@ export class AppTranslateService {
   switchLanguage(lang: 'fr' | 'en' | 'ar'): void {
     this.translate.use(lang);
     this.setHtmlAttributes(lang);
+    try { localStorage.setItem('sigat-lang', lang); } catch { /* storage blocked: the choice lasts for this visit */ }
   }
 
   /**

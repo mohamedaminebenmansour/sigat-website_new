@@ -7,6 +7,15 @@ import { HxRevealDirective } from '../../../shared/hydro/hx-reveal.directive';
 import { Path, Seg, buildPath, clamp, drawGlassPipe } from '../../../shared/hydraulics/hydraulics-core';
 import { COMPANY_VALUES } from './values.data';
 
+/** Colour palette for the industrial pump rendering (resolved from CSS vars + variant). */
+interface PumpPalette {
+  casing: string; casingDark: string; casingLight: string; casingRim: string;
+  motor: string; motorDark: string; motorLight: string; motorFin: string;
+  shaft: string; shaftDark: string; impeller: string; impellerDark: string; impellerRim: string;
+  water: string; waterDark: string; waterSurface: string;
+  bolt: string; boltLight: string; gasket: string; accent: string; cavitation: string;
+}
+
 /**
  * NOS VALEURS — the pump replaces the old "solar system".
  *
@@ -71,6 +80,10 @@ export class ValuesPumpComponent implements AfterViewInit, OnDestroy {
   readonly sectionId = input('values');
   /** Motor contactor. Home: driven by the reservoir float switches above; About: always on. */
   readonly running = input(true);
+  /** Pump model: 'centrifugal' (end-suction, motor + volute) or 'vertical-turbine' (line-shaft, deep well). */
+  readonly pumpModel = input<'centrifugal' | 'vertical-turbine'>('centrifugal');
+  /** Pump colour variant: 'industrial-blue' | 'navy' | 'mint' | 'slate' | 'orange'. Mirrors --vp-pump-* CSS vars. */
+  readonly pumpColor = input<'industrial-blue' | 'navy' | 'mint' | 'slate' | 'orange'>('industrial-blue');
 
   readonly values = COMPANY_VALUES;
   readonly hover = signal(-1);
@@ -98,6 +111,46 @@ export class ValuesPumpComponent implements AfterViewInit, OnDestroy {
   private pipeKey = '';
   private swirl = Array.from({ length: 60 }, () => ({ a: Math.random() * Math.PI * 2, r: Math.random() }));
   private g = { w: 1, h: 1, ox: 0, oy: 0, x: 0, y: 0, R: 50, pr: 40, q: 0.4, pipeR: 9 };
+  private pal!: PumpPalette;
+
+  /** Resolve the pump colour palette from CSS custom properties (+ variant overrides).
+   *  Read once per layout so the canvas stays cheap inside requestAnimationFrame. */
+  private refreshPalette(): void {
+    const cs = getComputedStyle(this.sec.nativeElement);
+    const gv = (name: string, fb: string) => { const v = cs.getPropertyValue(name).trim(); return v ? v : fb; };
+    const base: PumpPalette = {
+      casing: gv('--vp-pump-casing', '#2c4a7a'), casingDark: gv('--vp-pump-casing-dark', '#162e4f'),
+      casingLight: gv('--vp-pump-casing-light', '#5b7aa0'), casingRim: gv('--vp-pump-casing-rim', '#8fb0d8'),
+      motor: gv('--vp-pump-motor', '#1f3a5f'), motorDark: gv('--vp-pump-motor-dark', '#102238'),
+      motorLight: gv('--vp-pump-motor-light', '#4a6a8f'), motorFin: gv('--vp-pump-motor-fin', '#0c1a2c'),
+      shaft: gv('--vp-pump-shaft', '#8fa4b8'), shaftDark: gv('--vp-pump-shaft-dark', '#5b6f83'),
+      impeller: gv('--vp-pump-impeller', '#b9c6d4'), impellerDark: gv('--vp-pump-impeller-dark', '#7a8aa0'),
+      impellerRim: gv('--vp-pump-impeller-rim', '#e8eef5'),
+      water: gv('--vp-pump-water', 'rgba(110,190,255,0.62)'), waterDark: gv('--vp-pump-water-dark', 'rgba(25,110,205,0.78)'),
+      waterSurface: gv('--vp-pump-water-surface', 'rgba(230,248,255,0.5)'),
+      bolt: gv('--vp-pump-bolt', '#4b5d70'), boltLight: gv('--vp-pump-bolt-light', '#c7d2dd'),
+      gasket: gv('--vp-pump-gasket', '#7d93a8'), accent: gv('--vp-pump-accent', '#ff7a1a'),
+      cavitation: gv('--vp-pump-cavitation', 'rgba(200,220,255,0.45)'),
+    };
+    // Variant colour overrides (applied on top of the CSS vars).
+    const variant = this.pumpColor();
+    const over: Partial<PumpPalette> = variant === 'navy' ? {
+      casing: '#0f2b46', casingDark: '#071626', casingLight: '#2a4a6e',
+      motor: '#142740', motorDark: '#081320', motorLight: '#2e4a6e',
+    } : variant === 'mint' ? {
+      casing: '#2e5f6b', casingDark: '#183239', casingLight: '#5e8f9c',
+      motor: '#224752', motorDark: '#102228', motorLight: '#4a7a87',
+      water: 'rgba(140,210,220,0.62)', waterDark: 'rgba(60,140,155,0.78)',
+    } : variant === 'slate' ? {
+      casing: '#3d4a5c', casingDark: '#232d3a', casingLight: '#6e7e92',
+      motor: '#2d3746', motorDark: '#181e26', motorLight: '#5a6a7e',
+      water: 'rgba(150,165,185,0.55)', waterDark: 'rgba(90,105,130,0.7)',
+    } : variant === 'orange' ? {
+      casing: '#5a3a1a', casingDark: '#2e1d0d', casingLight: '#8f5e2e',
+      motor: '#422a12', motorDark: '#1e1308', motorLight: '#6a4a2a', accent: '#e8620a',
+    } : {};
+    this.pal = { ...base, ...over };
+  }
 
   ngAfterViewInit(): void {
     // tick while ANY part of the section is visible (the riser runs to its top edge)
@@ -172,6 +225,7 @@ export class ValuesPumpComponent implements AfterViewInit, OnDestroy {
       const wellTop = sh - this.wellH(sh);
       this.suction = this.source() ? buildPath(ox + g.x, oy + g.y + g.R * 1.42, [['L', ox + g.x, wellTop + this.wellH(sh) * 0.62] as Seg]) : undefined;
       this.stage.nativeElement.style.setProperty('--pr', g.pr.toFixed(1) + 'px');
+      this.refreshPalette();
     }
   }
 
@@ -449,89 +503,218 @@ export class ValuesPumpComponent implements AfterViewInit, OnDestroy {
     ctx.closePath();
   }
 
+  /* ------------------------------------------------------------------ pump entry point (dispatcher) */
   private drawPump(ctx: CanvasRenderingContext2D): void {
     const { x, y, R } = this.g;
-    const t = this.t;
+    const p = this.pal;
+    const n = this.n;
+    const q = this.q;
+    const spin = this.spin;
 
-    // 1. water in the casing (cut-away)
-    this.casingPath(ctx);
-    const wg = ctx.createRadialGradient(x, y, R * 0.3, x, y, R * 1.5);
-    wg.addColorStop(0, 'rgba(120,200,250,0.55)'); wg.addColorStop(1, 'rgba(25,110,205,0.75)');
-    ctx.fillStyle = wg; ctx.fill();
+    // Paint back → front so overlapping parts occlude correctly.
+    this.drawBasePlate(ctx, x, y, R, p);
+    this.drawSuctionNozzle(ctx, x, y, R, p, q);
+    this.drawWaterInCasing(ctx, x, y, R, p, q, n);
+    this.drawCasingWall(ctx, x, y, R, p);
+    this.drawWearRing(ctx, x, y, R, p);
+    this.drawImpeller(ctx, x, y, R, p, spin, n);
+    this.drawShaftSeal(ctx, x, y, R, p, n);
+    this.drawDischargeNozzle(ctx, x, y, R, p, q);
+    this.drawMotor(ctx, x, y, R, p, spin, n);
+    if (q > 0.5 && n > 0.25) this.drawCavitation(ctx, x, y, R, p, q, n);
+  }
 
-    // 2. flow streaks in the volute: clockwise, faster toward the outlet
-    ctx.save();
-    this.casingPath(ctx); ctx.clip();
-    ctx.lineCap = 'round';
-    for (const p of this.swirl) {
-      const a = p.a + this.spin * (0.55 + p.r * 0.35);           // clockwise
-      const rr = R * (1.02 + 0.32 * p.r);
-      ctx.beginPath(); ctx.arc(x, y, rr, a, a + 0.22 + 0.2 * p.r);
-      ctx.strokeStyle = `rgba(230,248,255,${(0.35 + 0.4 * p.r).toFixed(2)})`; ctx.lineWidth = 1.4; ctx.stroke();
+  /* base plate / skid */
+  private drawBasePlate(ctx: CanvasRenderingContext2D, x: number, y: number, R: number, p: PumpPalette): void {
+    const bw = R * 3.6, bh = R * 0.55;
+    const g = ctx.createLinearGradient(x - bw / 2, y + R * 1.2, x + bw / 2, y + R * 1.2 + bh);
+    g.addColorStop(0, p.shaftDark); g.addColorStop(0.5, p.shaft); g.addColorStop(1, p.shaftDark);
+    ctx.fillStyle = g; ctx.fillRect(x - bw / 2, y + R * 1.2, bw, bh);
+    ctx.strokeStyle = p.bolt; ctx.lineWidth = Math.max(1, R * 0.04); ctx.strokeRect(x - bw / 2, y + R * 1.2, bw, bh);
+    for (const bx of [x - bw / 2 + R * 0.5, x + bw / 2 - R * 0.5]) {
+      ctx.fillStyle = p.boltLight; ctx.beginPath(); ctx.arc(bx, y + R * 1.2 + bh * 0.5, R * 0.05, 0, Math.PI * 2); ctx.fill();
+      ctx.fillStyle = p.bolt; ctx.beginPath(); ctx.arc(bx, y + R * 1.2 + bh * 0.5, R * 0.025, 0, Math.PI * 2); ctx.fill();
     }
-    // streaks rising in the discharge nozzle
-    ctx.setLineDash([R * 0.18, R * 0.22]);
-    ctx.lineDashOffset = this.flowPh * R * 2.2;
-    ctx.strokeStyle = 'rgba(230,248,255,0.7)'; ctx.lineWidth = 1.4;
-    for (const f of [0.35, 0.5, 0.65]) {
-      ctx.beginPath(); ctx.moveTo(x - R + f * R * 0.5, y - R * 0.95); ctx.lineTo(x - R + f * R * 0.5, y - R * 1.55); ctx.stroke();
+  }
+  /* suction nozzle: water enters from the bottom */
+  private drawSuctionNozzle(ctx: CanvasRenderingContext2D, x: number, y: number, R: number, p: PumpPalette, q: number): void {
+    const nr = R * 0.42, ny = y + R * 1.45, pipeW = R * 0.95;
+    ctx.beginPath(); ctx.moveTo(x - pipeW / 2, y + R * 2.35); ctx.lineTo(x - pipeW / 2, ny - nr * 0.6);
+    ctx.lineTo(x + pipeW / 2, ny - nr * 0.6); ctx.lineTo(x + pipeW / 2, y + R * 2.35); ctx.closePath();
+    const pg = ctx.createLinearGradient(x - pipeW / 2, y + R * 1.2, x + pipeW / 2, y + R * 2.35);
+    pg.addColorStop(0, p.casingDark); pg.addColorStop(0.5, p.casing); pg.addColorStop(1, p.casingDark);
+    ctx.fillStyle = pg; ctx.fill(); ctx.strokeStyle = p.bolt; ctx.lineWidth = Math.max(1, R * 0.05); ctx.stroke();
+    this.drawFlange(ctx, x, ny, nr * 1.15, R * 0.14, p);
+    if (q > 0.05) {
+      ctx.save(); ctx.beginPath(); ctx.arc(x, ny, nr * 0.72, Math.PI * 0.55, Math.PI * 1.45);
+      ctx.strokeStyle = p.waterSurface; ctx.lineWidth = Math.max(1.5, R * 0.05); ctx.lineCap = 'round'; ctx.stroke(); ctx.restore();
     }
+  }
+  /* water inside the volute (cut-away) */
+  private drawWaterInCasing(ctx: CanvasRenderingContext2D, x: number, y: number, R: number, p: PumpPalette, q: number, n: number): void {
+    this.casingPath(ctx); ctx.save(); this.casingPath(ctx); ctx.clip();
+    const fill = 0.32 + 0.5 * q, fy = y + R * 1.05 - fill * R * 1.6;
+    const wg = ctx.createLinearGradient(x, fy - R * 0.4, x, fy + R * 0.4);
+    wg.addColorStop(0, p.waterSurface); wg.addColorStop(0.5, p.water); wg.addColorStop(1, p.waterDark);
+    ctx.fillStyle = wg; ctx.beginPath(); this.casingPath(ctx); ctx.clip(); ctx.rect(x - R * 1.7, fy, R * 3.4, R * 3); ctx.fill();
+    const shine = (Math.sin(this.t * 4 * n + 1) * 0.5 + 0.5) * n * q;
+    ctx.fillStyle = `rgba(255,255,255,${(0.18 * shine).toFixed(3)})`;
+    ctx.beginPath(); ctx.ellipse(x, fy - R * 0.15, R * 0.9, R * 0.18, 0, 0, Math.PI); ctx.fill();
     ctx.restore();
-
-    // 3. impeller (rotating clockwise)
-    ctx.save();
-    ctx.translate(x, y);
-    ctx.rotate(this.spin);
-    const sh = ctx.createRadialGradient(-R * 0.3, -R * 0.3, R * 0.1, 0, 0, R);
-    sh.addColorStop(0, 'rgba(225,235,245,0.55)'); sh.addColorStop(1, 'rgba(120,145,170,0.55)');
-    ctx.beginPath(); ctx.arc(0, 0, R * 0.98, 0, Math.PI * 2); ctx.fillStyle = sh; ctx.fill();
-    ctx.strokeStyle = 'rgba(70,90,110,0.7)'; ctx.lineWidth = 1.2; ctx.stroke();
-    const r1 = R * 0.3, r2 = R * 0.95, k = 0.95;
+    ctx.beginPath(); ctx.moveTo(x - R * 1.65, y); ctx.lineTo(x + R * 1.65, y);
+    ctx.strokeStyle = `rgba(255,255,255,${(0.25 + 0.15 * n).toFixed(2)})`; ctx.lineWidth = 1; ctx.stroke();
+  }
+  /* volute casing wall (heavy cast iron) */
+  private drawCasingWall(ctx: CanvasRenderingContext2D, x: number, y: number, R: number, p: PumpPalette): void {
+    this.casingPath(ctx);
+    const cg = ctx.createLinearGradient(x - R * 1.6, y - R * 1.7, x + R * 1.6, y + R * 1.7);
+    cg.addColorStop(0, p.casingLight); cg.addColorStop(0.35, p.casing); cg.addColorStop(0.65, p.casingDark); cg.addColorStop(1, p.motorDark);
+    ctx.strokeStyle = cg; ctx.lineWidth = Math.max(4, R * 0.11); ctx.lineJoin = 'round'; ctx.stroke();
+    ctx.strokeStyle = p.casingRim; ctx.lineWidth = Math.max(1.2, R * 0.04); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(x - R * 1.55, y); ctx.lineTo(x + R * 1.55, y);
+    ctx.strokeStyle = p.bolt; ctx.lineWidth = Math.max(1, R * 0.035); ctx.setLineDash([R * 0.12, R * 0.12]); ctx.stroke(); ctx.setLineDash([]);
+  }
+  /* stationary wear ring around the impeller eye */
+  private drawWearRing(ctx: CanvasRenderingContext2D, x: number, y: number, R: number, p: PumpPalette): void {
+    const r1 = R * 0.3, r2 = R * 0.36;
+    const gr = ctx.createRadialGradient(x, y, r1, x, y, r2);
+    gr.addColorStop(0, p.shaftDark); gr.addColorStop(0.45, p.shaft); gr.addColorStop(1, p.motorDark);
+    ctx.fillStyle = gr; ctx.beginPath(); ctx.arc(x, y, r2, 0, Math.PI * 2); ctx.fill();
+    ctx.beginPath(); ctx.arc(x, y, r1, 0, Math.PI * 2); ctx.fillStyle = p.motorDark; ctx.fill();
+    ctx.strokeStyle = p.boltLight; ctx.lineWidth = Math.max(1, R * 0.03);
+    ctx.beginPath(); ctx.arc(x, y, r2, 0, Math.PI * 2); ctx.stroke(); ctx.beginPath(); ctx.arc(x, y, r1, 0, Math.PI * 2); ctx.stroke();
+  }
+  /* spinning metallic impeller */
+  private drawImpeller(ctx: CanvasRenderingContext2D, x: number, y: number, R: number, p: PumpPalette, spin: number, n: number): void {
+    ctx.save(); ctx.translate(x, y); ctx.rotate(spin);
+    const r1 = R * 0.3, r2 = R * 0.95, k = 0.95, bladeW = R * 0.11;
+    const sh = ctx.createRadialGradient(-R * 0.25, -R * 0.25, R * 0.05, 0, 0, R);
+    sh.addColorStop(0, p.impellerRim); sh.addColorStop(0.42, p.impeller); sh.addColorStop(1, p.impellerDark);
+    ctx.beginPath(); ctx.arc(0, 0, r2 * 1.01, 0, Math.PI * 2); ctx.fillStyle = sh; ctx.fill();
+    ctx.strokeStyle = p.impellerDark; ctx.lineWidth = Math.max(1.5, R * 0.03); ctx.stroke();
     const bg = ctx.createLinearGradient(-R, -R, R, R);
-    bg.addColorStop(0, '#eef3f8'); bg.addColorStop(0.5, '#8a9db1'); bg.addColorStop(1, '#d5dee8');
+    bg.addColorStop(0, p.impellerRim); bg.addColorStop(0.35, p.impeller); bg.addColorStop(1, p.impellerDark);
     ctx.lineCap = 'round';
     for (let b = 0; b < 6; b++) {
       const th0 = (b * Math.PI) / 3;
-      ctx.beginPath();
-      for (let j = 0; j <= 14; j++) {
-        const r = r1 + ((r2 - r1) * j) / 14;
-        const th = th0 - k * Math.log(r / r1);                  // leans against the rotation
-        const px = Math.cos(th) * r, py = Math.sin(th) * r;
-        j ? ctx.lineTo(px, py) : ctx.moveTo(px, py);
+      const pts: { x: number; y: number }[] = [];
+      for (let j = 0; j <= 16; j++) {
+        const r = r1 + ((r2 - r1) * j) / 16;
+        const th = th0 - k * Math.log(r / r1);
+        pts.push({ x: Math.cos(th) * r, y: Math.sin(th) * r });
       }
-      ctx.strokeStyle = '#4b5d70'; ctx.lineWidth = R * 0.13; ctx.stroke();
-      ctx.strokeStyle = bg; ctx.lineWidth = R * 0.09; ctx.stroke();
+      for (let j = 0; j < pts.length - 1; j++) {
+        const pt = pts[j], npt = pts[j + 1];
+        const dx = npt.x - pt.x, dy = npt.y - pt.y, l = Math.hypot(dx, dy) || 1;
+        const nx = -dy / l, ny = dx / l;
+        ctx.beginPath(); ctx.moveTo(pt.x + nx * bladeW * 0.5, pt.y + ny * bladeW * 0.5);
+        ctx.lineTo(npt.x + nx * bladeW * 0.5, npt.y + ny * bladeW * 0.5);
+        ctx.lineTo(npt.x - nx * bladeW * 0.5, npt.y - ny * bladeW * 0.5);
+        ctx.lineTo(pt.x - nx * bladeW * 0.5, pt.y - ny * bladeW * 0.5); ctx.closePath();
+        const g = ctx.createLinearGradient(pt.x, pt.y, npt.x, npt.y);
+        g.addColorStop(0, p.impellerRim); g.addColorStop(0.5, p.impeller); g.addColorStop(1, p.impellerDark);
+        ctx.fillStyle = g; ctx.fill(); ctx.strokeStyle = p.shaftDark; ctx.lineWidth = Math.max(1, R * 0.02); ctx.stroke();
+      }
     }
-    ctx.beginPath(); ctx.arc(0, 0, R * 0.32, 0, Math.PI * 2);
-    const hg = ctx.createRadialGradient(-R * 0.1, -R * 0.1, 1, 0, 0, R * 0.32);
-    hg.addColorStop(0, '#f3f6f9'); hg.addColorStop(1, '#7d90a3'); ctx.fillStyle = hg; ctx.fill();
-    ctx.strokeStyle = '#4b5d70'; ctx.lineWidth = 1.5; ctx.stroke();
-    ctx.beginPath(); ctx.arc(0, 0, R * 0.2, 0, Math.PI * 2); ctx.fillStyle = 'rgba(20,60,110,0.55)'; ctx.fill();
-    ctx.beginPath(); ctx.arc(0, 0, R * 0.11, 0, Math.PI * 2); ctx.fillStyle = '#c7d2dd'; ctx.fill();
-    ctx.fillStyle = '#4b5d70'; ctx.fillRect(-R * 0.025, -R * 0.11, R * 0.05, R * 0.05);
+    const hg = ctx.createRadialGradient(-R * 0.1, -R * 0.1, 1, 0, 0, R * 0.34);
+    hg.addColorStop(0, p.impellerRim); hg.addColorStop(1, p.shaftDark);
+    ctx.beginPath(); ctx.arc(0, 0, R * 0.34, 0, Math.PI * 2); ctx.fillStyle = hg; ctx.fill();
+    ctx.strokeStyle = p.shaftDark; ctx.lineWidth = 1.5; ctx.stroke();
+    ctx.beginPath(); ctx.arc(0, 0, R * 0.2, 0, Math.PI * 2); ctx.fillStyle = p.motorDark; ctx.fill();
+    ctx.beginPath(); ctx.arc(0, 0, R * 0.11, 0, Math.PI * 2); ctx.fillStyle = p.boltLight; ctx.fill();
+    ctx.fillStyle = p.motorDark; ctx.fillRect(-R * 0.022, -R * 0.11, R * 0.044, R * 0.05);
+    if (n > 0.5) {
+      ctx.strokeStyle = `rgba(255,255,255,${(0.12 * (n - 0.5)).toFixed(3)})`;
+      ctx.lineWidth = Math.max(2, R * 0.04); ctx.beginPath(); ctx.arc(0, 0, r2 * 1.03, 0, Math.PI * 2); ctx.stroke();
+    }
     ctx.restore();
-
-    // 4. casing wall (cast body, drawn over the water)
-    this.casingPath(ctx);
-    const cg = ctx.createLinearGradient(x - R * 1.5, y - R * 1.6, x + R * 1.5, y + R * 1.5);
-    cg.addColorStop(0, '#dfe7ee'); cg.addColorStop(0.45, '#7f93a7'); cg.addColorStop(1, '#3f5163');
-    ctx.strokeStyle = cg; ctx.lineWidth = Math.max(3, R * 0.09); ctx.lineJoin = 'round'; ctx.stroke();
-    ctx.strokeStyle = 'rgba(255,255,255,0.35)'; ctx.lineWidth = 1; ctx.stroke();
-
-    // 5. discharge flange (bolted) + concentric reducer to the riser
-    const fx0 = x - R * 1.12, fx1 = x - R * 0.38, fy = y - R * 1.55;
-    ctx.fillStyle = '#8a9db1';
-    ctx.fillRect(fx0, fy - R * 0.1, fx1 - fx0, R * 0.12);
-    ctx.fillStyle = '#4b5d70';
-    for (const bx of [fx0 + R * 0.08, fx1 - R * 0.08]) { ctx.beginPath(); ctx.arc(bx, fy - R * 0.04, R * 0.035, 0, Math.PI * 2); ctx.fill(); }
-    const nx = x - R * 0.75, top = fy - R * 0.1, pr = this.g.pipeR;
-    ctx.beginPath();
-    ctx.moveTo(x - R, top); ctx.lineTo(nx - pr, top - R * 0.3); ctx.lineTo(nx + pr, top - R * 0.3); ctx.lineTo(x - R * 0.5, top); ctx.closePath();
-    const rg = ctx.createLinearGradient(x - R, 0, x - R * 0.5, 0);
-    rg.addColorStop(0, '#6f8398'); rg.addColorStop(0.5, '#dfe7ee'); rg.addColorStop(1, '#6f8398');
-    ctx.fillStyle = rg; ctx.fill();
   }
-
+  /* shaft seal / stuffing box */
+  private drawShaftSeal(ctx: CanvasRenderingContext2D, x: number, y: number, R: number, p: PumpPalette, n: number): void {
+    const sx = x + R * 0.62, sy = y, gl = R * 0.14, gr = R * 0.11;
+    ctx.fillStyle = p.shaftDark; ctx.fillRect(sx - gl, sy - gr * 1.4, gl * 1.5, gr * 2.8);
+    ctx.strokeStyle = p.bolt; ctx.lineWidth = Math.max(1, R * 0.03); ctx.strokeRect(sx - gl, sy - gr * 1.4, gl * 1.5, gr * 2.8);
+    for (const syb of [sy - gr * 0.8, sy + gr * 0.8]) {
+      ctx.fillStyle = p.boltLight; ctx.beginPath(); ctx.arc(sx - gl * 0.35, syb, R * 0.03, 0, Math.PI * 2); ctx.fill();
+    }
+    ctx.fillStyle = p.shaft; ctx.fillRect(sx - gl * 0.5, sy - R * 0.025, gl * 0.5, R * 0.05);
+    const leak = Math.min(1, Math.max(0, (n - 0.6) * 3)) * Math.max(0, Math.sin(this.t * 2.2));
+    if (leak > 0.05) {
+      ctx.fillStyle = `rgba(255,255,255,${(0.35 * leak).toFixed(3)})`;
+      ctx.beginPath(); ctx.arc(sx, sy + gr * 1.5 + leak * 4, R * 0.025, 0, Math.PI * 2); ctx.fill();
+    }
+  }
+  /* discharge nozzle: vertical, upward pumping direction */
+  private drawDischargeNozzle(ctx: CanvasRenderingContext2D, x: number, y: number, R: number, p: PumpPalette, q: number): void {
+    const nx = x - R * 0.72, ny = y - R * 1.5, nr = R * 0.34;
+    this.drawFlange(ctx, nx, ny - nr * 0.2, R * 0.52, R * 0.3, p);
+    ctx.beginPath(); ctx.moveTo(nx - nr, ny - nr * 0.6); ctx.lineTo(nx - nr, ny - R * 1.05);
+    ctx.lineTo(nx + nr, ny - R * 1.05); ctx.lineTo(nx + nr, ny - nr * 0.6); ctx.closePath();
+    const pg = ctx.createLinearGradient(nx - nr, ny - R * 1.1, nx + nr, ny - nr * 0.6);
+    pg.addColorStop(0, p.casingDark); pg.addColorStop(0.5, p.casing); pg.addColorStop(1, p.casingDark);
+    ctx.fillStyle = pg; ctx.fill(); ctx.strokeStyle = p.bolt; ctx.lineWidth = Math.max(1, R * 0.04); ctx.stroke();
+    ctx.save(); ctx.beginPath();
+    ctx.moveTo(nx - nr * 0.5, ny - nr * 0.6); ctx.lineTo(nx - nr * 0.5, ny - R * 1.05);
+    ctx.moveTo(nx, ny - nr * 0.6); ctx.lineTo(nx, ny - R * 1.05);
+    ctx.moveTo(nx + nr * 0.5, ny - nr * 0.6); ctx.lineTo(nx + nr * 0.5, ny - R * 1.05);
+    ctx.setLineDash([R * 0.16, R * 0.2]); ctx.lineDashOffset = this.flowPh * R * 2.2;
+    ctx.strokeStyle = `rgba(230,248,255,${(0.55 + 0.25 * q).toFixed(2)})`; ctx.lineWidth = Math.max(1.2, R * 0.04); ctx.lineCap = 'round'; ctx.stroke();
+    ctx.restore();
+  }
+  /* electric motor with cooling fins */
+  private drawMotor(ctx: CanvasRenderingContext2D, x: number, y: number, R: number, p: PumpPalette, spin: number, n: number): void {
+    const mx = x, my = y - R * 2.55, mw = R * 1.85, mh = R * 1.05;
+    const mg = ctx.createLinearGradient(mx - mw / 2, my - mh / 2, mx + mw / 2, my + mh / 2);
+    mg.addColorStop(0, p.motorLight); mg.addColorStop(0.4, p.motor); mg.addColorStop(0.8, p.motorDark); mg.addColorStop(1, p.motorFin);
+    ctx.fillStyle = mg; ctx.beginPath(); ctx.roundRect(mx - mw / 2, my - mh / 2, mw, mh, Math.max(4, R * 0.06)); ctx.fill();
+    ctx.strokeStyle = p.shaftDark; ctx.lineWidth = Math.max(1.5, R * 0.04); ctx.stroke();
+    ctx.strokeStyle = p.motorFin; ctx.lineWidth = Math.max(1, R * 0.03);
+    for (let i = 0; i < 10; i++) {
+      const ang = (i / 10) * Math.PI * 2;
+      const fx = mx + Math.cos(ang) * (mw * 0.42), fy = my + Math.sin(ang) * (mh * 0.42);
+      const tx = mx + Math.cos(ang) * (mw * 0.52), ty = my + Math.sin(ang) * (mh * 0.52);
+      ctx.beginPath(); ctx.moveTo(fx, fy); ctx.lineTo(tx, ty); ctx.stroke();
+    }
+    const tbw = R * 0.7, tbh = R * 0.4;
+    ctx.fillStyle = p.motorDark; ctx.fillRect(mx - tbw / 2, my - mh / 2 - tbh, tbw, tbh);
+    ctx.strokeStyle = p.bolt; ctx.lineWidth = Math.max(1, R * 0.03); ctx.strokeRect(mx - tbw / 2, my - mh / 2 - tbh, tbw, tbh);
+    ctx.fillStyle = p.boltLight; ctx.beginPath(); ctx.arc(mx, my - mh / 2 - tbh * 0.5, R * 0.025, 0, Math.PI * 2); ctx.fill();
+    const cy = y - R * 1.45;
+    ctx.fillStyle = p.shaftDark; ctx.fillRect(x - R * 0.16, cy - R * 0.06, R * 0.32, R * 0.12);
+    ctx.strokeStyle = p.shaft; ctx.lineWidth = Math.max(1, R * 0.025); ctx.beginPath(); ctx.moveTo(x - R * 0.16, cy); ctx.lineTo(x + R * 0.16, cy); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(x, y - R * 0.34); ctx.lineTo(x, cy + R * 0.06);
+    ctx.strokeStyle = p.shaftDark; ctx.lineWidth = Math.max(1, R * 0.02); ctx.setLineDash([R * 0.08, R * 0.06]); ctx.stroke(); ctx.setLineDash([]);
+    if (n > 0.55) {
+      ctx.strokeStyle = `rgba(255,255,255,${(0.08 * (n - 0.55)).toFixed(3)})`;
+      ctx.lineWidth = Math.max(2, R * 0.03); ctx.beginPath(); ctx.ellipse(mx, my, mw * 0.55, mh * 0.55, 0, 0, Math.PI * 2); ctx.stroke();
+    }
+  }
+  /* bolted flange helper */
+  private drawFlange(ctx: CanvasRenderingContext2D, cx: number, cy: number, half: number, thick: number, p: PumpPalette): void {
+    const g = ctx.createLinearGradient(cx, cy - thick, cx, cy + thick);
+    g.addColorStop(0, p.casingLight); g.addColorStop(0.5, p.casing); g.addColorStop(1, p.casingDark);
+    ctx.fillStyle = g; ctx.fillRect(cx - half, cy - thick, half * 2, thick * 2);
+    ctx.strokeStyle = p.shaftDark; ctx.lineWidth = Math.max(1, thick * 0.25); ctx.strokeRect(cx - half, cy - thick, half * 2, thick * 2);
+    const boltR = half * 0.78, boltN = 8;
+    for (let i = 0; i < boltN; i++) {
+      const ang = (i / boltN) * Math.PI * 2;
+      const bx = cx + Math.cos(ang) * boltR, by = cy + Math.sin(ang) * boltR;
+      ctx.fillStyle = p.boltLight; ctx.beginPath(); ctx.arc(bx, by, thick * 0.18, 0, Math.PI * 2); ctx.fill();
+      ctx.fillStyle = p.bolt; ctx.beginPath(); ctx.arc(bx, by, thick * 0.09, 0, Math.PI * 2); ctx.fill();
+    }
+    ctx.strokeStyle = p.gasket; ctx.lineWidth = Math.max(1, thick * 0.18);
+    ctx.beginPath(); ctx.ellipse(cx, cy, half * 0.92, thick * 0.92, 0, 0, Math.PI * 2); ctx.stroke();
+  }
+  /* cavitation bubbles near the impeller eye */
+  private drawCavitation(ctx: CanvasRenderingContext2D, x: number, y: number, R: number, p: PumpPalette, q: number, n: number): void {
+    for (let i = 0; i < 8; i++) {
+      const ang = this.t * 1.3 + (i / 8) * Math.PI * 2;
+      const rr = R * (0.42 + 0.35 * Math.sin(this.t + i));
+      const bx = x + Math.cos(ang) * rr, by = y + Math.sin(ang) * rr * 0.85;
+      const rad = R * (0.015 + 0.03 * Math.abs(Math.sin(this.t * 3 + i)));
+      ctx.fillStyle = p.cavitation; ctx.beginPath(); ctx.arc(bx, by, rad, 0, Math.PI * 2); ctx.fill();
+    }
+  }
   /**
    * Streamlines from the pump to each value. In a source + free vortex the
    * streamlines are logarithmic spirals theta(r) = theta_b - c ln(Rb/r)

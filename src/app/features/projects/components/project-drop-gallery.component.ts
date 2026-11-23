@@ -3,6 +3,7 @@ import {
 } from '@angular/core';
 import { TranslatePipe } from '@ngx-translate/core';
 import { HydroTicker } from '../../../shared/hydro/hydro-ticker.service';
+import { HxWaveEdgeComponent } from '../../../shared/hydro/hx-wave-edge.component';
 import { GRAVITY, clamp } from '../../../shared/hydro/hydro-physics';
 
 interface Transition { from: number; to: number; x: number; y: number; t: number; phase: 'fall' | 'ripple'; }
@@ -23,9 +24,12 @@ interface Transition { from: number; to: number; x: number; y: number; t: number
 @Component({
   selector: 'app-project-drop-gallery',
   standalone: true,
-  imports: [TranslatePipe],
+  imports: [TranslatePipe, HxWaveEdgeComponent],
   template: `
     <section class="dg" [attr.aria-label]="'project_gallery' | translate">
+      <!-- the reading (white) goes under the surface into the deep gallery, and rises again into the light dossier -->
+      <app-hx-wave-edge color="#ffffff" back="#2f8fe0" [flip]="true" />
+      <app-hx-wave-edge color="#eaf5fd" back="#2f8fe0" />
       <div class="hx-container">
         <header class="hx-head dg__head">
           <p class="hx-eyebrow hx-eyebrow--light">{{ 'project_gallery' | translate }}</p>

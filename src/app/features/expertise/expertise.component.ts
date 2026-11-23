@@ -36,7 +36,7 @@ import { ExpertiseFlowComponent } from './components/expertise-flow.component';
       <app-wave-pipe class="xp-hero__joint" [height]="110" [amplitude]="28" [phase]="1.1" fillBelow="#eef6fd" />
     </section>
 
-    <section class="xp-hub hx-blueprint">
+    <section class="xp-hub">
       <div class="hx-container">
         <header class="hx-head hx-reveal" hxReveal>
           <p class="hx-eyebrow">{{ 'xp_hub_kicker' | translate }}</p>

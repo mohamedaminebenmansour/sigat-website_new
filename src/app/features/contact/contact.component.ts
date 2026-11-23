@@ -1,75 +1,42 @@
 import { Component, inject } from '@angular/core';
-import { RouterLink } from '@angular/router';
 import { TranslatePipe } from '@ngx-translate/core';
 import { MockDataService } from '../../core/services/mock-data.service';
-import type { ProjectMapEntry } from '../../shared/components/project-map/project-map.types';
-import { ContactHeroComponent } from './components/contact-hero.component';
+import { ContactLayingComponent } from './components/contact-laying.component';
 import { ProjectInquiryComponent } from './components/project-inquiry.component';
-import { ContactInformationComponent } from './components/contact-information.component';
 import { ContactOfficeComponent } from './components/contact-office.component';
-import { ContactProcessComponent } from './components/contact-process.component';
-import { ContactTrustComponent } from './components/contact-trust.component';
-import { ContactFeaturedProjectComponent } from './components/contact-featured-project.component';
-import { CtaBannerComponent } from '../../shared/components/cta-banner.component';
 import { ProjectMapComponent } from '../../shared/components/project-map/project-map.component';
+import { WavePipeComponent } from '../../shared/hydraulics/wave-pipe.component';
 
+/**
+ * CONTACT — "we lay the pipe to your project".
+ *   1. the pipe-laying site (sticky, scroll = the real installation sequence)
+ *   2. the glass pipe leaves the ground (the page's only pipe joint)
+ *   3. the inquiry form = the connection (its pipe fills as the form is completed)
+ *   4. head office, 5. map of the sites
+ */
 @Component({
   selector: 'app-contact',
   standalone: true,
   host: { class: 'contact-page' },
-  imports: [
-    RouterLink,
-    TranslatePipe,
-    ContactHeroComponent,
-    ProjectInquiryComponent,
-    ContactInformationComponent,
-    ContactOfficeComponent,
-    ContactProcessComponent,
-    ContactTrustComponent,
-    ContactFeaturedProjectComponent,
-    CtaBannerComponent,
-    ProjectMapComponent,
-  ],
+  imports: [TranslatePipe, ContactLayingComponent, ProjectInquiryComponent, ContactOfficeComponent, ProjectMapComponent, WavePipeComponent],
   template: `
-    <app-contact-hero />
-<app-contact-trust />
+    <app-contact-laying />
+    <app-wave-pipe class="lay__joint" [height]="110" [amplitude]="28" [phase]="1.3" fillAbove="#8f6f4a" fillBelow="#eef7fd" />
     <app-project-inquiry />
-    <app-contact-process />
-
-
-
-
-
     <app-contact-office />
 
-
-
-    <!-- Map section -->
     @if (mapEntries().length > 0) {
-      <section class="py-16 md:py-20 bg-gray-50">
+      <section class="cm pt-8 md:pt-10 pb-16 md:pb-20">
         <div class="container mx-auto px-4">
           <div class="text-center max-w-3xl mx-auto mb-10">
-            <p class="text-sm font-semibold uppercase tracking-[0.18em] text-orange-500 mb-3">{{ 'contact_map_eyebrow' | translate }}</p>
-            <h2 class="text-2xl md:text-3xl font-bold text-gray-900 mb-3">{{ 'contact_map_title' | translate }}</h2>
-            <p class="text-gray-600">{{ 'contact_map_subtitle' | translate }}</p>
+            <p class="hx-eyebrow" style="justify-content:center">{{ 'contact_map_eyebrow' | translate }}</p>
+            <h2 class="hx-h2 hx-display">{{ 'contact_map_title' | translate }}</h2>
+            <p class="text-gray-600 mt-3">{{ 'contact_map_subtitle' | translate }}</p>
           </div>
-          <div>
-            <app-project-map [projects]="mapEntries()" />
-          </div>
+          <app-project-map [projects]="mapEntries()" />
         </div>
       </section>
     }
-
-
-
-
-
-    <app-cta-banner
-      [title]="'contact_cta_title' | translate"
-      [description]="'contact_cta_subtitle' | translate"
-      [buttonText]="'contact_cta_btn' | translate"
-      buttonRoute="#project-inquiry"
-    />
   `
 })
 export class ContactComponent {

@@ -40,9 +40,21 @@ export interface Project {
   /** Geographic information for the location/map section. */
   locationGeo?: ProjectGeo;
 
+  /** Nature of the works, drives the animated schematic on the projects network. */
+  work?: ProjectWork;
+
+  /** Contract value band (TND, excl. tax) for the references table: < 1 M, 1–5 M, 5–10 M, > 10 M. */
+  amount?: 'lt1' | '1_5' | '5_10' | 'gt10';
+
+  /** Delivery status for the references table. */
+  status?: 'done' | 'ongoing';
+
   /** Marks this entry as the company office rather than a real construction project. */
   isOffice?: boolean;
 }
+
+/** supply = pressure main (AEP), sewer = gravity network, desal = reverse osmosis, bridge = canal bridge, vrd = roads & utilities */
+export type ProjectWork = 'supply' | 'sewer' | 'desal' | 'bridge' | 'vrd';
 
 export interface ProjectMedia {
   cover: string;

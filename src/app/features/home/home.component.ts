@@ -4,7 +4,7 @@ import { HomeWaterSceneComponent } from './sections/home-water-scene.component';
 import { WavePipeComponent } from '../../shared/hydraulics/wave-pipe.component';
 import { ValuesPumpComponent } from '../about/components/values-pump.component';
 import { HomeProjectsComponent } from './sections/home-projects.component';
-import { HomeTapComponent } from './sections/home-tap.component';
+import { HomeOutfallComponent } from './sections/home-outfall.component';
 
 /**
  * HOME — where SIGAT's water comes from, as a real installation:
@@ -16,7 +16,7 @@ import { HomeTapComponent } from './sections/home-tap.component';
  *                   story is written on the water
  *   valeurs       — wet well -> centrifugal pump (values in its free vortex)
  *                   -> rising main straight up into the logo's J
- *   realisations, robinet (call to action)
+ *   realisations, then the outfall: the main discharges into the pool (call to action)
  *
  * The riser x is reported by the water scene (tailX), so the pump section
  * always lines up with the logo's J whatever the screen size.
@@ -24,16 +24,16 @@ import { HomeTapComponent } from './sections/home-tap.component';
 @Component({
   selector: 'app-home',
   standalone: true,
-  imports: [HomeHeroComponent, HomeWaterSceneComponent, WavePipeComponent, ValuesPumpComponent, HomeProjectsComponent, HomeTapComponent],
+  imports: [HomeHeroComponent, HomeWaterSceneComponent, WavePipeComponent, ValuesPumpComponent, HomeProjectsComponent, HomeOutfallComponent],
   template: `
     <app-home-hero />
     <app-wave-pipe class="hx-joint" [height]="110" [amplitude]="30" [phase]="0.6" fillAbove="#04294f" fillBelow="#86d0f7" />
     <app-home-water-scene (tailX)="riserX.set($event)" (pump)="pumpOn.set($event)" />
     <app-values-pump [riserX]="riserX()" [running]="pumpOn()" [source]="true" sectionId="values-home" />
     <!-- the network carries on: the well's water hands over to the projects ("where the water arrives") -->
-    <app-wave-pipe class="hx-joint" [height]="110" [amplitude]="28" [phase]="1.7" fillAbove="#1d6dc6" fillBelow="#d6edfb" />
+    <app-wave-pipe class="hx-joint" [height]="110" [amplitude]="28" [phase]="1.7" fillAbove="#1d6dc6" fillBelow="#c9eefc" />
     <app-home-projects />
-    <app-home-tap />
+    <app-home-outfall />
   `
 })
 export class HomeComponent {
