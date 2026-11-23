@@ -56,10 +56,15 @@ interface PumpPalette {
       <canvas #front class="vp__cv vp__cv--front" aria-hidden="true"></canvas>
 
       <div class="vp__panel" aria-live="polite">
-        <h3 class="hx-display"><i [class]="values[focus()].icon" aria-hidden="true"></i> {{ values[focus()].titleKey | translate }}</h3>
-        <p>{{ values[focus()].descriptionKey | translate }}</p>
-        <small>{{ 'hx_pump_hint' | translate }}</small>
+        <span class="vp__ptile" aria-hidden="true"><i [class]="values[focus()].icon"></i></span>
+        <div class="vp__pbody">
+          <p class="vp__pidx">{{ (focus() + 1).toString().padStart(2, '0') }} <span>/ {{ values.length.toString().padStart(2, '0') }}</span></p>
+          <h3 class="hx-display">{{ values[focus()].titleKey | translate }}</h3>
+          <p>{{ values[focus()].descriptionKey | translate }}</p>
+        </div>
+        <span class="vp__dots" aria-hidden="true">@for (v of values; track v.id; let i = $index) { <i [class.is-on]="i === focus()"></i> }</span>
       </div>
+      <p class="vp__hint">{{ 'hx_pump_hint' | translate }}</p>
     </section>
   `
 })
@@ -333,11 +338,12 @@ export class ValuesPumpComponent implements AfterViewInit, OnDestroy {
     if (f !== this.focus()) this.focus.set(f);
     this.planetEls.forEach((el, i) => {
       const o = orbits[i];
-      const s = (1 + 0.2 * o.d) * (this.hover() === i ? 1.15 : 1);
+      const s = (0.92 + 0.22 * o.d) * (this.hover() === i ? 1.15 : 1);
       const n = el.nativeElement;
       n.style.transform = `translate3d(${(o.x - g.pr).toFixed(1)}px, ${(o.y - g.pr).toFixed(1)}px, 0) scale(${s.toFixed(3)})`;
-      n.style.zIndex = o.d >= 0 ? '3' : '1';
-      n.style.opacity = (0.78 + 0.22 * (o.d + 1) / 2).toFixed(2);
+      n.style.zIndex = String(3 + Math.round((o.d + 1) * 10));          // strict depth order: no label drawn over a nearer bubble
+      n.style.opacity = (0.55 + 0.45 * (o.d + 1) / 2).toFixed(2);
+      n.style.setProperty('--near', ((o.d + 1) / 2).toFixed(2));
     });
   }
 
@@ -513,6 +519,7 @@ export class ValuesPumpComponent implements AfterViewInit, OnDestroy {
 
     // Paint back → front so overlapping parts occlude correctly.
     this.drawBasePlate(ctx, x, y, R, p);
+    this.drawMotor(ctx, x, y, R, p, spin, n);
     this.drawSuctionNozzle(ctx, x, y, R, p, q);
     this.drawWaterInCasing(ctx, x, y, R, p, q, n);
     this.drawCasingWall(ctx, x, y, R, p);
@@ -520,20 +527,28 @@ export class ValuesPumpComponent implements AfterViewInit, OnDestroy {
     this.drawImpeller(ctx, x, y, R, p, spin, n);
     this.drawShaftSeal(ctx, x, y, R, p, n);
     this.drawDischargeNozzle(ctx, x, y, R, p, q);
-    this.drawMotor(ctx, x, y, R, p, spin, n);
     if (q > 0.5 && n > 0.25) this.drawCavitation(ctx, x, y, R, p, q, n);
   }
 
-  /* base plate / skid */
+  /* concrete plinths (the suction passes between them) with anchor bolts; cast feet of the casing bolted on */
   private drawBasePlate(ctx: CanvasRenderingContext2D, x: number, y: number, R: number, p: PumpPalette): void {
-    const bw = R * 3.6, bh = R * 0.55;
-    const g = ctx.createLinearGradient(x - bw / 2, y + R * 1.2, x + bw / 2, y + R * 1.2 + bh);
-    g.addColorStop(0, p.shaftDark); g.addColorStop(0.5, p.shaft); g.addColorStop(1, p.shaftDark);
-    ctx.fillStyle = g; ctx.fillRect(x - bw / 2, y + R * 1.2, bw, bh);
-    ctx.strokeStyle = p.bolt; ctx.lineWidth = Math.max(1, R * 0.04); ctx.strokeRect(x - bw / 2, y + R * 1.2, bw, bh);
-    for (const bx of [x - bw / 2 + R * 0.5, x + bw / 2 - R * 0.5]) {
-      ctx.fillStyle = p.boltLight; ctx.beginPath(); ctx.arc(bx, y + R * 1.2 + bh * 0.5, R * 0.05, 0, Math.PI * 2); ctx.fill();
-      ctx.fillStyle = p.bolt; ctx.beginPath(); ctx.arc(bx, y + R * 1.2 + bh * 0.5, R * 0.025, 0, Math.PI * 2); ctx.fill();
+    const top = y + R * 1.32, h = R * 0.5, gap = R * 0.62, w = R * 1.25;
+    for (const sx of [-1, 1]) {
+      const x0 = sx < 0 ? x - gap - w : x + gap;
+      const g = ctx.createLinearGradient(0, top, 0, top + h);
+      g.addColorStop(0, '#d3cfc6'); g.addColorStop(1, '#a9a399');
+      ctx.fillStyle = g; ctx.fillRect(x0, top, w, h);
+      ctx.fillStyle = 'rgba(0,0,0,0.12)'; ctx.fillRect(x0, top + h - R * 0.06, w, R * 0.06);
+      // cast foot of the casing, bolted to the plinth
+      const fx = sx < 0 ? x - gap - R * 0.38 : x + gap + R * 0.02;
+      ctx.beginPath(); ctx.moveTo(fx, top); ctx.lineTo(fx + R * 0.36, top); ctx.lineTo(fx + R * (sx < 0 ? 0.36 : 0.18), top - R * 0.24); ctx.lineTo(fx + R * (sx < 0 ? 0.18 : 0), top - R * 0.24); ctx.closePath();
+      ctx.fillStyle = p.casingDark; ctx.fill();
+      for (const bx of [fx + R * 0.08, fx + R * 0.28]) {
+        ctx.fillStyle = p.boltLight; ctx.beginPath(); ctx.arc(bx, top - R * 0.03, R * 0.04, 0, Math.PI * 2); ctx.fill();
+      }
+      // anchor bolts of the motor feet on the outer end
+      const ax = sx < 0 ? x0 + R * 0.2 : x0 + w - R * 0.2;
+      ctx.fillStyle = p.bolt; ctx.fillRect(ax - R * 0.05, top - R * 0.05, R * 0.1, R * 0.05);
     }
   }
   /* suction nozzle: water enters from the bottom */
@@ -661,32 +676,45 @@ export class ValuesPumpComponent implements AfterViewInit, OnDestroy {
     ctx.strokeStyle = `rgba(230,248,255,${(0.55 + 0.25 * q).toFixed(2)})`; ctx.lineWidth = Math.max(1.2, R * 0.04); ctx.lineCap = 'round'; ctx.stroke();
     ctx.restore();
   }
-  /* electric motor with cooling fins */
+  /* TEFC electric motor behind the casing, on the same shaft: seen end-on, offset up-right for depth —
+     finned frame (fins are radial when seen along the shaft), feet on the plinths, terminal box, lifting eye */
   private drawMotor(ctx: CanvasRenderingContext2D, x: number, y: number, R: number, p: PumpPalette, spin: number, n: number): void {
-    const mx = x, my = y - R * 2.55, mw = R * 1.85, mh = R * 1.05;
-    const mg = ctx.createLinearGradient(mx - mw / 2, my - mh / 2, mx + mw / 2, my + mh / 2);
-    mg.addColorStop(0, p.motorLight); mg.addColorStop(0.4, p.motor); mg.addColorStop(0.8, p.motorDark); mg.addColorStop(1, p.motorFin);
-    ctx.fillStyle = mg; ctx.beginPath(); ctx.roundRect(mx - mw / 2, my - mh / 2, mw, mh, Math.max(4, R * 0.06)); ctx.fill();
-    ctx.strokeStyle = p.shaftDark; ctx.lineWidth = Math.max(1.5, R * 0.04); ctx.stroke();
-    ctx.strokeStyle = p.motorFin; ctx.lineWidth = Math.max(1, R * 0.03);
-    for (let i = 0; i < 10; i++) {
-      const ang = (i / 10) * Math.PI * 2;
-      const fx = mx + Math.cos(ang) * (mw * 0.42), fy = my + Math.sin(ang) * (mh * 0.42);
-      const tx = mx + Math.cos(ang) * (mw * 0.52), ty = my + Math.sin(ang) * (mh * 0.52);
-      ctx.beginPath(); ctx.moveTo(fx, fy); ctx.lineTo(tx, ty); ctx.stroke();
+    const mx = x + R * 0.55, my = y - R * 0.6, Rm = R * 1.28, fins = 36;
+    // feet down to the plinths
+    ctx.fillStyle = p.motorDark;
+    for (const sx of [-1, 1]) {
+      const fx = mx + sx * Rm * 0.72;
+      ctx.beginPath(); ctx.moveTo(fx - R * 0.16, my + Rm * 0.6); ctx.lineTo(fx + R * 0.16, my + Rm * 0.6);
+      ctx.lineTo(fx + R * 0.24, y + R * 1.32); ctx.lineTo(fx - R * 0.24, y + R * 1.32); ctx.closePath(); ctx.fill();
     }
-    const tbw = R * 0.7, tbh = R * 0.4;
-    ctx.fillStyle = p.motorDark; ctx.fillRect(mx - tbw / 2, my - mh / 2 - tbh, tbw, tbh);
-    ctx.strokeStyle = p.bolt; ctx.lineWidth = Math.max(1, R * 0.03); ctx.strokeRect(mx - tbw / 2, my - mh / 2 - tbh, tbw, tbh);
-    ctx.fillStyle = p.boltLight; ctx.beginPath(); ctx.arc(mx, my - mh / 2 - tbh * 0.5, R * 0.025, 0, Math.PI * 2); ctx.fill();
-    const cy = y - R * 1.45;
-    ctx.fillStyle = p.shaftDark; ctx.fillRect(x - R * 0.16, cy - R * 0.06, R * 0.32, R * 0.12);
-    ctx.strokeStyle = p.shaft; ctx.lineWidth = Math.max(1, R * 0.025); ctx.beginPath(); ctx.moveTo(x - R * 0.16, cy); ctx.lineTo(x + R * 0.16, cy); ctx.stroke();
-    ctx.beginPath(); ctx.moveTo(x, y - R * 0.34); ctx.lineTo(x, cy + R * 0.06);
-    ctx.strokeStyle = p.shaftDark; ctx.lineWidth = Math.max(1, R * 0.02); ctx.setLineDash([R * 0.08, R * 0.06]); ctx.stroke(); ctx.setLineDash([]);
+    // fins
+    ctx.save(); ctx.translate(mx, my);
+    for (let i = 0; i < fins; i++) {
+      ctx.save(); ctx.rotate((i / fins) * Math.PI * 2);
+      ctx.fillStyle = p.motorDark;                                    // cast cooling fins: short, rounded
+      ctx.beginPath(); ctx.roundRect(-R * 0.03, -Rm - R * 0.085, R * 0.06, R * 0.12, R * 0.03); ctx.fill();
+      ctx.restore();
+    }
+    // frame
+    const fg = ctx.createRadialGradient(-Rm * 0.35, -Rm * 0.35, Rm * 0.1, 0, 0, Rm);
+    fg.addColorStop(0, p.motorLight); fg.addColorStop(0.55, p.motor); fg.addColorStop(1, p.motorDark);
+    ctx.beginPath(); ctx.arc(0, 0, Rm, 0, Math.PI * 2); ctx.fillStyle = fg; ctx.fill();
+    ctx.strokeStyle = p.motorFin; ctx.lineWidth = Math.max(1.2, R * 0.03); ctx.stroke();
+    // end shield ring + bolts
+    ctx.beginPath(); ctx.arc(0, 0, Rm * 0.82, 0, Math.PI * 2); ctx.strokeStyle = 'rgba(255,255,255,0.12)'; ctx.lineWidth = Math.max(1, R * 0.025); ctx.stroke();
+    for (let i = 0; i < 4; i++) { const a = Math.PI / 4 + (i * Math.PI) / 2; ctx.fillStyle = p.boltLight; ctx.beginPath(); ctx.arc(Math.cos(a) * Rm * 0.9, Math.sin(a) * Rm * 0.9, R * 0.035, 0, Math.PI * 2); ctx.fill(); }
+    ctx.restore();
+    // terminal box and lifting eye on top
+    const tbw = R * 0.62, tbh = R * 0.34, ty = my - Rm - R * 0.08;
+    ctx.fillStyle = p.motorDark; ctx.beginPath(); ctx.roundRect(mx - tbw / 2, ty - tbh, tbw, tbh, R * 0.05); ctx.fill();
+    ctx.strokeStyle = p.motorLight; ctx.lineWidth = Math.max(1, R * 0.02); ctx.stroke();
+    ctx.fillStyle = p.bolt; ctx.fillRect(mx + tbw / 2, ty - tbh * 0.6, R * 0.14, R * 0.09);              // cable gland
+    ctx.strokeStyle = p.motorLight; ctx.lineWidth = Math.max(1.5, R * 0.04);
+    ctx.beginPath(); ctx.arc(mx - Rm * 0.55, my - Rm * 0.86, R * 0.09, Math.PI, 0); ctx.stroke();          // lifting eye
+    // a soft hum glow when running
     if (n > 0.55) {
       ctx.strokeStyle = `rgba(255,255,255,${(0.08 * (n - 0.55)).toFixed(3)})`;
-      ctx.lineWidth = Math.max(2, R * 0.03); ctx.beginPath(); ctx.ellipse(mx, my, mw * 0.55, mh * 0.55, 0, 0, Math.PI * 2); ctx.stroke();
+      ctx.lineWidth = Math.max(2, R * 0.03); ctx.beginPath(); ctx.arc(mx, my, Rm + R * 0.18, 0, Math.PI * 2); ctx.stroke();
     }
   }
   /* bolted flange helper */

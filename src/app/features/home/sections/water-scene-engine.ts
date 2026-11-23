@@ -150,6 +150,7 @@ export class WaterSceneEngine {
   private ringPh = 0;
   private drainPath?: Path;
   private drainFill = 0;                         // closed drain: water standing in it (fraction, from the bottom up)
+  private drainIn = 0;                           // inflow over the drain's rim (0..1): the falling stream inside the tube
   private pourX = 0;                             // where the inlet jet hits the surface
   /** surface level (0..1) at which the outlet mouth is reached */
   private readonly mouthLevel = (LG.ringBottom - OUT_MOUTH_Y) / (LG.ringBottom - LG.full);
@@ -614,8 +615,20 @@ export class WaterSceneEngine {
         if (Math.random() < 0.2) this.ringRip.push({ x: hit.x, t: 0, amp: 1 });
       }
     }
-    // closed drain: fills from its bottom as soon as the surface covers its mouth; a shut valve holds it
-    if (this.level > this.drainLevel + 0.01) this.drainFill = Math.min(1, this.drainFill + dt * 1.2);
+    // closed drain, filled through its only opening: once the surface covers the mouth, water spills over the rim
+    // (weir: q ∝ head^1.5), falls down the dry tube onto the shut valve and the column rises from there; the trapped
+    // air must leave through the same mouth, so the filling pulses ("glugging") and bubbles burst out into the ring
+    const head = this.level - this.drainLevel;
+    if (head > 0 && this.drainFill < 1) {
+      const q = Math.pow(clamp(head / 0.06, 0, 1), 1.5);
+      const glug = 0.35 + 0.65 * Math.pow(Math.max(0, Math.sin(this.t * 10.5)), 2);
+      this.drainIn = q * glug;
+      this.drainFill = Math.min(1, this.drainFill + dt * 0.42 * this.drainIn);
+      if (Math.random() < dt * 14 * q * (1 - glug * 0.5)) {
+        const [mx, my] = this.M(DRAIN_LINE[0][0], DRAIN_MOUTH_Y);
+        this.ringBub.push({ x: mx + rand(-3, 3) * s / 0.4, y: my - 2, vx: rand(-8, 8), vy: -rand(20, 50), r: rand(1.2, 3.2), life: 1 });
+      }
+    } else this.drainIn = Math.max(0, this.drainIn - dt * 3);
     // drain leg — the valve is turned by hand-ish speed (~0.35 s)
     this.valve = clamp(this.valve + (this.releasing ? 1 : -1) * dt / 0.35, 0, 1);
     if (this.level > 0.004) this.legUpper = Math.min(1, this.legUpper + dt * 1.6);          // ring water runs down to the shut valve
@@ -757,7 +770,16 @@ export class WaterSceneEngine {
     // closed drain: still water standing on the shut valve, then the real closure at its foot
     if (this.drainPath) {
       const dp = this.drainPath;
-      if (this.drainFill > 0) this.inBore(ctx, 2, box, g => this.tubeWater(g, dp, dp.length * (1 - this.drainFill), dp.length, r, 0, false, this.drainFill < 1, false));
+      const top = dp.length * (1 - this.drainFill);
+      // the stream falling inside the dry part of the tube, from the rim to the column (thin: q is small)
+      if (this.drainIn > 0.02 && top > 2) this.inBore(ctx, 2, box, g => {
+        tracePath(g, dp, 0, top, r * 0.25);
+        g.lineCap = 'round'; g.lineWidth = Math.max(1.5, r * (0.18 + 0.22 * this.drainIn)); g.strokeStyle = `rgba(120,200,255,${0.55 + 0.35 * this.drainIn})`; g.stroke();
+        g.setLineDash([r * 0.6, r * 1.1]); g.lineDashOffset = -this.t * 420 * s; g.lineWidth = Math.max(1, r * 0.08); g.strokeStyle = 'rgba(255,255,255,0.8)'; g.stroke(); g.setLineDash([]);
+        const q = dp.at(top);                                          // froth where it lands on the column
+        g.fillStyle = `rgba(255,255,255,${0.75 * this.drainIn})`; g.beginPath(); g.ellipse(q.x, q.y - 1, r * 0.9, r * 0.28, 0, 0, Math.PI * 2); g.fill();
+      });
+      if (this.drainFill > 0) this.inBore(ctx, 2, box, g => this.tubeWater(g, dp, top, dp.length, r, 0, false, this.drainFill < 1, false));
       this.drawDrainClosure(ctx, dp);
     }
     this.drawPour(ctx, r);
