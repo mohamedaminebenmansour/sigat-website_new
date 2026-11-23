@@ -1556,8 +1556,23 @@ textarea.ci-input { resize: vertical; }
 .lg__upd a { color: #1565c0; }
 /* HSE trench: pinned beside the steps, like the partnership joint */
 @media (min-width: 1024px) {
-  /* scroll sequence: a tall section whose content stays pinned while the 4 stages play */
-  .ht { min-height: 300vh; overflow: clip; }   /* clip (not hidden): hidden would stop the content from pinning */
-  .ht > .crv__grid { position: sticky; top: 96px; }
+  .ht .crv__grid { grid-template-columns: .85fr 1.15fr; align-items: center; }
 }
-@media (max-width: 1023px) { .ht__scene { order: 1; } }
+/* clickable step cards; the current one carries a bar that fills over the stage's 3.6 s */
+.ht__steps li { position: relative; padding: 0; overflow: hidden; }
+.ht__steps button { display: flex; gap: 1rem; align-items: flex-start; width: 100%; padding: .9rem 1.1rem; border: 0; background: none; color: inherit; text-align: start; cursor: pointer; font: inherit; }
+.ht__steps button:focus-visible { outline: 2px solid #4fb3ff; outline-offset: -2px; border-radius: 16px; }
+.ht__steps li:hover { background: rgba(255, 255, 255, .1); }
+.ht__steps li.is-cur { opacity: 1; background: rgba(255, 255, 255, .12); border-color: rgba(255, 154, 77, .7); box-shadow: 0 16px 30px -22px rgba(0, 0, 0, .7); }
+.ht__steps li:not(.is-cur).is-on { opacity: .8; }
+.ht__bar { position: absolute; left: 0; bottom: 0; height: 3px; width: 0; background: linear-gradient(90deg, #ff9a4d, #ff7a1a); }
+.ht__steps li.is-cur .ht__bar { animation: ht-bar 3.6s linear forwards; }
+.ht__steps.is-paused li.is-cur .ht__bar { animation: none; width: 100%; opacity: .5; }
+@keyframes ht-bar { to { width: 100%; } }
+@media (prefers-reduced-motion: reduce) { .ht__steps li.is-cur .ht__bar { animation: none; width: 100%; } }
+@media (max-width: 1023px) {
+  .ht__scene { order: 1; }
+  .ht .crv__copy { display: contents; }               /* phones: heading → drawing → steps */
+  .ht .crv__copy > header { order: 0; }
+  .ht__steps { order: 2; margin-top: 0; }
+}

@@ -12,7 +12,8 @@ import { HxWaveEdgeComponent } from '../../shared/hydro/hx-wave-edge.component';
  *                  spoil kept ≥ 0.40 m from the edge, ladder rising above the edge, the worker inside
  *   4 handover     pipe on its bedding, shoring removed bottom-up as the trench is backfilled,
  *                  surface reinstated, fencing removed
- * Scroll advances the stage; CSS transitions only; reduced motion = the finished site.
+ * Plays by itself while on screen (one stage every STAGE s, loops); clicking a step shows it and pauses
+ * the loop for a moment. CSS transitions only; reduced motion = the finished site, steps still clickable.
  */
 @Component({
   selector: 'app-hse-trench',
@@ -27,11 +28,14 @@ import { HxWaveEdgeComponent } from '../../shared/hydro/hx-wave-edge.component';
             <p class="hx-eyebrow hx-eyebrow--light">{{ 'hse_site_kicker' | translate }}</p>
             <h2 class="hx-h2 hx-display">{{ 'hse_site_title' | translate }}</h2>
           </header>
-          <ol class="crv__steps">
+          <ol class="crv__steps ht__steps" [class.is-paused]="paused()">
             @for (i of [1, 2, 3, 4]; track i) {
-              <li [class.is-on]="stage() >= i">
-                <span class="crv__mark" aria-hidden="true">{{ i }}</span>
-                <span><b>{{ 'hse_site_' + i + '_t' | translate }}</b><span>{{ 'hse_site_' + i | translate }}</span></span>
+              <li [class.is-on]="stage() >= i" [class.is-cur]="stage() === i">
+                <button type="button" (click)="show(i)" [attr.aria-pressed]="stage() === i">
+                  <span class="crv__mark" aria-hidden="true">{{ i }}</span>
+                  <span><b>{{ 'hse_site_' + i + '_t' | translate }}</b><span>{{ 'hse_site_' + i | translate }}</span></span>
+                </button>
+                <i class="ht__bar" aria-hidden="true"></i>
               </li>
             }
           </ol>
@@ -113,21 +117,36 @@ export class HseTrenchComponent implements AfterViewInit, OnDestroy {
   private readonly ticker = inject(HydroTicker);
   private readonly zone = inject(NgZone);
   @ViewChild('sec', { static: true }) sec!: ElementRef<HTMLElement>;
-  readonly stage = signal(0);
+  readonly stage = signal(1);
+  readonly paused = signal(false);
   private off?: () => void;
+  private clock = 0;
+  private resumeAt = 0;
+  private static readonly STAGE = 3.6;   // seconds per stage (matches the CSS bar)
+  private static readonly HOLD = 2;      // extra time on the finished site before looping
 
   ngAfterViewInit(): void {
-    const sec = this.sec.nativeElement;
-    this.off = this.ticker.register(sec, () => {
-      const r = sec.getBoundingClientRect(), vh = window.innerHeight;
-      // desktop: the section is tall and its content pinned, so the 4 stages share the scroll evenly;
-      // phones: normal flow, the stage follows the section through the screen
-      const p = window.innerWidth >= 1024
-        ? Math.max(0, Math.min(1, -r.top / Math.max(1, r.height - vh)))
-        : Math.max(0, Math.min(1, (vh * 0.75 - r.top) / Math.max(1, r.height * 0.85)));
-      const s = this.ticker.reducedMotion ? 4 : Math.min(4, Math.floor(p * 4.4 + 0.25));
-      if (s !== this.stage()) this.zone.run(() => this.stage.set(s));
+    const sec = this.sec.nativeElement, T = HseTrenchComponent.STAGE, cycle = T * 4 + HseTrenchComponent.HOLD;
+    if (this.ticker.reducedMotion) { this.stage.set(4); return; }
+    // the ticker only runs while the section is on screen, so the loop pauses off-screen by itself
+    this.off = this.ticker.register(sec, dt => {
+      if (this.paused()) {
+        this.resumeAt -= dt;
+        if (this.resumeAt > 0) return;
+        this.zone.run(() => this.paused.set(false));
+        this.clock = (this.stage() - 1) * T;
+      }
+      this.clock = (this.clock + dt) % cycle;
+      const st = Math.min(4, 1 + Math.floor(this.clock / T));
+      if (st !== this.stage()) this.zone.run(() => this.stage.set(st));
     });
+  }
+
+  /** a click shows that stage and holds it for a moment before the loop carries on */
+  show(i: number): void {
+    this.stage.set(i);
+    this.paused.set(true);
+    this.resumeAt = 7;
   }
 
   ngOnDestroy(): void { this.off?.(); }
