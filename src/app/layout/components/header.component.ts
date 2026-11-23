@@ -1,5 +1,7 @@
 import { Component, ElementRef, HostListener, ViewChild, computed, inject, output, signal } from '@angular/core';
-import { Router, RouterLink, RouterLinkActive } from '@angular/router';
+import { NavigationEnd, Router, RouterLink, RouterLinkActive } from '@angular/router';
+import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
+import { filter } from 'rxjs';
 import { TranslatePipe } from '@ngx-translate/core';
 import { AppTranslateService } from '../../core/services/translate.service';
 import { NAV_LINKS, SUPPORTED_LANGUAGES } from '../../core/navigation/navigation.service';
@@ -35,7 +37,7 @@ const MORE_ICON: Record<string, string> = { '/hse': 'fa-helmet-safety', '/partne
                class="nl rounded-lg px-3 py-2 font-serif text-[16px] text-white">{{ link.label | translate }}</a>
           }
           <div class="hd-more-wrap">
-            <button type="button" (click)="moreOpen.set(!moreOpen())" [attr.aria-expanded]="moreOpen()" aria-haspopup="true"
+            <button type="button" (click)="toggleMore()" [attr.aria-expanded]="moreOpen()" aria-haspopup="true"
                     class="nl rounded-lg px-3 py-2 font-serif text-[16px] text-white">
               {{ 'nav_more' | translate }} <i class="fa-solid fa-chevron-down hd-more__chev" [class.is-up]="moreOpen()" aria-hidden="true"></i>
             </button>
@@ -57,11 +59,8 @@ const MORE_ICON: Record<string, string> = { '/hse': 'fa-helmet-safety', '/partne
           <input #box type="search" [placeholder]="'nav_search' | translate" [attr.aria-label]="'nav_search' | translate"
                  role="combobox" aria-autocomplete="list" [attr.aria-expanded]="open()" aria-controls="hd-results"
                  [attr.aria-activedescendant]="open() && active() >= 0 ? 'hd-r-' + active() : null"
-                 [value]="query()" (input)="onSearch($event)" (keydown)="onKey($event)" (focus)="focused.set(true)" (blur)="onBlur()">
+                 [value]="query()" (input)="onSearch($event)" (keydown)="onKey($event)" (focus)="onFocus()" (blur)="onBlur()">
           @if (!query()) { <kbd class="hd-kbd" aria-hidden="true">/</kbd> }
-          <select class="hd-lang" [attr.aria-label]="'nav_language' | translate" (change)="onLang($event)">
-            @for (lang of languages; track lang.code) { <option [value]="lang.code" [selected]="lang.code === currentLang">{{ lang.label }}</option> }
-          </select>
 
           @if (open()) {
             <div id="hd-results" class="hd-panel hd-results is-open" role="listbox">
@@ -91,6 +90,21 @@ const MORE_ICON: Record<string, string> = { '/hse': 'fa-helmet-safety', '/partne
           }
         </div>
 
+        <div class="hd-lang-wrap hidden lg:block">
+          <button type="button" class="hd-lang" (click)="toggleLang()" [attr.aria-expanded]="langOpen()" aria-haspopup="true" [attr.aria-label]="'nav_language' | translate">
+            <i class="fa-solid fa-globe" aria-hidden="true"></i><span>{{ langLabel() }}</span><i class="fa-solid fa-chevron-down hd-more__chev" [class.is-up]="langOpen()" aria-hidden="true"></i>
+          </button>
+          <div class="hd-panel hd-langs" [class.is-open]="langOpen()" role="menu">
+            @for (l of langNames; track l.code) {
+              <button type="button" role="menuitemradio" [attr.aria-checked]="l.code === currentLang" class="hd-langs__opt" [class.is-on]="l.code === currentLang"
+                      (click)="setLang(l.code)" [tabindex]="langOpen() ? 0 : -1" [attr.lang]="l.code" [attr.dir]="l.code === 'ar' ? 'rtl' : 'ltr'">
+                <span class="hd-langs__code">{{ l.short }}</span><span class="hd-langs__name">{{ l.name }}</span>
+                <i class="fa-solid fa-check hd-langs__ok" aria-hidden="true"></i>
+              </button>
+            }
+          </div>
+        </div>
+
         <button class="ml-auto rounded-lg p-2 text-white hover:bg-white/10 lg:hidden" (click)="toggleMobileMenu()" aria-label="Toggle menu">
           <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16" />
@@ -104,6 +118,12 @@ export class HeaderComponent {
   readonly mobileMenuToggled = output<void>();
   readonly isScrolled = signal(false);
   readonly moreOpen = signal(false);
+  readonly langOpen = signal(false);
+  readonly langNames = [
+    { code: 'fr' as const, short: 'FR', name: 'Français' },
+    { code: 'en' as const, short: 'EN', name: 'English' },
+    { code: 'ar' as const, short: 'عر', name: 'العربية' },
+  ];
   readonly query = signal('');
   readonly focused = signal(false);
   readonly hits = signal<SearchHit[]>([]);
@@ -129,16 +149,32 @@ export class HeaderComponent {
   private readonly search = inject(SiteSearchService);
   private readonly translateService = inject(AppTranslateService);
 
-  constructor() { this.currentLang = this.translateService.getCurrentLang(); }
+  constructor() {
+    this.currentLang = this.translateService.getCurrentLang();
+    // a panel never outlives the page it was opened on
+    this.router.events.pipe(filter(e => e instanceof NavigationEnd), takeUntilDestroyed()).subscribe(() => this.closePanels());
+  }
+
+  langLabel(): string { return this.langNames.find(l => l.code === this.currentLang)?.short ?? 'FR'; }
+  toggleMore(): void { const v = !this.moreOpen(); this.closePanels(); this.moreOpen.set(v); }
+  toggleLang(): void { const v = !this.langOpen(); this.closePanels(); this.langOpen.set(v); }
+  setLang(code: 'fr' | 'en' | 'ar'): void { this.translateService.switchLanguage(code); this.currentLang = code; this.closePanels(); }
+  private closePanels(): void { this.moreOpen.set(false); this.langOpen.set(false); }
+  onFocus(): void { this.closePanels(); this.focused.set(true); }
 
   moreIcon(path: string): string { return MORE_ICON[path] ?? 'fa-circle'; }
 
   @HostListener('window:scroll', [])
-  onWindowScroll(): void { this.isScrolled.set(window.scrollY > 24); }
+  onWindowScroll(): void {
+    this.isScrolled.set(window.scrollY > 24);
+    if (this.moreOpen() || this.langOpen()) this.closePanels();   // scrolling away closes the menus
+  }
 
   @HostListener('document:click', ['$event'])
   onDocClick(e: Event): void {
-    if (!(e.target as HTMLElement).closest('.hd-more-wrap')) this.moreOpen.set(false);
+    const t = e.target as HTMLElement;
+    if (!t.closest('.hd-more-wrap')) this.moreOpen.set(false);
+    if (!t.closest('.hd-lang-wrap')) this.langOpen.set(false);
   }
 
   /** "/" focuses the search (unless typing in a field); Esc closes the "Plus" menu */
@@ -148,7 +184,7 @@ export class HeaderComponent {
     if (e.key === '/' && !['INPUT', 'TEXTAREA', 'SELECT'].includes(tag) && !(e.target as HTMLElement).isContentEditable) {
       e.preventDefault(); this.box?.nativeElement.focus();
     }
-    if (e.key === 'Escape') this.moreOpen.set(false);
+    if (e.key === 'Escape') this.closePanels();
   }
 
   onSearch(e: Event): void {
@@ -187,11 +223,6 @@ export class HeaderComponent {
     return [{ t: title, m: false }];
   }
 
-  onLang(e: Event): void {
-    const lang = (e.target as HTMLSelectElement).value as 'fr' | 'en' | 'ar';
-    this.translateService.switchLanguage(lang);
-    this.currentLang = lang;
-  }
 
   toggleMobileMenu(): void { this.mobileMenuToggled.emit(); }
 }

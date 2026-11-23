@@ -1,78 +1,142 @@
-import { AfterViewInit, Component, inject } from '@angular/core';
+import { AfterViewInit, Component, ElementRef, NgZone, OnDestroy, ViewChild, inject, signal } from '@angular/core';
 import { ActivatedRoute, RouterLink } from '@angular/router';
 import { TranslatePipe } from '@ngx-translate/core';
 import { COMPANY_INFO, COMPANY_MAILTO } from '../../core/company/company-info';
 import { PageHeroComponent } from '../../shared/components/page-hero.component';
+import { HydroTicker } from '../../shared/hydro/hydro-ticker.service';
 
 /**
  * LEGAL — mentions légales + privacy policy (#privacy).
  * Company identity comes from COMPANY_INFO.legal; empty values read "being updated".
  * Personal data: Tunisian organic law n° 2004-63 of 27 July 2004 (INPDP).
+ * Design: a reading gauge (sight glass filling as you read, a flange per section) beside the document;
+ * the company identity is an equipment nameplate; the privacy points are cards.
+ * Colours: hero → foam → white → light water #eaf5fd → footer.
  */
 @Component({
   selector: 'app-legal',
   standalone: true,
   imports: [RouterLink, TranslatePipe, PageHeroComponent],
   template: `
-    <app-page-hero photo="assets/media/gallery/20231222-pipeline" crumb="legal_crumb" kicker="legal_kicker" title="legal_title" [short]="true" fillBelow="#ffffff" />
+    <app-page-hero photo="assets/media/gallery/20231222-pipeline" crumb="legal_crumb" kicker="legal_kicker" title="legal_title" [short]="true" fillBelow="#eef6fd" />
 
-    <section class="pg pg--white">
-      <div class="hx-container lg-doc">
-        <nav class="lg-toc" aria-label="sommaire">
-          <a href="#editor" (click)="go($event, 'editor')">{{ 'legal_editor_t' | translate }}</a>
-          <a href="#ip" (click)="go($event, 'ip')">{{ 'legal_ip_t' | translate }}</a>
-          <a href="#privacy" (click)="go($event, 'privacy')">{{ 'legal_privacy_t' | translate }}</a>
-          <a href="#cookies" (click)="go($event, 'cookies')">{{ 'legal_cookies_t' | translate }}</a>
+    <section class="lg">
+      <div class="hx-container lg__grid">
+        <!-- reading gauge = table of contents -->
+        <nav class="lg__gauge" [attr.aria-label]="'legal_toc' | translate">
+          <span class="lg__tube" aria-hidden="true"><i [style.height.%]="progress() * 100"></i></span>
+          <ol>
+            @for (s of sections; track s.id; let i = $index) {
+              <li [class.is-on]="reached() > i">
+                <a [href]="'#' + s.id" (click)="go($event, s.id)"><span class="lg__flange" aria-hidden="true"></span><span>{{ s.t | translate }}</span></a>
+              </li>
+            }
+          </ol>
         </nav>
 
-        <article>
-          <h2 id="editor" class="hx-display">{{ 'legal_editor_t' | translate }}</h2>
-          <dl class="lg-dl">
-            <dt>{{ 'legal_name' | translate }}</dt><dd>{{ info.legalName }} ({{ info.name }})</dd>
-            <dt>{{ 'legal_form' | translate }}</dt><dd>{{ info.legal.form || ('legal_pending' | translate) }}</dd>
-            <dt>{{ 'legal_seat' | translate }}</dt><dd>{{ info.address }}</dd>
-            <dt>{{ 'legal_rne' | translate }}</dt><dd>{{ info.legal.rne || ('legal_pending' | translate) }}</dd>
-            <dt>{{ 'legal_tax' | translate }}</dt><dd>{{ info.legal.taxId || ('legal_pending' | translate) }}</dd>
-            <dt>{{ 'legal_capital' | translate }}</dt><dd>{{ info.legal.capital || ('legal_pending' | translate) }}</dd>
-            <dt>{{ 'legal_director' | translate }}</dt><dd>{{ info.legal.director || ('legal_pending' | translate) }}</dd>
-            <dt>{{ 'legal_contact' | translate }}</dt><dd><a [href]="mailto" dir="ltr">{{ info.email }}</a></dd>
-            <dt>{{ 'legal_host' | translate }}</dt><dd>{{ info.legal.host || ('legal_pending' | translate) }}</dd>
-          </dl>
+        <article #doc class="lg__doc">
+          <section id="editor" class="lg__card">
+            <p class="lg__num">01</p>
+            <h2 class="hx-display">{{ 'legal_editor_t' | translate }}</h2>
+            <!-- company identity as an equipment nameplate -->
+            <div class="lg-plate">
+              <span class="lg-plate__rivet" aria-hidden="true"></span><span class="lg-plate__rivet" aria-hidden="true"></span>
+              <span class="lg-plate__rivet" aria-hidden="true"></span><span class="lg-plate__rivet" aria-hidden="true"></span>
+              <div class="lg-plate__head"><img src="assets/media/logo/sigatlogo-trim.png" alt="SIGAT" /><span>{{ info.legalName }}</span></div>
+              <dl>
+                @for (r of plate(); track r.k) {
+                  <div><dt>{{ r.k | translate }}</dt><dd [class.is-pending]="!r.v">
+                    @if (r.mail) { <a [href]="mailto" dir="ltr">{{ r.v }}</a> } @else { {{ r.v || ('legal_pending' | translate) }} }
+                  </dd></div>
+                }
+              </dl>
+            </div>
+          </section>
 
-          <h2 id="ip" class="hx-display">{{ 'legal_ip_t' | translate }}</h2>
-          <p>{{ 'legal_ip_1' | translate }}</p>
-          <p>{{ 'legal_liability' | translate }}</p>
+          <section id="ip" class="lg__card">
+            <p class="lg__num">02</p>
+            <h2 class="hx-display">{{ 'legal_ip_t' | translate }}</h2>
+            <p>{{ 'legal_ip_1' | translate }}</p>
+            <p>{{ 'legal_liability' | translate }}</p>
+          </section>
 
-          <h2 id="privacy" class="hx-display">{{ 'legal_privacy_t' | translate }}</h2>
-          <p>{{ 'legal_privacy_intro' | translate }}</p>
-          @for (k of privacy; track k) {
-            <h3>{{ 'legal_pv_' + k + '_t' | translate }}</h3>
-            <p>{{ 'legal_pv_' + k | translate }}</p>
-          }
-          <p>{{ 'legal_pv_exercise' | translate }} <a [href]="mailto" dir="ltr">{{ info.email }}</a>.</p>
+          <section id="privacy" class="lg__card">
+            <p class="lg__num">03</p>
+            <h2 class="hx-display">{{ 'legal_privacy_t' | translate }}</h2>
+            <p class="lg__lead">{{ 'legal_privacy_intro' | translate }}</p>
+            <div class="lg-pv">
+              @for (k of privacy; track k.k) {
+                <div class="lg-pv__item">
+                  <i class="fa-solid {{ k.icon }}" aria-hidden="true"></i>
+                  <h3>{{ 'legal_pv_' + k.k + '_t' | translate }}</h3>
+                  <p>{{ 'legal_pv_' + k.k | translate }}</p>
+                </div>
+              }
+            </div>
+            <p class="lg__exercise">{{ 'legal_pv_exercise' | translate }}
+              <a [href]="mailto" class="hx-btn hx-btn--primary lg__mail" dir="ltr"><i class="fa-solid fa-envelope" aria-hidden="true"></i> {{ info.email }}</a>
+            </p>
+          </section>
 
-          <h2 id="cookies" class="hx-display">{{ 'legal_cookies_t' | translate }}</h2>
-          <p>{{ 'legal_cookies' | translate }}</p>
+          <section id="cookies" class="lg__card">
+            <p class="lg__num">04</p>
+            <h2 class="hx-display">{{ 'legal_cookies_t' | translate }}</h2>
+            <p>{{ 'legal_cookies' | translate }}</p>
+          </section>
 
-          <p class="lg-upd">{{ 'legal_updated' | translate }} 23/11/2026 · <a routerLink="/contact">{{ 'nav_contact' | translate }}</a></p>
+          <p class="lg__upd">{{ 'legal_updated' | translate }} 23/11/2026 · <a routerLink="/contact">{{ 'nav_contact' | translate }}</a></p>
         </article>
       </div>
     </section>
   `
 })
-export class LegalComponent implements AfterViewInit {
+export class LegalComponent implements AfterViewInit, OnDestroy {
   private readonly route = inject(ActivatedRoute);
+  private readonly ticker = inject(HydroTicker);
+  private readonly zone = inject(NgZone);
+  @ViewChild('doc', { static: true }) doc!: ElementRef<HTMLElement>;
   readonly info = COMPANY_INFO;
   readonly mailto = COMPANY_MAILTO;
-  readonly privacy = ['who', 'data', 'why', 'keep', 'share', 'rights'];
+  readonly progress = signal(0);
+  readonly reached = signal(0);
+  private off?: () => void;
+
+  readonly sections = [
+    { id: 'editor', t: 'legal_editor_t' }, { id: 'ip', t: 'legal_ip_t' },
+    { id: 'privacy', t: 'legal_privacy_t' }, { id: 'cookies', t: 'legal_cookies_t' },
+  ];
+  readonly privacy = [
+    { k: 'who', icon: 'fa-building' }, { k: 'data', icon: 'fa-database' }, { k: 'why', icon: 'fa-bullseye' },
+    { k: 'keep', icon: 'fa-hourglass-half' }, { k: 'share', icon: 'fa-share-nodes' }, { k: 'rights', icon: 'fa-scale-balanced' },
+  ];
+  /** nameplate rows (empty value = "being updated") */
+  plate() {
+    const L = this.info.legal;
+    return [
+      { k: 'legal_name', v: `${this.info.legalName} (${this.info.name})` },
+      { k: 'legal_form', v: L.form }, { k: 'legal_seat', v: this.info.address },
+      { k: 'legal_rne', v: L.rne }, { k: 'legal_tax', v: L.taxId }, { k: 'legal_capital', v: L.capital },
+      { k: 'legal_director', v: L.director }, { k: 'legal_contact', v: this.info.email, mail: true }, { k: 'legal_host', v: L.host },
+    ];
+  }
 
   ngAfterViewInit(): void {
     const f = this.route.snapshot.fragment;
     if (f) setTimeout(() => document.getElementById(f)?.scrollIntoView({ block: 'start' }), 300);
+    const doc = this.doc.nativeElement;
+    this.off = this.ticker.register(doc, () => {
+      const r = doc.getBoundingClientRect(), vh = window.innerHeight;
+      const p = Math.max(0, Math.min(1, (vh * 0.4 - r.top) / Math.max(1, r.height - vh * 0.5)));
+      let n = 0;
+      for (const s of this.sections) { const el = document.getElementById(s.id); if (el && el.getBoundingClientRect().top < vh * 0.45) n++; }
+      if (Math.abs(p - this.progress()) > 0.004 || n !== this.reached()) this.zone.run(() => { this.progress.set(p); this.reached.set(n); });
+    });
   }
+
+  ngOnDestroy(): void { this.off?.(); }
 
   go(e: Event, id: string): void {
     e.preventDefault();
-    document.getElementById(id)?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    document.getElementById(id)?.scrollIntoView({ behavior: this.ticker.reducedMotion ? 'auto' : 'smooth', block: 'start' });
   }
 }

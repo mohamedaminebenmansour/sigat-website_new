@@ -17,7 +17,9 @@ const LAST_SECTION_COLOR: Record<string, string> = {
   '/contact': '#eaf5fd', // contact ends on the map of the sites
   '/projects': '#eaf5fd', // projects end on the map too
   '/careers': '#eaf5fd', // careers ends on light water
-  '/partnerships': '#eaf5fd' // partnerships too
+  '/partnerships': '#eaf5fd', // partnerships too
+  '/hse': '#eaf5fd', // HSE ends on light water
+  '/legal': '#eaf5fd' // legal too
 };
 
 @Component({

@@ -4,21 +4,24 @@ import { TranslatePipe } from '@ngx-translate/core';
 import { COMPANY_INFO } from '../../core/company/company-info';
 import { PageHeroComponent } from '../../shared/components/page-hero.component';
 import { HxRevealDirective } from '../../shared/hydro/hx-reveal.directive';
+import { HseTrenchComponent } from './hse-trench.component';
 
 /**
  * HSE & QUALITY — what SIGAT does on site, and where it stands on certification.
  * SIGAT is NOT ISO certified yet: the three standards are shown "in progress"
  * from COMPANY_INFO.certifications (flip a status to 'certified' when obtained).
  * No invented statistics.
+ * Flow: commitments (white → foam) → ISO path (foam) → the shored trench, under the surface (site steps)
+ * → (wave) CTA on light water #eaf5fd → footer.
  */
 @Component({
   selector: 'app-hse',
   standalone: true,
-  imports: [RouterLink, TranslatePipe, PageHeroComponent, HxRevealDirective],
+  imports: [RouterLink, TranslatePipe, PageHeroComponent, HxRevealDirective, HseTrenchComponent],
   template: `
     <app-page-hero photo="assets/media/gallery/20230618-riprap" crumb="nav_hse" kicker="hse_kicker" title="hse_title" sub="hse_subtitle" fillBelow="#ffffff" [phase]="1.6" />
 
-    <section class="pg pg--white">
+    <section class="pg hse-commit">
       <div class="hx-container">
         <header class="hx-head hx-reveal" hxReveal>
           <p class="hx-eyebrow">{{ 'hse_commit_kicker' | translate }}</p>
@@ -62,21 +65,9 @@ import { HxRevealDirective } from '../../shared/hydro/hx-reveal.directive';
       </div>
     </section>
 
-    <section class="pg pg--navy">
-      <div class="hx-container">
-        <header class="hx-head hx-reveal" hxReveal>
-          <p class="hx-eyebrow hx-eyebrow--light">{{ 'hse_site_kicker' | translate }}</p>
-          <h2 class="hx-h2 hx-display">{{ 'hse_site_title' | translate }}</h2>
-        </header>
-        <ol class="pg-steps">
-          @for (i of [1, 2, 3, 4]; track i) {
-            <li><b>{{ 'hse_site_' + i + '_t' | translate }}</b><span>{{ 'hse_site_' + i | translate }}</span></li>
-          }
-        </ol>
-      </div>
-    </section>
+    <app-hse-trench />
 
-    <section class="pg pg--white">
+    <section class="pg cr-spont">
       <div class="hx-container">
         <div class="pg-cta">
           <div>
